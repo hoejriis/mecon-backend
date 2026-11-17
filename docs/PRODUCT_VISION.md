@@ -4,7 +4,7 @@ This document describes the intended Reader experience. See [availability](https
 
 ## The proposition
 
-MECON Reader is a familiar, communication-first MeshCore client with MECON's visual identity. A person comfortable in the stock MeshCore app should immediately recognize contacts, channels, conversations, Companion selection, composing and send status. It is **inspired by the stock app's interaction model, not a pixel-for-pixel reproduction**. Do not copy stock app artwork, source, icons, layouts or distinctive presentation.
+MECON Reader is a familiar, communication-first MeshCore client with MECON's visual identity. Use [MeshCore One](https://github.com/Avi0n/MeshCoreOne) as the primary GUI inspiration for chats, channels, contacts, maps and Companion flows. Build original React/TypeScript components with official MECON branding and retain the existing Apache-2.0 license. Do not copy GPLv3 MC1 application source or protected artwork/assets without separate licensing clearance. Existing approved navigation, permissions and Backend contracts remain authoritative.
 
 The first deliverable is a **BLE-enabled web Reader for iPhone/iPad using Bluefy**, initially for **Device Users**, with an authorized MECON Backend supplying online history, account/authorization and gateway services. The Reader uses a versioned Backend interface and can evolve independently of the Backend implementation.
 

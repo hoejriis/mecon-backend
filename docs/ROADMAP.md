@@ -9,10 +9,14 @@ The first application experience focuses on Device Users: chats, channels, conta
 - Direct Web Bluetooth access to a compatible Companion where the browser and hardware support it.
 - Account-authorized online history and messaging through a versioned Backend API.
 - Clear separation between local BLE and Backend send/read paths, including provenance and acknowledgements.
-- Familiar MeshCore terminology with a distinct MECON design.
+- MeshCore One-inspired GUI workflows with original React components, official MECON branding and existing Apache-2.0 license.
 - Privacy boundaries that prevent administrators and fleet owners from reading other users' private messages.
 
 The [Reader architecture](MVP1_ARCHITECTURE.md), [experience design](READER_UX.md) and [delivery and acceptance](MVP1_PLAN.md) describe this first increment. Hardware and browser compatibility must be demonstrated before it is advertised as available.
+
+## Future native Apple Reader
+
+The separate `mecon-app` will fork [MeshCore One](https://github.com/Avi0n/MeshCoreOne) to reuse its native iOS/iPadOS features as much as practical and integrate MECON Backend online services under the same authorization and messaging contracts. MC1 application code is GPLv3; verify dependency licenses, source obligations, upstream maintenance and distribution before release. The React web Reader remains mandatory; Fleet Owner and Instance Admin GUI use cases remain **web-only**. This is target direction, not implemented or verified.
 
 ## Fleet operations and administration
 

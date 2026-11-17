@@ -30,4 +30,4 @@ Delegated receive identities (up to four extra), offline secure cache and fully 
 
 ## Tracking
 
-- [Public product documentation issue](ROADMAP.md)
+- [Application roadmap](ROADMAP.md)

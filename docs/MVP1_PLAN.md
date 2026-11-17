@@ -1,5 +1,7 @@
 # Reader-first MVP1 — delivery plan and acceptance
 
+> **Approved MVP1 implementation baseline (17 November 2026):** [MVP1 implementation design](MVP1_IMPLEMENTATION_DESIGN.md) governs milestone order, navigation, privacy, map, F2 deployment and acceptance. Older illustrative or five-tab descriptions are superseded where conflicting. Real hardware and Backend API conformance still require verification.
+
 **Status:** Reader MVP issue-backed design plan; full-product replacement is separately scoped in future  issues. No coding, deployment or production cutover authorized by this document.
 
 ## Workstreams in dependency order

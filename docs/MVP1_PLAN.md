@@ -1,3 +1,5 @@
+> **Owner UX revision, 17 November 2026:** Device User web Reader follows MC1 with **Chats / Nodes / Map / Tools / Settings** bottom tabs, Channels inside Chats, and Fleet/Admin management deferred to later web-only GUI. This supersedes any three-tab or phone Fleet wording below. See [ADR](ARCHITECTURE_DECISIONS.md) and [implementation design](MVP1_IMPLEMENTATION_DESIGN.md). Backend/security and delivery sequencing remain unchanged.
+
 # Reader-first MVP1 — delivery plan and acceptance
 
 > **Approved MVP1 implementation baseline (17 November 2026):** [MVP1 implementation design](MVP1_IMPLEMENTATION_DESIGN.md) governs milestone order, navigation, privacy, map, F2 deployment and acceptance. Older illustrative or five-tab descriptions are superseded where conflicting. Real hardware and Backend API conformance still require verification.

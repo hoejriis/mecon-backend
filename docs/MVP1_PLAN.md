@@ -4,10 +4,10 @@
 
 ## Workstreams in dependency order
 
-1. **Product, visual and navigation contracts.** Approve familiarity principles, mobile/tablet flows, brand usage and user acceptance.
+1. **Product, visual and navigation contracts.** Approve stock-familiar **persistent bottom Chats / Channels / Map on phone, tablet and web**, role-gated fourth **Fleet** tab for Fleet Owner/Admin on phone (equivalent to existing Devices), secondary placement of Contacts/Companion/Settings, brand usage and user acceptance. Future desktop/tablet Admin GUI design is deferred. Define bounded Map MVP acceptance without inventing public data rights.
 2. **Bluefy BLE feasibility spike.** Real iPhone/iPad Bluefy + supported Companion, connection, GATT, send/receive, reconnect, screen lock and permission behavior. Record actual supported firmware/board/browser versions. No simulated hardware acceptance.
 3. **MECON Backend compatibility contract.** Inventory current endpoints and central authorization; define minimal versioned contract and sanitized fixtures, then implement adapter only where needed without breaking existing Reader.
-4. **New Reader shell.** React/TypeScript app, account/session context, responsive task navigation, MECON brand assets and accessibility.
+4. **New Reader shell.** React/TypeScript app, account/session context, persistent bottom navigation across viewports, role-gated phone Fleet entry, MECON brand assets and accessibility.
 5. **Direct BLE Companion adapter.** Pairing, capability discovery, status, device message/send flow; source/provenance and error semantics.
 6. **Messaging and Backend integration.** Chats, channels, contacts, compose, normalized outcomes, authorized identity selection, clear BLE-vs-Backend path.
 7. **End-to-end acceptance.** Cross-user isolation, honest send outcomes, reconnect, duplicate prevention, Bluefy iPhone/iPad and secondary desktop browser, compatibility with current Reader.

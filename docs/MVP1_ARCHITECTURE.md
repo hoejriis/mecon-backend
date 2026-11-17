@@ -1,4 +1,4 @@
-# MVP1 architecture — Bluefy Reader + existing private Backend
+# MVP1 architecture — Bluefy Reader + MECON Backend
 
 **Status:** Target integration design; interfaces require inventory and conformance. No new Backend implementation or migration in MVP1.
 
@@ -7,7 +7,7 @@ flowchart TD
   U["Device User · Bluefy on iPhone/iPad"]
   R["New public TypeScript/React Reader"]
   C["Assigned MeshCore Companion · BLE"]
-  A["Private Backend · versioned Reader API"]
+  A["MECON Backend · versioned Reader API"]
   M["Existing MQTT / USB agent / storage"]
   U --> R
   R <-->|"Web Bluetooth · user gesture · capability gated"| C
@@ -17,11 +17,11 @@ flowchart TD
 
 ## Responsibilities
 
-**Reader:** presentation, device/transport state, user interactions, local BLE adapter, identity selection and normalized message display. No direct MQTT credentials, private Backend internals, fleet-management bypass or Backend business logic.
+**Reader:** presentation, device/transport state, user interactions, local BLE adapter, identity selection and normalized message display. No direct MQTT credentials, MECON Backend internals, fleet-management bypass or Backend business logic.
 
 **Companion:** canonical device identity and native MeshCore BLE operations; BLE may provide local messages and sends where supported. No assumption that browser can export keys or perform all stock-app operations.
 
-**Private Backend:** existing session/auth, assigned-device authorization, authorized message history, online send, contacts/channels and outcome evidence, MQTT and USB-agent integration. Provide a **versioned, bounded compatibility API**. Preserve current Reader and existing production behavior.
+**MECON Backend:** session/auth, assigned-device authorization, authorized message history, online send, contacts/channels and outcome evidence, MQTT and USB-agent integration. Provide a **versioned, bounded compatibility API**. Preserve current Reader and existing production behavior.
 
 ## Critical integration rule
 

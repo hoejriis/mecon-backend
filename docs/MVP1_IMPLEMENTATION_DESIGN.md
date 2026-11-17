@@ -7,7 +7,7 @@
 Build a public TypeScript/React **Device User Reader** that uses the existing **private F2 Backend**, not a new public Backend. **First independently deployable milestone:** restricted `https://reader.mecon.cloud` on F2, sharing exactly the existing `mecon.cloud` user population and Backend authority. This milestone precedes full BLE/messaging completion and is not a public beta.
 
 1. **M0 design and contracts:** use this approved UX and brand; public Reader API contract, private Backend #1836, live observation contract/private #1838; sanitized fixtures. Do not block shell work on live hardware.
-2. **M1 restricted F2 shell:** HTTPS/DNS, separate deployment/rollback, same Backend login/session and capability checks, responsive bottom navigation, role-gated phone Fleet, map empty/loading/error and authorized feed integration when available. Existing `mecon.cloud` remains unchanged.
+2. **M1 restricted F2 shell:** HTTPS/DNS, separate deployment/rollback, same Backend login/session and capability checks, responsive bottom navigation, MC1-like five-tab Device User navigation, map empty/loading/error and authorized feed integration when available. Existing `mecon.cloud` remains unchanged.
 3. **M2 Backend-connected messaging/map:** Chats/Channels, authorized messages/contacts/identities, safe send/status and live packet observation map from permitted projection; no BLE required to operate Backend-only.
 4. **M3 BLE hardware and adapter:** prove Bluefy on real iPhone/iPad and supported Companion; implement only verified GATT/protocol capabilities, no assumptions of background support.
 5. **M4 MVP1 acceptance:** real-device E2E, privacy, duplicates, reconnection, usability, failure paths and release evidence. Public beta/GA remains separately approved.
@@ -18,13 +18,10 @@ Owner-approved: [MeshCore One](https://github.com/Avi0n/MeshCoreOne) replaces th
 
 ## Layout and navigation
 
-- **Phone, tablet and desktop web:** persistent **bottom** tabs in order **Chats | Channels | Map**; selected tab and keyboard/screen-reader semantics are clear. Tablet/desktop may show master/detail columns above bottom bar. Do not substitute a sidebar for bottom tabs.
-- **Phone only, with Backend-granted Fleet Owner or Instance Admin management capability:** fourth **Fleet** tab (existing Devices functionality). No Fleet tab for users lacking grants. Do not infer management rights from a user label; use capabilities. The separate desktop/tablet management/Admin GUI is a **future** project, not MVP1.
-- **Secondary:** Contacts (reachable from Chats/search/new conversation), Companion selection/connection (header/status or relevant context), Settings/account/logout (header/menu). These are routes or panels, not additional bottom tabs.
-- **Chats:** recent authorized DMs, unread and send state, conversation detail, composer, explicit sender identity and transport path.
-- **Channels:** public and authorized private channels, membership/key rules, conversation view; no recipient-wide ACK.
-- **Map:** **live packet observation map first**, not an inferred topology map. Mark actual receiving observer locations when authorized and location known, show timestamps, RF evidence and observation freshness. Do **not** infer transmitter locations, radio links or RF paths. Missing location produces an observation list without invented pins. Separate public-safe and authenticated role-scoped projections, respecting source consent/rights. Provide paused/disconnected/empty/no-permission states. Never display another user's private plaintext.
-- **Fleet phone:** authorized inventory/device status/actions equivalent to existing Devices, using private Backend permission checks; no cross-user private message access. No new management API implied.
+**Owner-revised MC1 baseline:** persistent **Chats | Nodes | Map | Tools | Settings** bottom tabs for Device Users on phone/tablet/desktop. MC1-like light mobile UI, conversation list filters for All/Unread/DMs/Channels/Rooms where supported, individual conversation and channel views, node lists/details, map and tool entry points. The original three-tab Chats/Channels/Map and phone Fleet tab are superseded. **Fleet Owner and Instance Admin management GUI is later, web-only work**; do not build Fleet as an MVP1 Device User destination. Responsive desktop/tablet may use split panes but preserve the MC1 information architecture.
+
+M1 shell should expose truthful loading/empty/unavailable states for each tab; MC1 features without verified MECON firmware/Backend support must not be simulated as functional. Messaging, BLE-vs-Backend send, privacy and live observation Map rules below remain authoritative. Map pins are actual authorized observer locations, never inferred transmitters. Nodes show only authorized information; Tools actions require verified capabilities.
+
 
 ## Brand and visual system
 
@@ -41,7 +38,7 @@ Use actual `hoejriis/MeshContinuum/brand/` SVG assets (`lockup-dark.svg`, `locku
 
 ## Acceptance criteria
 
-**M1 deploy gate:** DNS/TLS and separate rollback; only existing mecon.cloud users can authenticate; authorized login/logout/session expiry/revocation tested; no cross-user data or unauthorized Fleet access; bottom tabs on phone/tablet/desktop; safe map unavailable state; smoke-tested Backend connectivity; no regression to existing UI/Backend; no production RF action required.
+**M1 deploy gate:** DNS/TLS and separate rollback; only existing mecon.cloud users can authenticate; authorized login/logout/session expiry/revocation tested; no cross-user data or unauthorized management access; MC1-like five-tab bottom navigation on phone/tablet/desktop; safe map unavailable state; smoke-tested Backend connectivity; no regression to existing UI/Backend; no production RF action required.
 
 **M2 feature gate:** authorized Chats/Channels and observation map use actual API evidence; no invented RF paths; packet feed privacy/source rights respected; no duplicate/ambiguous send; accurate errors and no cross-user history.
 

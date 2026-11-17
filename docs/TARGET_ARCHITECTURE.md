@@ -56,4 +56,4 @@ A single Raspberry Pi can host Backend+Reader, Mosquitto and USB Connector; comp
 
 ## MVP1 exception
 
-The **first implementation** is a new Bluefy-focused Device User Reader. It uses direct BLE where proven and a versioned API on the **existing private Backend**, which continues to run MQTT, USB Connector, account and online messaging services. The new public Backend, fleet/admin screens, federation, advanced offline support and deployment packaging are **target-only**. See [MVP1 architecture](MVP1_ARCHITECTURE.md).
+The **first implementation** is a new Bluefy-focused Device User Reader. It uses direct BLE where proven and a versioned API on the **existing MECON Backend**, which continues to run MQTT, USB Connector, account and online messaging services. The new public Backend, fleet/admin screens, federation, advanced offline support and deployment packaging are **target-only**. See [MVP1 architecture](MVP1_ARCHITECTURE.md).

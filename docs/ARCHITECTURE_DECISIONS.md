@@ -55,6 +55,14 @@ A stock-firmware Companion can be enrolled by authorized identity/key material w
 
 References: [public component responsibilities](COMPONENTS.md), [authorized Repeater-origin transmission](https://github.com/hoejriis/deimos-mesh/issues/1746), [firmware conformance](https://github.com/hoejriis/mecon-firmware/issues/117), [RF repeater management](https://github.com/hoejriis/deimos-mesh/issues/1280).
 
+## Room Server scope — accepted 17 November 2026
+
+**Decision:** The MeshCore Room Server remains supported for upstream/stock compatibility, but is **not a primary MECON fleet profile or a target for new Room Server-specific development**. The three default profiles remain Personal Companion, Repeater Gateway and RF-only Repeater. Existing generic firmware role support and already implemented operations are retained; do not remove or break stock-compatible behavior. Generic security/conformance work applies where relevant, but must not create a separate MECON Room Server product, special firmware edition, dedicated Reader workflow or Backend feature solely for this role.
+
+**Rationale:** Backend-managed history, identities, delivery and future Backend store-and-forward cover normal MECON needs with a unified Reader experience. A stock Room Server remains useful as an independent RF-only service during total Backend absence, which is deliberately not MECON's primary operating model. Future store-and-forward is a Backend capability, not a Room Server firmware fork. This changes product scope, not a claim that Backend store-and-forward is implemented.
+
+**Affected work:** [public Backend device inventory #16](https://github.com/hoejriis/mecon-backend/issues/16), [firmware conformance #117](https://github.com/hoejriis/mecon-firmware/issues/117). Historical completed Room Server support issues remain as implementation history, not a mandate for new product features.
+
 ## Open / verification required
 
 The five topics previously listed here have been reconciled with owner decisions and existing issues; none remains a **fundamental unanswered product-architecture question**. Implementation-specific interfaces, test thresholds, migration and release gates remain tracked in their issues. In particular:

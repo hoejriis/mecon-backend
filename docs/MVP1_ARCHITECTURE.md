@@ -17,7 +17,7 @@ flowchart TD
 
 ## Responsibilities
 
-**Reader:** presentation, device/transport state, user interactions, local BLE adapter, identity selection and normalized message display. No direct MQTT credentials, MECON Backend internals, fleet-management bypass or Backend business logic.
+**Reader:** stock-familiar persistent bottom Chats/Channels/Map navigation across phone/tablet/web; phone Fleet entry for authorized Fleet Owners/Admins (existing Devices function); Contacts/Companion/Settings as secondary actions; presentation, device/transport state, user interactions, local BLE adapter, identity selection and normalized message display. No direct MQTT credentials, MECON Backend internals, fleet-management bypass or Backend business logic.
 
 **Companion:** canonical device identity and native MeshCore BLE operations; BLE may provide local messages and sends where supported. No assumption that browser can export keys or perform all stock-app operations.
 
@@ -45,6 +45,6 @@ Do not publish private production URLs, credentials, customer data or internal s
 
 ## Deferred
 
-Offline encrypted history and local unlock, automatic BLE/Backend event reconciliation, fleet-owner/admin GUI, observation analytics, public Backend implementation, OTA and firmware protocol expansion.
+Offline encrypted history and local unlock, automatic BLE/Backend event reconciliation, future desktop/tablet Fleet Owner/Admin management GUI design, advanced observation analytics, public Backend implementation, OTA and firmware protocol expansion.
 
 [Product vision](PRODUCT_VISION.md) · [UX](READER_UX.md) · [MVP plan](MVP1_PLAN.md)

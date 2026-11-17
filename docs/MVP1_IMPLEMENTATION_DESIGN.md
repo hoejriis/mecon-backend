@@ -12,6 +12,10 @@ Build a public TypeScript/React **Device User Reader** that uses the existing **
 4. **M3 BLE hardware and adapter:** prove Bluefy on real iPhone/iPad and supported Companion; implement only verified GATT/protocol capabilities, no assumptions of background support.
 5. **M4 MVP1 acceptance:** real-device E2E, privacy, duplicates, reconnection, usability, failure paths and release evidence. Public beta/GA remains separately approved.
 
+## GUI inspiration and licensing
+
+Owner-approved: [MeshCore One](https://github.com/Avi0n/MeshCoreOne) replaces the stock MeshCore app as primary visual/interaction reference. Implement original React/TypeScript components with MECON branding under existing Apache-2.0 license; do not copy MC1 GPLv3 application code or protected artwork without explicit licensing review. Approved navigation, Fleet role gating, milestones, API and privacy remain unchanged. Future native Apple `mecon-app` will fork MC1 for Device Users and integrate MECON Backend online services; Fleet Owner/Admin use cases remain web-only. Native integration is target, not implemented.
+
 ## Layout and navigation
 
 - **Phone, tablet and desktop web:** persistent **bottom** tabs in order **Chats | Channels | Map**; selected tab and keyboard/screen-reader semantics are clear. Tablet/desktop may show master/detail columns above bottom bar. Do not substitute a sidebar for bottom tabs.

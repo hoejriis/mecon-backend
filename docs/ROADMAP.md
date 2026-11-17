@@ -27,3 +27,7 @@ See [deployments](DEPLOYMENTS.md), [components](COMPONENTS.md), [security](SECUR
 ## Availability
 
 The roadmap describes intended capabilities, not a claim that they are implemented. See the [public availability statement](https://github.com/hoejriis/MeshContinuum/blob/main/docs/CAPABILITIES.md) for current software and hardware evidence.
+
+## Reader MVP2 offline continuity and desktop USB (approved target)
+
+After the P3 Reader MVP, the Reader supports encrypted bounded offline cache, trusted local unlock, Backend-issued scoped offline leases, and **direct desktop Chromium Web Serial** to a Companion. With a valid lease, an authenticated and locally unlocked user may send/receive through authorized **BLE or USB** while the Backend is unreachable. Lease expiry blocks outbound local actions; locally unlocked private cache becomes read-only. Browser USB is separate from the headless USB-to-MQTT Connector. Updates require user-confirmed activation and safe draft/attempt-preserving migration. The private Backend remains online authority; no functionality or hardware support is claimed verified. See [Reader MVP2 design](READER_MVP2_DESIGN.md) and [ADR](ARCHITECTURE_DECISIONS.md).

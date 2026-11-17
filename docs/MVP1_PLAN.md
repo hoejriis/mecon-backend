@@ -30,8 +30,4 @@ Delegated receive identities (up to four extra), offline secure cache and fully 
 
 ## Tracking
 
-- [P5 architecture umbrella](https://github.com/hoejriis/deimos-mesh/issues/35)
-- [Original Reader-first MVP umbrella](https://github.com/hoejriis/deimos-mesh/issues/1835)
-- [Existing Backend compatibility work](https://github.com/hoejriis/deimos-mesh/issues/1836)
-- [Existing Reader UX work](https://github.com/hoejriis/deimos-mesh/issues/1837)
 - [Public product documentation issue](https://github.com/hoejriis/MeshContinuum/issues/33)

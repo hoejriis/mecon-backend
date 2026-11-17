@@ -8,6 +8,8 @@ MECON Reader is a familiar, communication-first MeshCore client with MECON's vis
 
 The first deliverable is a **BLE-enabled web Reader for iPhone/iPad using Bluefy**, initially for **Device Users**, with an authorized MECON Backend supplying online history, account/authorization and gateway services. The Reader uses a versioned Backend interface and can evolve independently of the Backend implementation.
 
+The Device User GUI follows MC1's **Chats / Nodes / Map / Tools / Settings** bottom navigation, with Channels within Chats. Fleet Owner and Admin management GUIs are later web-only work; there is no phone Fleet tab in the Device User Reader.
+
 ## Core experience
 
 1. Open the Reader in Bluefy on an iPhone/iPad; see clear support and connection state.

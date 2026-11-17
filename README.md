@@ -16,6 +16,6 @@ The public application repository for **MECON**, beginning with a **Bluefy-enabl
 
 - [MeshContinuum](https://github.com/hoejriis/MeshContinuum) — product, public documentation and visual identity
 - [mecon-firmware](https://github.com/hoejriis/mecon-firmware) — device firmware and public contracts
-- [deimos-mesh](https://github.com/hoejriis/deimos-mesh/issues/35) — existing private Backend and transition programme
+- Existing private MECON Backend — existing operational implementation (not publicly accessible)
 
 MECON is independent of MeshCore. It is not an official MeshCore app; stock MeshCore devices and apps remain supported separately. Do not submit private keys, credentials, real messages or private deployment data in public issues.

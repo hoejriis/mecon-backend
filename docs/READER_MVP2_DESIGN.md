@@ -1,0 +1,37 @@
+# Reader MVP2 — offline continuity, safe updates and direct laptop USB
+
+**Status:** approved target design, 17 November 2026. **Sequence:** after P3 Reader MVP1 integration, no public Backend replacement. The existing private Backend remains account, capability and online messaging authority. This is a preparation/design programme; none of these functions is claimed implemented or hardware-verified.
+
+## Scope and separation
+- #24: bounded, per-user encrypted local cache, drafts, trusted unlock, server-authorized time-limited offline lease, safe reconnect and reconciliation.
+- #25: independently deployed Reader at `reader.mecon.cloud` gets versioned assets, user-confirmed activation, compatible cache migration, preservation of unique drafts and uncertain RF attempts, rollback.
+- Direct browser USB: laptop/desktop **Chromium Web Serial** where available, foreground user gesture and permission, direct USB-attached Companion. Share the BLE Companion protocol/operation abstraction and truthful send/receive status. No direct MQTT or private Backend USB-agent dependency.
+- #21 is a **different** standalone headless serial-to-MQTT Connector; no coupling to browser USB.
+- Fleet Owner/Admin desktop GUI (#17/#18), public Backend implementation (#9–#16), federation and broad public deployment remain deferred.
+
+## Offline policy — owner accepted
+A previously authenticated, locally unlocked Device User with a **valid, Backend-issued bounded offline lease** may read authorized cached history and **send/receive through a locally connected BLE or USB Companion while the Backend is unreachable**, limited to identities and operations actually granted by the lease and verified device capabilities. No online gateway send or Backend history access while disconnected. The Reader is **not** a standalone authority; it cannot mint or extend leases or acquire new identity rights offline. When lease expires, locally cached private content becomes **read-only** where trusted unlock permits; block all outbound BLE/USB actions. If no trusted unlock, show only account-independent shell and quarantine protected content/drafts without silently erasing them.
+
+**Offline incoming messages:** display only if the local device/protocol can legitimately expose them and the cached authorization covers that identity/channel; otherwise hold as unavailable/unknown rather than bypassing identity privacy. Device private keys remain on Companion, not in Reader storage. Explicitly distinguish locally observed incoming messages from Backend-synced history.
+
+## Direct USB design
+- Feature-detect secure-context Web Serial; request device access **only** after explicit user interaction. Show unsupported, denied, disconnected, busy, permission revoked, stale, reconnecting and device-protocol incompatible states. Never auto-grant or silently switch paths.
+- Use native public firmware USB framing and capability `hello`; do not assume Web Serial parity with BLE until actual firmware/browser tests. Map USB and BLE into one bounded Companion adapter interface; USB does not create a second MeshCore identity.
+- Send path is explicitly **local USB**, **local BLE** or **Backend**. Device accepted, RF transmitted, native recipient ACK and unknown are separate evidence. Unknown/timeout never authorizes silent cross-transport retry.
+- When connected to Backend, server remains the authority for user/device assignments and lease issuance; browser USB must not expose device management operations outside granted capabilities. For offline, enforce lease scope and local trusted unlock; acknowledge inability to revoke disconnected access before lease expiry.
+- Desktop Chromium is the first target; unsupported browsers use Backend-only or verified BLE path. Do not promise Safari/Firefox USB support or background execution.
+
+## Cache, sync and safety
+- Encrypted IndexedDB per account/deployment, bounded age/size, versioned schema and key separation; never store MeshCore private keys. Server issues signed/otherwise verifiable offline authorization lease with identity/operation scope, issue/expiry and replay protection; actual format/crypto and maximum duration must be specified with private Backend security owner before implementation.
+- Store stable draft IDs, attempt IDs, native packet IDs where available, source transport, local receive evidence, status and authorization provenance. Reconnect obtains fresh authorization and authorized snapshots/cursors; deduplicate by stable identity/evidence, preserve uncertain attempts, never auto-resend or silently erase unique drafts. Account disablement/reassignment takes effect immediately online, while offline capability is necessarily bounded by lease expiry.
+- Cache and service-worker update must be atomic/recoverable; retain the prior version and encrypted data until migration verified. New version may download in background but **activation requires user confirmation** after checking drafts and in-flight attempts; no forced unsafe reload or automatic send.
+
+## Delivery gates
+1. **Contracts and fixtures:** private Backend lease issuance/revocation semantics, authorization projection, public firmware USB framing/capability matrix, encrypted cache and migration fixture sets. Missing interface details are implementation dependencies, not permission to invent security parameters.
+2. **#24:** online/offline/expired lease/unsupported unlock, lost network, reassignment, account switching, eviction and reconnect; prove no private-data leakage and no ambiguous duplicate send.
+3. **USB issue:** real laptop Chromium + supported Companion/firmware, permission, connect/receive/send/status, unplug/replug, busy port, lease-valid offline and lease-expired outbound denial.
+4. **#25:** interrupted update, schema incompatibility, rollback, draft/attempt preservation, offline upgrade, no loss or duplicate RF sends.
+5. **Integration:** same Reader and Backend API as P3, independent F2 rollback, no change to current private Backend UI or public Backend replacement.
+
+## Open technical parameters, not new owner product decisions
+Offline lease maximum duration and secure issuance/validation; exact trusted local unlock mechanism; firmware USB protocol mapping and board/browser matrix; cache quotas and retention defaults; update rollback retention. Validate and document these before claiming end-to-end acceptance.

@@ -1,10 +1,10 @@
 # Reader MVP1 — visual UX examples
 
-> **Approved MVP1 implementation baseline (17 November 2026):** [MVP1 implementation design](MVP1_IMPLEMENTATION_DESIGN.md) governs milestone order, navigation, privacy, map, F2 deployment and acceptance. Older illustrative or five-tab descriptions are superseded where conflicting. Real hardware and Backend API conformance still require verification.
+> **Approved MVP1 implementation baseline (17 November 2026):** [MVP1 implementation design](MVP1_IMPLEMENTATION_DESIGN.md) governs milestone order, navigation, privacy, map, F2 deployment and acceptance. The former three-tab and phone Fleet concept is superseded by the owner-approved MC1 five-tab Device User layout. Real hardware and Backend API conformance still require verification.
 
 **Status:** illustrative reference mockups, **not** implemented UI or an approved pixel-perfect design. Data, device names and counts are fictitious. These mockups illustrate the owner's approved navigation and live packet observation starting point. The separate desktop/tablet Admin GUI remains deferred.
 
-![Two mobile concept screens: live packet Map and role-gated Fleet](../design/reader-mvp1-map-fleet-concepts.svg)
+**Historical superseded concept:** [Map and phone Fleet mockup](../design/reader-mvp1-map-fleet-concepts.svg) (not the approved MC1 navigation).
 
 ## MC1 screen references and MECON branded concept
 
@@ -14,9 +14,9 @@ Primary visual inspiration is [MeshCore One's App Store listing and screenshots]
 
 - **Brand authority:** [MeshContinuum brand specification](https://github.com/hoejriis/MeshContinuum/blob/main/docs/BRAND.md). Use **actual** original SVGs from [MeshContinuum/brand](https://github.com/hoejriis/MeshContinuum/tree/main/brand), especially `lockup-dark.svg` / `lockup-light.svg`. The SVG concept above intentionally uses text in place of a logo; do **not** approximate or redraw the mark from it.
 - Colours: navy `#0D1736`, turquoise `#25D6C9`, violet `#8B7CFF`, light `#F5F7FB`; dark surfaces `#0A1230` and `#131D45`. Respect documented contrast requirements.
-- **All viewports:** persistent bottom **Chats / Channels / Map**. Phone Fleet Owner/Instance Admin with actual management capability gets **Fleet** as fourth bottom item, corresponding to today's Devices functionality. Ordinary users see three tabs. Contacts, Companion and Settings are secondary.
+- **All viewports:** persistent bottom **Chats / Nodes / Map / Tools / Settings**, with Channels within Chats. MC1's light mobile interface is the primary reference. Earlier three-tab and Fleet illustrations are historical, not the target.
 - **Map starts with live packet observations**, using authorized observation sources and public/role-scoped projections as appropriate. Show reception **at actual observer locations** and truthful RF metadata. Never infer transmitter location or draw a packet route from hearing alone. Respect privacy and observation-source publication rules; show empty/unavailable states.
-- **Fleet:** the phone-oriented management entry reuses authorized existing Devices functions. It must not grant access to other users' private content. The larger desktop/tablet Admin GUI is a later separate design.
+- **Fleet/Admin:** management GUI is deferred to later web-only design; not a Device User bottom tab.
 - This mockup is **not** evidence that Bluefy, packet map, RF metrics, fleet device counts or live APIs have been implemented.
 
 ## Tracking

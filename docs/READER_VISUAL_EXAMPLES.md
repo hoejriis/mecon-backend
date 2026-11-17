@@ -1,5 +1,7 @@
 # Reader MVP1 — visual UX examples
 
+> **Approved MVP1 implementation baseline (17 November 2026):** [MVP1 implementation design](MVP1_IMPLEMENTATION_DESIGN.md) governs milestone order, navigation, privacy, map, F2 deployment and acceptance. Older illustrative or five-tab descriptions are superseded where conflicting. Real hardware and Backend API conformance still require verification.
+
 **Status:** illustrative reference mockups, **not** implemented UI or an approved pixel-perfect design. Data, device names and counts are fictitious. These mockups illustrate the owner's approved navigation and live packet observation starting point. The separate desktop/tablet Admin GUI remains deferred.
 
 ![Two mobile concept screens: live packet Map and role-gated Fleet](../design/reader-mvp1-map-fleet-concepts.svg)

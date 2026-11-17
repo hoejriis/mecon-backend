@@ -20,7 +20,7 @@ Device Users receive **messages**, not raw observations: messages to public chan
 
 - Each device belongs to one fleet and may be assigned to **one Device User**, including its Fleet Owner.
 - Each Device User may be assigned **up to five devices**.
-- A user's primary Companion may receive for **up to four additional delegated identities**, when supported. Delegation is receive/decrypt/native-ACK only, **not send-as**. Do not promise this until firmware documented work and the planned Backend delegated-receive integration have real-hardware acceptance.
+- A user's primary Companion may receive for **up to four additional delegated identities**, when supported. Delegation is receive/decrypt/native-ACK only, **not send-as**. Do not promise this until compatible firmware and the planned Backend delegated-receive integration have real-hardware acceptance.
 - Device assignment, ownership transfer and delegated-key provisioning are different audited operations.
 - Reassignment revokes the former user's Backend authorization and requires safe key/delegation lifecycle handling. Offline device revocation has physical/cryptographic limitations.
 
@@ -28,4 +28,4 @@ Device Users receive **messages**, not raw observations: messages to public chan
 
 A direct BLE pairing is **not** proof of Backend account authorization or ownership. The Reader must not merge another person's device-local messages into the signed-in user's Backend account. Backend remains authoritative for online user/assignment access. Direct local Companion use is gated by supported firmware and explicit pairing/identity authority; device-only use without Backend authentication requires a separately defined security/UX policy before implementation.
 
-Never expose private keys to the Reader application merely to implement delegated receive identities. The Companion remains canonical custodian; delegated Backend key custody is governed by P5 architecture, not a UI shortcut.
+Never expose private keys to the Reader application merely to implement delegated receive identities. The Companion remains canonical custodian; delegated Backend key custody is governed by the target security architecture, not a UI shortcut.

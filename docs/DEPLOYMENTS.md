@@ -1,6 +1,6 @@
 # Deployment models and lifecycle — target
 
-**Post-MVP architecture.** MVP1 reuses an existing private Backend; these models describe the eventual public application, not a released installer.
+**Post-MVP architecture.** MVP1 reuses an existing MECON Backend; these models describe the eventual public application, not a released installer.
 
 ## Vocabulary
 
@@ -12,7 +12,7 @@ One Raspberry Pi or other host runs Backend+served Reader, SQLite, Mosquitto and
 
 ## 2. Distributed or hybrid
 
-Backend+Reader and broker can run on different hosts/sites; a USB Connector may be near a radio. Private Backend can be reachable over VPN while only an MQTT rendezvous is Internet-facing. Backend attaches to configured local and public brokers; a device chooses one active broker profile, preferring verified LAN when available, then public primary and secondary. Broker credentials and topic ACLs are not application user grants.
+Backend+Reader and broker can run on different hosts/sites; a USB Connector may be near a radio. MECON Backend can be reachable over VPN while only an MQTT rendezvous is Internet-facing. Backend attaches to configured local and public brokers; a device chooses one active broker profile, preferring verified LAN when available, then public primary and secondary. Broker credentials and topic ACLs are not application user grants.
 
 ## 3. Multiple Backends in one Deployment
 

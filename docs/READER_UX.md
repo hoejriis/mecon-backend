@@ -1,5 +1,7 @@
 # Reader UX — familiar to MeshCore users, distinctly MECON
 
+> **Approved MVP1 implementation baseline (17 November 2026):** [MVP1 implementation design](MVP1_IMPLEMENTATION_DESIGN.md) governs milestone order, navigation, privacy, map, F2 deployment and acceptance. Older illustrative or five-tab descriptions are superseded where conflicting. Real hardware and Backend API conformance still require verification.
+
 **Status:** Design specification, not a completed UI.
 
 ## Navigation — owner-approved 17 November 2026

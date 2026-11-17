@@ -1,6 +1,6 @@
 # Reader-first MVP1 — delivery plan and acceptance
 
-**Status:** Issue-backed design plan; no coding, deployment or production cutover authorized by this document.
+**Status:** Reader MVP issue-backed design plan; full-product replacement is separately scoped in future P5 issues. No coding, deployment or production cutover authorized by this document.
 
 ## Workstreams in dependency order
 

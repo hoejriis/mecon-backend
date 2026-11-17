@@ -2,7 +2,7 @@
 
 The public application architecture for [MeshContinuum (MECON)](https://github.com/hoejriis/MeshContinuum): a familiar MeshCore messaging Reader, fleet operations, observation history and a self-hostable Backend for individuals and small communities.
 
-> **Status — design, 17 November 2026:** The complete product target is documented here. **The first implementation programme is MVP1: the Bluefy-enabled Device User Reader GUI.** The remaining full-product work is now decomposed into separately scoped future issues. No public Backend application or Reader code is shipped yet. MVP1 connects to the existing private MECON Backend; its code, issues and operational details are not public and are deliberately not linked from this repository.
+The application combines a familiar MeshCore Reader, fleet operations, observation history and a self-hostable Backend. Explore the intended product below; [availability](https://github.com/hoejriis/MeshContinuum/blob/main/docs/CAPABILITIES.md) separately explains what is ready to use.
 
 ## Start with the product
 
@@ -19,21 +19,20 @@ The public application architecture for [MeshContinuum (MECON)](https://github.c
 - [Deployment models, multi-site operation and recovery](docs/DEPLOYMENTS.md)
 - [Roadmap — active MVP versus future target](docs/ROADMAP.md)
 
-## Current work: MVP1 Reader GUI
+## The Reader experience
 
-A Bluefy-first web Reader for iPhone/iPad Device Users, with familiar **Chats, Channels, Contacts, Companion and Settings**, MECON's original colors/mark, BLE connection to a supported Companion and authorized online history/messaging through the existing private Backend. Familiar to users of the stock MeshCore app, but not a copy. Bluefy and hardware compatibility are **not yet verified**.
+A Bluefy-first web Reader for iPhone/iPad Device Users, with familiar **Chats, Channels, Contacts, Companion and Settings**, MECON's original colors/mark, BLE connection to a supported Companion and authorized online history/messaging through an authorized MECON Backend. Familiar to users of the stock MeshCore app, but not a copy. Browser and hardware support vary; consult the [availability record](https://github.com/hoejriis/MeshContinuum/blob/main/docs/CAPABILITIES.md).
 
 - [MVP product vision](docs/PRODUCT_VISION.md)
 - [Reader interaction specification](docs/READER_UX.md)
-- [BLE and private Backend MVP integration](docs/MVP1_ARCHITECTURE.md)
+- [Reader BLE and Backend integration](docs/MVP1_ARCHITECTURE.md)
 - [MVP delivery plan and acceptance](docs/MVP1_PLAN.md)
-- [Active MVP issues](https://github.com/hoejriis/mecon-backend/issues)
 
-**Issue sequencing:** Reader MVP issues #1–#7 are P3; full replacement issues #9–#29 are P5 and Needs Design. The latter describe independently deliverable future work and are not authorization to start implementation before the MVP. Issue #8 is closed as superseded by the granular backlog.
+
 
 ## Related public repositories
 
 - [MeshContinuum](https://github.com/hoejriis/MeshContinuum) — product story, branding, roadmap, hosted-beta context and public-facing documentation.
 - [mecon-firmware](https://github.com/hoejriis/mecon-firmware) — independent managed-device firmware and contracts, hardware evidence and releases.
 
-MECON is independent of [MeshCore](https://github.com/meshcore-dev/MeshCore); no official affiliation is implied. Do not publish keys, private messages, production addresses, credentials or sensitive deployment information in issues.
+MECON is independent of [MeshCore](https://github.com/meshcore-dev/MeshCore); no official affiliation is implied. Protect private messages, device keys, credentials and sensitive deployment information.

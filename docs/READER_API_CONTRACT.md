@@ -35,6 +35,10 @@ All list responses carry `items`, `next_cursor` (nullable) and `as_of`. IDs are 
 - Device outcome/inbox buffers may be bounded and lost on reboot. `unknown` or `timed_out` does not prove non-transmission; **never automatically resend** through the same or another path. The user must explicitly authorize a new attempt, with a new attempt ID.
 - Messages include `message_id`, `conversation_id`, `identity_id`, `source_path`, `observed_at`, `content`, and optional `attempt_id`; do not invent a cross-source merge when identity cannot be proven.
 
+## Automatic Backend-origin coordination — target
+
+For a user-initiated **Backend-path** P2P/DM, public-channel or private-channel send, Reader chooses the authorized sender identity and destination, **not Repeater Gateway origins**. Backend coordinates an eligible Companion-first, otherwise random-gateway-first RF transmission and observation-driven sequential fallback across gateways. Each subsequent origin is selected only after a 10–15-second window **measured from confirmed actual RF transmission**, if that gateway has neither heard nor transmitted the same native packet. Backend retains one logical send attempt, per-origin outcomes and native packet identity where valid; normal RF repeating continues. Report truthful progress and uncertainty. No automatic fallback from an uncertain **BLE-path** send to Backend; BLE/Backend remain explicit separate paths. See [ADR](ARCHITECTURE_DECISIONS.md) and [Backend orchestration #1746](https://github.com/hoejriis/deimos-mesh/issues/1746). This is target behavior, not a claim of an implemented endpoint.
+
 ## Events and synchronization
 
 SSE event envelope: `{event_id,kind,occurred_at,resource_id,version}`. Kinds include message, conversation, device status, attempt status, authorization changed and resync required. Cursor is opaque, scoped to the authenticated user and expires according to server policy. Reconnect with cursor; on expiration or permission changes, discard cached unauthorized data and reload authorized snapshots. Do not replay private content after revocation. Heartbeats are transport-only.

@@ -2,7 +2,7 @@
 
 ## Current active development scope: **MVP1 Device User Reader GUI only**
 
-The only implementation issues currently open in this public repository should concern the **Bluefy-enabled Reader for Device Users**, its UX, BLE feasibility/adapter, private Backend compatibility, message journeys and acceptance. The Backend is **not being rebuilt in MVP1**. Fleet Owner/Admin screens, federation, deployment packaging, advanced offline cache and new public Backend code are **documented targets only**; do not create implementation issues for them until a subsequent phase is authorized.
+**The only implementation work to start now** concerns the **Bluefy-enabled Reader for Device Users**, its UX, BLE feasibility/adapter, private Backend compatibility, message journeys and acceptance. The Backend is **not being rebuilt in MVP1**. Future Fleet Owner/Admin screens, federation, deployment packaging, advanced offline cache and public Backend replacement now have **separately deliverable P5 / Needs Design issues #9–#29**, to be implemented only after a later programme is authorized.
 
 ### MVP1 gates
 
@@ -24,4 +24,4 @@ See [MVP1 plan](MVP1_PLAN.md) and [active MVP1 issues](https://github.com/hoejri
 - Multi-Backend Join, continuity, federation and cold recovery; migration from private service.
 - Independent-operator and hardware acceptance, security review and public release.
 
-These are **not current MVP1 commitments**. See [target architecture](TARGET_ARCHITECTURE.md), [deployments](DEPLOYMENTS.md) and [roles](ROLES_AND_PERMISSIONS.md).
+These are **not current MVP1 commitments**. [Future implementation issues #9–#29](https://github.com/hoejriis/mecon-backend/issues?q=is%3Aissue+label%3AP5) are scoped as individual deliverables, not an umbrella. See [target architecture](TARGET_ARCHITECTURE.md), [deployments](DEPLOYMENTS.md) and [roles](ROLES_AND_PERMISSIONS.md).

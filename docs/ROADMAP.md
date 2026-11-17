@@ -1,27 +1,29 @@
-# Public application roadmap — target and active work
+# Application roadmap
 
-## Current active development scope: **MVP1 Device User Reader GUI only**
+MeshContinuum's application grows from a familiar messaging Reader into a self-hostable service for people and communities operating MeshCore networks. The architecture is designed to work locally first, with optional multi-site connectivity. See the [target architecture](TARGET_ARCHITECTURE.md) and [product vision](PRODUCT_VISION.md).
 
-**The only implementation work to start now** concerns the **Bluefy-enabled Reader for Device Users**, its UX, BLE feasibility/adapter, private Backend compatibility, message journeys and acceptance. The Backend is **not being rebuilt in MVP1**. Future Fleet Owner/Admin screens, federation, deployment packaging, advanced offline cache and public Backend replacement now have **separately deliverable P5 / Needs Design issues #9–#29**, to be implemented only after a later programme is authorized.
+## Reader for everyday messaging
 
-### MVP1 gates
+The first application experience focuses on Device Users: chats, channels, contacts, Companion selection and reliable explanations of what a message's status actually means.
 
-1. Bluefy/iPhone/iPad real-device BLE protocol evidence.
-2. MECON-branded, stock-MeshCore-familiar Reader navigation and flows.
-3. Versioned private Backend compatibility contract for account, authorized messages and send outcomes.
-4. React Reader shell and BLE adapter; direct BLE and online paths explicitly distinguished.
-5. End-to-end chats, channels, contacts, Companion selection and honest send status.
-6. Privacy and hardware acceptance; existing private Backend and Reader unaffected.
+- Direct Web Bluetooth access to a compatible Companion where the browser and hardware support it.
+- Account-authorized online history and messaging through a versioned Backend API.
+- Clear separation between local BLE and Backend send/read paths, including provenance and acknowledgements.
+- Familiar MeshCore terminology with a distinct MECON design.
+- Privacy boundaries that prevent administrators and fleet owners from reading other users' private messages.
 
-See [MVP1 plan](MVP1_PLAN.md) and [active MVP1 issues](https://github.com/hoejriis/mecon-backend/issues).
+The [Reader architecture](MVP1_ARCHITECTURE.md), [experience design](READER_UX.md) and [delivery and acceptance](MVP1_PLAN.md) describe this first increment. Hardware and browser compatibility must be demonstrated before it is advertised as available.
 
-## Later target increments — documentation only
+## Fleet operations and administration
 
-- Fleet Owner inventory, assignment, configuration, diagnostics and observation-sharing GUI.
-- Admin deployment, accounts, public observation sources, infrastructure and health GUI.
-- Local encrypted offline Reader cache, authorization lease, safe synchronization and direct BLE/USB workflows beyond MVP1.
-- Public Python/FastAPI Backend, served Reader, SQLite, Mosquitto and USB Connector deployment packaging.
-- Multi-Backend Join, continuity, federation and cold recovery; migration from private service.
-- Independent-operator and hardware acceptance, security review and public release.
+Fleet Owners gain device inventory, assignment, configuration, diagnostics and observation-sharing controls. Instance Administrators manage deployments, accounts, infrastructure, public sources and security. Permissions remain composable; owning or administering a device does not grant access to its user's private conversations.
 
-These are **not current MVP1 commitments**. [Future implementation issues #9–#29](https://github.com/hoejriis/mecon-backend/issues?q=is%3Aissue+label%3AP5) are scoped as individual deliverables, not an umbrella. See [target architecture](TARGET_ARCHITECTURE.md), [deployments](DEPLOYMENTS.md) and [roles](ROLES_AND_PERMISSIONS.md).
+## Self-hosting, continuity and resilience
+
+The complete application brings together a Python/FastAPI Backend, served TypeScript/React Reader, SQLite state, a standard MQTT broker and optional transparent USB Connector. It is designed for a single small site first, then trusted multi-Backend federation, continuity and recovery. A secure local Reader cache and broader offline support are later capabilities.
+
+See [deployments](DEPLOYMENTS.md), [components](COMPONENTS.md), [security](SECURITY_AND_PRIVACY.md) and [roles](ROLES_AND_PERMISSIONS.md).
+
+## Availability
+
+The roadmap describes intended capabilities, not a claim that they are implemented. See the [public availability statement](https://github.com/hoejriis/MeshContinuum/blob/main/docs/CAPABILITIES.md) for current software and hardware evidence.

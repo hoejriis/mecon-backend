@@ -6,6 +6,10 @@
 
 ![Two mobile concept screens: live packet Map and role-gated Fleet](../design/reader-mvp1-map-fleet-concepts.svg)
 
+## MC1 screen references and MECON branded concept
+
+Primary visual inspiration is [MeshCore One's App Store listing and screenshots](https://apps.apple.com/app/meshcore-one/id6757419477) and its [feature overview](https://github.com/Avi0n/MeshCoreOne). A separate newly generated MECON-branded multi-screen concept was presented in the project conversation on 17 November 2026. It shows Chats, Channels, observation Map, desktop split-view and authorized Fleet navigation; it is **illustrative only** and not checked into this repository. Do not infer implementation, real telemetry, approved locations or verified device capabilities from illustrative screenshots. The normative design, real brand SVGs and privacy restrictions override mockups. Web Reader stays React/TypeScript under Apache-2.0; do not copy GPLv3 MC1 app source or protected assets.
+
 ## Design constraints for the coder
 
 - **Brand authority:** [MeshContinuum brand specification](https://github.com/hoejriis/MeshContinuum/blob/main/docs/BRAND.md). Use **actual** original SVGs from [MeshContinuum/brand](https://github.com/hoejriis/MeshContinuum/tree/main/brand), especially `lockup-dark.svg` / `lockup-light.svg`. The SVG concept above intentionally uses text in place of a logo; do **not** approximate or redraw the mark from it.

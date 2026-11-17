@@ -36,3 +36,8 @@ A Bluefy-first web Reader for iPhone/iPad Device Users, with familiar **Chats, C
 - [mecon-firmware](https://github.com/hoejriis/mecon-firmware) — independent managed-device firmware and contracts, hardware evidence and releases.
 
 MECON is independent of [MeshCore](https://github.com/meshcore-dev/MeshCore); no official affiliation is implied. Protect private messages, device keys, credentials and sensitive deployment information.
+
+
+## Architecture decisions
+
+Before proposing changes to roles, fleets, devices, trust, messaging or federation, consult the [Architecture decisions](docs/ARCHITECTURE_DECISIONS.md). Accepted decisions should not be reopened without a documented change; unresolved matters are listed separately.

@@ -27,3 +27,7 @@ Invitation-only multi-user service; passkeys and magic links (when email configu
 ## Transport and recovery
 
 HTTPS/WSS for Reader APIs, signed device authority separate from broker auth, mutual authenticated Backend federation, protected continuity packages and separately controlled cold Recovery. No public secrets, private instance addresses, production messages or credentials in public docs/issues.
+
+## Reader MVP2 offline continuity and desktop USB (approved target)
+
+After the P3 Reader MVP, the Reader supports encrypted bounded offline cache, trusted local unlock, Backend-issued scoped offline leases, and **direct desktop Chromium Web Serial** to a Companion. With a valid lease, an authenticated and locally unlocked user may send/receive through authorized **BLE or USB** while the Backend is unreachable. Lease expiry blocks outbound local actions; locally unlocked private cache becomes read-only. Browser USB is separate from the headless USB-to-MQTT Connector. Updates require user-confirmed activation and safe draft/attempt-preserving migration. The private Backend remains online authority; no functionality or hardware support is claimed verified. See [Reader MVP2 design](READER_MVP2_DESIGN.md) and [ADR](ARCHITECTURE_DECISIONS.md).

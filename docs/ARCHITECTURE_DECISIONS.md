@@ -81,6 +81,10 @@ The first deployed Reader MVP1 is an **independently deployed public-repository 
 
 **Supersedes** MVP1-plan language that a deployed Reader necessarily waits until all hardware/privacy final release gates or a separate public beta authorization; those gates still apply to **public beta/GA**, not this specifically approved restricted F2 integration environment. **Affected:** [MVP1 plan](MVP1_PLAN.md), [MVP1 architecture](MVP1_ARCHITECTURE.md), [Deployments](DEPLOYMENTS.md), public Reader issues #1/#4/#7, and private Backend compatibility issue [#1836](https://github.com/hoejriis/deimos-mesh/issues/1836). Target decision; no claim that DNS, TLS, SSO/session interoperability or deployment is currently implemented.
 
+## Reader MVP1 implementation design baseline — confirmed 17 November 2026
+
+The owner authorized finalizing the MVP1 design and beginning staged development. [MVP1 implementation design](MVP1_IMPLEMENTATION_DESIGN.md) is the consolidated approved specification for stock-familiar bottom Chats/Channels/Map navigation, capability-gated phone Fleet, MeshContinuum brand assets, live **observation** Map (not inferred RF routes), same-user restricted F2 Reader deployment, explicit BLE-versus-Backend send path and safe delivery evidence. **First deployable milestone** is the authenticated Reader shell on `reader.mecon.cloud`; BLE hardware conformance and complete messaging are subsequent milestones, not blockers for the shell. Existing `mecon.cloud` services remain operational. This clarifies delivery sequencing, **not** authorization for public beta or any unverified hardware claim. #1/#2/#3/#4 can proceed as designed; #5/#6/#7 remain gated on hardware/API/integration evidence, not new owner UX choices.
+
 ## Open / verification required
 
 The five topics previously listed here have been reconciled with owner decisions and existing issues; none remains a **fundamental unanswered product-architecture question**. Implementation-specific interfaces, test thresholds, migration and release gates remain tracked in their issues. In particular:

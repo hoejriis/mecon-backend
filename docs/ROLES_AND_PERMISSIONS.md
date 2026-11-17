@@ -16,7 +16,7 @@ Roles are **composable capabilities**, not three separate account types. A Fleet
 
 ## Assignment
 
-One assigned user per device; up to five devices per user. Assignment is not ownership and ownership is not a private-message grant. The primary Companion may later receive for up to four additional identities with explicitly delegated receive/decrypt/ACK only, never unrestricted send-as. On reassignment revoke Backend rights, handle key/delegation lifecycle and explain limitations for offline radios.
+A fleet has one or more co-owners. Each Companion belongs to exactly one fleet, is never shared between users, and has at most one active assigned user; default assignment is a fleet owner. Up to five devices per user. Assignment is not ownership and ownership is not a private-message grant. The primary Companion may later receive for up to four additional identities with explicitly delegated receive/decrypt/ACK only, never unrestricted send-as. On reassignment revoke Backend rights, handle key/delegation lifecycle and explain limitations for offline radios.
 
 ## GUI
 

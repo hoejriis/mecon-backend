@@ -27,3 +27,16 @@ Same-Deployment mutual authentication, direct HTTPS first, MQTT fallback, stable
 ## Public contract boundaries
 
 Native MeshCore semantics remain canonical. Generic firmware contracts live in [mecon-firmware](https://github.com/hoejriis/mecon-firmware); MECON-specific user/fleet policy lives in this application. See [target architecture](TARGET_ARCHITECTURE.md) and [security](SECURITY_AND_PRIVACY.md).
+
+## Live packet observation API (cross-client contract)
+
+The existing private Backend is the **sole implementation owner** of a versioned live packet API, to be documented with **public synthetic schemas and fixtures**. It serves two different privacy projections over common normalized reception/provenance events:
+
+- **Anonymous public projection:** public catalogue, approved node profile/coordinates, bounded live SSE and short-lived non-identifying observation links for the [MeshContinuum public map](https://github.com/hoejriis/MeshContinuum/issues/22). No raw packets, observer identities, keys, private coordinates, source endpoints or privileged metadata.
+- **Authenticated capability-scoped projection:** per-authorized-user/fleet/Admin reception evidence, multi-observer packet details, optional bounded live capture and RF analytics for future [Fleet Owner](https://github.com/hoejriis/mecon-backend/issues/17) and [Admin](https://github.com/hoejriis/mecon-backend/issues/18) Reader interfaces. Operational privileges do not grant another user's private plaintext.
+
+Both contracts specify version, event/cursor identity, dedup/provenance, snapshot + stream reconciliation, reconnect, heartbeat, backpressure, clock confidence, retention, expiry and revocation. The website and Reader never subscribe to Backend MQTT or its SQLite database directly. **This is a contract target, not a published or verified endpoint.**
+
+## Transitional ownership during the private Backend period
+
+The private Backend team implements Backend semantics, firmware integration, API contracts and **minimal private Reader screens only when needed for E2E tests** (for example FMC provisioning or live observation validation). The public application team owns all polished Reader UX, including future Fleet Owner/Admin and analytics views, and the standalone USB Connector. Public MQTT is the canonical USB Connector transport; the Backend team owns compatible broker/device envelopes, auth and job processing. The public Backend rewrite comes **last**, after Reader, USB Connector and broker interoperability have been validated against frozen contracts.

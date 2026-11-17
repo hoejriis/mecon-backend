@@ -16,7 +16,7 @@ The first deliverable is a **BLE-enabled web Reader for iPhone/iPad using Bluefy
 4. Browse conversations, channels and contacts in familiar patterns. Direct messages belong to the user's assigned identities; channel content requires appropriate channel access. **Device Users do not browse raw observation feeds.**
 5. Send a direct or channel message via an available authorized path; distinguish pending, handed to device, transmitted, acknowledged (when supported), failed and unknown. Do not imply recipient read receipts.
 6. Reconnect after BLE or network interruption without silently duplicating sends. Explain when an action needs BLE, Backend or both.
-7. Switch among up to five assigned Companions/identities. Delegated receive identities (primary + up to four) are **future conditional support**, gated on Backend #1793 and firmware #552; they are not an MVP launch requirement.
+7. Switch among up to five assigned Companions/identities. Delegated receive identities (primary + up to four) are **future conditional support**, gated on the planned Backend delegated-receive integration and firmware #552; they are not an MVP launch requirement.
 
 ## Personas and security
 

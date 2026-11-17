@@ -48,3 +48,12 @@ Do not publish private production URLs, credentials, customer data or internal s
 Offline encrypted history and local unlock, automatic BLE/Backend event reconciliation, future desktop/tablet Fleet Owner/Admin management GUI design, advanced observation analytics, public Backend implementation, OTA and firmware protocol expansion.
 
 [Product vision](PRODUCT_VISION.md) · [UX](READER_UX.md) · [MVP plan](MVP1_PLAN.md)
+
+## Approved first F2 Reader integration deployment — 17 November 2026
+
+- **URL:** `https://reader.mecon.cloud`, independently deployed on **F2**; public Reader code, private Backend unchanged as the system of record at `mecon.cloud` on F2.
+- **Access:** **same existing users as `mecon.cloud`**, using its established Backend login/session and per-user capability checks. No independent users, new sign-up, additional authorization grants, or bypass via API/live updates. Fleet management is role/capability-gated; admins do not gain other users' private messages.
+- **Integration:** versioned private Backend Reader API, HTTPS, secure cross-origin session/cookie/CORS/CSRF/WebSocket contract, sanitized test fixtures and auditable configuration. No private credentials or production endpoint assumptions embedded in public client code beyond explicitly approved deployment configuration.
+- **First milestone:** reachable restricted Reader shell, authentication/session, Chats/Channels/Map navigation, safe empty/loading states and authorized Backend connectivity; live packet map consumes only permitted observation projection as API is delivered. BLE and complete messaging journeys can follow after real-device feasibility.
+- **Coexistence:** existing `mecon.cloud` UI/Backend and MQTT/USB remain operational; no public Backend migration or cutover. This restricted integration deployment is **approved**, but is not an open public beta or proof of all MVP1 acceptance gates. Public beta/GA and production RF behavior require separate acceptance/approval.
+- **Status:** approved **target**, not deployed or verified. Infrastructure, DNS/TLS, auth behavior and security tests are implementation tasks.

@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="850" viewBox="0 0 960 850">
+<title>MeshContinuum Reader MVP1 — live packet Map and phone Fleet wireframe concepts</title>
+<rect width="960" height="850" fill="#F5F7FB"/>
+<text x="44" y="37" font-family="sans-serif" font-size="20" fill="#0D1736" font-weight="700">MeshContinuum · MECON Reader UX reference</text>
+<text x="44" y="61" font-family="sans-serif" font-size="13" fill="#0D1736">Illustrative mockups only · simulated content · canonical logo: MeshContinuum/brand/lockup-dark.svg</text>
+<defs><style>text{font-family:system-ui,Arial,sans-serif}.small{font-size:13px;fill:#B8C5E0}.white{fill:#F5F7FB}.label{font-size:17px;font-weight:700;fill:#F5F7FB}.line{stroke:#293C65;stroke-width:1}</style></defs>
+<g transform="translate(44,82)">
+<rect width="405" height="732" rx="26" fill="#0A1230"/>
+<text x="23" y="44" font-size="22" fill="#F5F7FB" font-weight="700">MeshContinuum</text><text x="24" y="63" class="small">MECON</text>
+<text x="24" y="109" class="label">Live packet map</text><text x="24" y="131" class="small">Authorized observations · last 15 minutes</text>
+<rect x="18" y="151" width="369" height="380" rx="15" fill="#131D45" stroke="#354775"/>
+<path d="M20 214 Q130 140 245 236 T387 205 M18 393 Q95 309 201 392 T387 353 M90 151 Q150 270 75 531 M285 151 Q220 298 341 531" fill="none" stroke="#314D64" stroke-width="3"/>
+<g fill="#25D6C9" stroke="#0A1230" stroke-width="4"><circle cx="92" cy="242" r="13"/><circle cx="211" cy="323" r="13"/><circle cx="326" cy="229" r="13"/></g>
+<g fill="#8B7CFF" stroke="#0A1230" stroke-width="4"><circle cx="145" cy="403" r="11"/><circle cx="301" cy="430" r="11"/></g>
+<text x="105" y="238" class="small">Gateway A</text><text x="225" y="319" class="small">Gateway B</text><text x="261" y="215" class="small">Observer C</text>
+<rect x="30" y="166" width="150" height="35" rx="17" fill="#0A1230"/><circle cx="47" cy="183" r="5" fill="#25D6C9"/><text x="60" y="188" class="white" font-size="13">Live observations</text>
+<text x="24" y="563" class="label">Recent observations</text>
+<rect x="18" y="578" width="369" height="85" rx="12" fill="#131D45"/>
+<text x="30" y="601" class="white" font-size="14">10:23:47 · Gateway A</text><text x="30" y="621" class="small">Packet observed · -82 dBm</text>
+<path d="M30 632 H375" class="line"/><text x="30" y="651" class="white" font-size="14">10:22:31 · Gateway B · -85 dBm</text>
+<path d="M0 677 H405" class="line"/><text x="56" y="711" class="small">Chats</text><text x="169" y="711" class="small">Channels</text><text x="317" y="711" fill="#8B7CFF" font-size="15" font-weight="700">Map</text>
+<path d="M295 721 H364" stroke="#8B7CFF" stroke-width="4" stroke-linecap="round"/>
+</g>
+<g transform="translate(511,82)">
+<rect width="405" height="732" rx="26" fill="#0A1230"/>
+<text x="23" y="44" font-size="22" fill="#F5F7FB" font-weight="700">MeshContinuum</text><text x="24" y="63" class="small">MECON</text>
+<text x="24" y="109" class="label">Fleet</text><text x="24" y="131" class="small">Existing Devices function · authorized roles only</text>
+<g transform="translate(18,156)">
+<rect width="116" height="99" rx="12" fill="#131D45"/><rect x="126" width="116" height="99" rx="12" fill="#131D45"/><rect x="252" width="117" height="99" rx="12" fill="#131D45"/>
+<text x="16" y="47" font-size="31" font-weight="700" class="white">24</text><text x="16" y="74" class="small">Devices</text>
+<text x="144" y="47" font-size="31" font-weight="700" fill="#25D6C9">20</text><text x="144" y="74" class="small">Online</text>
+<text x="270" y="47" font-size="31" font-weight="700" fill="#8B7CFF">4</text><text x="270" y="74" class="small">Offline</text>
+</g>
+<text x="24" y="294" class="label">Devices</text>
+<rect x="18" y="315" width="369" height="48" rx="12" fill="#131D45"/><text x="33" y="345" class="small">Search authorized devices…</text>
+<rect x="18" y="378" width="369" height="238" rx="12" fill="#131D45"/>
+<g class="line"><path d="M28 435 H376"/><path d="M28 493 H376"/><path d="M28 551 H376"/></g>
+<g font-size="15" fill="#F5F7FB"><text x="33" y="405">Hilltop Gateway</text><text x="33" y="463">Lakeside Gateway</text><text x="33" y="521">Alpha-01 · Companion</text><text x="33" y="579">Cabin Repeater</text></g>
+<g font-size="12" fill="#B8C5E0"><text x="33" y="424">Repeater Gateway</text><text x="33" y="482">Repeater Gateway</text><text x="33" y="540">Personal Companion</text><text x="33" y="598">RF-only Repeater</text></g>
+<g font-size="13"><text x="295" y="410" fill="#25D6C9">Online</text><text x="295" y="468" fill="#25D6C9">Online</text><text x="295" y="526" fill="#25D6C9">Online</text><text x="295" y="584" fill="#B8C5E0">Offline</text></g>
+<path d="M0 677 H405" class="line"/><text x="31" y="711" class="small">Chats</text><text x="118" y="711" class="small">Channels</text><text x="252" y="711" class="small">Map</text><text x="332" y="711" fill="#8B7CFF" font-size="15" font-weight="700">Fleet</text>
+<path d="M319 721 H376" stroke="#8B7CFF" stroke-width="4" stroke-linecap="round"/>
+</g>
+</svg>

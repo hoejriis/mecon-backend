@@ -1,6 +1,6 @@
 # Reader access and identity model
 
-**Status:** P5 product contract. Normative ownership basis: [public roles and permissions](ROLES_AND_PERMISSIONS.md), [target architecture](TARGET_ARCHITECTURE.md).
+**Status:**  product contract. Normative ownership basis: [public roles and permissions](ROLES_AND_PERMISSIONS.md), [target architecture](TARGET_ARCHITECTURE.md).
 
 ## Separate three concerns
 
@@ -20,7 +20,7 @@ Device Users receive **messages**, not raw observations: messages to public chan
 
 - Each device belongs to one fleet and may be assigned to **one Device User**, including its Fleet Owner.
 - Each Device User may be assigned **up to five devices**.
-- A user's primary Companion may receive for **up to four additional delegated identities**, when supported. Delegation is receive/decrypt/native-ACK only, **not send-as**. Do not promise this until firmware #552 and the planned Backend delegated-receive integration have real-hardware acceptance.
+- A user's primary Companion may receive for **up to four additional delegated identities**, when supported. Delegation is receive/decrypt/native-ACK only, **not send-as**. Do not promise this until firmware documented work and the planned Backend delegated-receive integration have real-hardware acceptance.
 - Device assignment, ownership transfer and delegated-key provisioning are different audited operations.
 - Reassignment revokes the former user's Backend authorization and requires safe key/delegation lifecycle handling. Offline device revocation has physical/cryptographic limitations.
 

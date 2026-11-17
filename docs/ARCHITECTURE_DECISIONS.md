@@ -41,6 +41,20 @@
 - **Public live-feed publication:** owner-approved detailed specification in [private Backend #1795](https://github.com/hoejriis/deimos-mesh/issues/1795) and [website #22](https://github.com/hoejriis/MeshContinuum/issues/22): approved public coordinates only, 15-second live activity effects, 15-minute maximum public catalogue cache, approximately five-minute profile aggregates, 24-hour/seven-day packet counts, no raw packet or observer identity exposure, source-rights and privacy validation before production.
 - **Cached Reader, not standalone:** Reader depends on a Backend for sustained operation. A bounded encrypted cache with trusted local unlock and a time-limited offline lease permits cached operation during disconnection; expired lease limits private data to read-only and prevents outbound actions. Reconnect must preserve drafts and avoid ambiguous duplicate sends. [Public Backend #24](https://github.com/hoejriis/mecon-backend/issues/24).
 
+## Primary fleet device profiles — 17 November 2026
+
+These are **nonexclusive fleet-facing profiles**, not new firmware families or substitutes for reported capabilities. Backend connectivity and Backend manageability are distinct.
+
+| Profile | Connectivity | Role and custody | Typical security posture |
+|---|---|---|---|
+| Personal Companion | BLE/USB by default; optional Wi-Fi/MQTT | Assigned to exactly one fleet and one Device User (default: a fleet owner); canonical primary user identity, potentially up to four delegated receive identities; may hold narrowly scoped Deployment continuity material | Normal |
+| Repeater Gateway | Direct Backend transport via Wi-Fi/MQTT or transparent USB Connector | MeshCore repeater plus observation gateway and authorized RF transmit origin for Backend-constructed user messages. Does not need user private keys. Fleet infrastructure rather than personal Companion assignment | Hardened |
+| RF-only Repeater | No direct Backend transport; reachable via LoRa through managed infrastructure | MeshCore repeater and fleet infrastructure; remotely manageable over authorized RF operations where firmware capabilities, routing and reachability permit | Hardened |
+
+A stock-firmware Companion can be enrolled by authorized identity/key material with a reduced MECON feature set; managed telemetry/configuration requires demonstrated compatible device capabilities. The firmware supports additional configurations; these profiles are the primary defaults, not exhaustive or hardcoded device classes.
+
+References: [public component responsibilities](COMPONENTS.md), [authorized Repeater-origin transmission](https://github.com/hoejriis/deimos-mesh/issues/1746), [firmware conformance](https://github.com/hoejriis/mecon-firmware/issues/117), [RF repeater management](https://github.com/hoejriis/deimos-mesh/issues/1280).
+
 ## Open / verification required
 
 The five topics previously listed here have been reconciled with owner decisions and existing issues; none remains a **fundamental unanswered product-architecture question**. Implementation-specific interfaces, test thresholds, migration and release gates remain tracked in their issues. In particular:

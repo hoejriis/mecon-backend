@@ -137,6 +137,20 @@ describe('SIMULATED: the composer offers only the paths that can carry the send'
     expect(screen.queryByRole('radio', { name: 'USB' })).not.toBeInTheDocument();
   });
 
+  it('a channel target gets no local path and no slot entry, even with a capable own device connected; the reason is stated', async () => {
+    routes();
+    const r = await connectedRig();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    mount(r.session);
+    await user.click(await screen.findByRole('link', { name: /Demo Channel/ }));
+    await screen.findByText('Synthetic channel message');
+    expect(await screen.findByTestId('channel-local-unavailable')).toHaveTextContent("Sending to a channel through a device needs the device's channel list (coming soon)");
+    expect(screen.queryByRole('radio', { name: 'USB' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/slot/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/Sent through the Backend\./)).toBeInTheDocument();
+  });
+
   it('with sending switched off on the Backend, a connected device is the only path, and says so', async () => {
     routes('unavailable');
     const r = await connectedRig();

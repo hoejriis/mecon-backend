@@ -7,6 +7,7 @@ import { OfflineGate, registerGate } from '../offline/gate';
 import { expiredPayload, leaseSource } from '../offline/leaseSource.test-util';
 import { leasePayload } from '../offline/testkit';
 import { describeAttempt, isUncertainAttempt, type LocalAttempt } from './attemptStatus';
+import { CHANNEL_LOCAL_UNAVAILABLE } from './localPath';
 import { preflightLocal, runLocalSend } from './localSend';
 
 const S = 'SIMULATED — not hardware verified: local send flow';
@@ -64,14 +65,14 @@ describe(`${S}: facts, and never a resend or a reroute`, () => {
     expect(r.backend.post).not.toHaveBeenCalled();
   });
 
-  it('a channel send: accepted, no ACK is ever claimed', async () => {
+  it('a channel attempt is refused before the device: nothing is written, even with a slot in the record', async () => {
     const r = await ready();
-    const t = track(attempt('c1', CH));
+    const t = track(attempt('c1', CH, { localTarget: { channelIndex: 0 } }));
     await runLocalSend(r.session, t.get(), IDENT, t.patch);
-    const v = describeAttempt(t.get(), 'channel');
-    expect(v.label).toBe('Accepted by the device');
-    expect(v.facts).not.toContain('Recipient ACK');
-    expect(v.terminal).toBe(true);
+    expect(t.get().phase).toBe('rejected');
+    expect(t.get().error?.code).toBe('channel_unavailable');
+    expect(r.mock.writes.filter((w) => w[0] === 2 || w[0] === 3)).toHaveLength(0);
+    expect(r.mock.sendWrites()).toHaveLength(0);
   });
 
   it('a lost reply is unknown: one write, no resend while time passes, nothing to the Backend, and "Send again" is offered', async () => {
@@ -154,7 +155,6 @@ describe(`${S}: the preflight tells the truth and writes nothing`, () => {
     ['identity not on the lease', ['valid', leaseFor({ identities: [{ identity_id: 'x', operations: ['send.direct'] }] })], /identity is not on your offline lease/],
     ['operation not permitted', ['valid', leaseFor({ identities: [{ identity_id: 'ident_t', operations: ['receive'] }] })], /does not allow send\.direct/],
     ['device not assigned', ['valid', leaseFor({ devices: ['other'] })], /device is not assigned/],
-    ['channel not on the lease', ['valid', leaseFor({ channels: ['other'] })], /channel is not on your offline lease/, CH],
   ];
   for (const [name, args, re, target] of reasons) {
     it(`offline, ${name}: refused with the reason, zero device writes, draft untouched`, async () => {
@@ -192,7 +192,7 @@ describe(`${S}: the preflight tells the truth and writes nothing`, () => {
     expect(preflightLocal(null, IDENT, DM, to)).toMatchObject({ ok: false, reason: 'No device is connected.' });
     expect(preflightLocal(r.session, { ...IDENT, public_key_prefix: 'fefefe' }, DM, to)).toMatchObject({ ok: false, reason: expect.stringContaining('not the one this identity belongs to') });
     expect(preflightLocal(r.session, IDENT, DM, {})).toMatchObject({ ok: false, reason: 'Choose which device contact to send to.' });
-    expect(preflightLocal(r.session, IDENT, CH, {})).toMatchObject({ ok: false, reason: 'Choose the channel slot on the device.' });
+    expect(preflightLocal(r.session, IDENT, CH, { channelIndex: 0 })).toMatchObject({ ok: false, reason: CHANNEL_LOCAL_UNAVAILABLE });
     r.h.unplug();
     await wait(30);
     expect(preflightLocal(r.session, IDENT, DM, to)).toMatchObject({ ok: false, reason: 'The device is not connected.' });

@@ -27,6 +27,9 @@ export type { LocalPath, SendPath };
 export type LocalDeviceHandle = Pick<DeviceSession, 'path' | 'subscribe' | 'getSnapshot' | 'can' | 'sendDirect' | 'sendChannel' | 'connect' | 'reconnect' | 'disconnect'>;
 export type { AttemptFacts, LocalSendAuth, SessionResult, SessionSnapshot };
 
+/** Why a channel target has no local path. Shown as is. */
+export const CHANNEL_LOCAL_UNAVAILABLE = "Sending to a channel through a device needs the device's channel list (coming soon)";
+
 export const sendCapability = (kind: Target['kind']): Capability => (kind === 'contact' ? 'message.send.direct' : 'message.send.channel');
 
 /** What the path decision needs to know about one device. */
@@ -71,6 +74,8 @@ export interface PathInput {
 export function availablePaths(i: PathInput): SendPath[] {
   const out: SendPath[] = [];
   if (i.sendState === 'available' && i.online) out.push('backend');
+  // A local channel send needs the device's channel slot, which the Reader cannot yet learn: not offered.
+  if (i.target.kind === 'channel') return out;
   const need = sendCapability(i.target.kind);
   for (const path of ['ble', 'usb'] as const) {
     const d = i.devices.find((x) => x.path === path);

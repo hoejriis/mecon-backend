@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { Identity, Target } from '../api/types';
 import { useDevices } from '../device/DeviceContext';
 import { PATH_LABEL, pathOf, type LocalAttempt, type LocalTarget, type SendPath } from '../messaging/attemptStatus';
-import { availablePaths, defaultPath, deviceView, type LocalDeviceHandle } from '../messaging/localPath';
+import { CHANNEL_LOCAL_UNAVAILABLE, availablePaths, defaultPath, deviceView, type LocalDeviceHandle } from '../messaging/localPath';
 import { preflightLocal } from '../messaging/localSend';
 import type { SendRoute } from '../messaging/MessagingContext';
 
@@ -16,8 +16,6 @@ export interface SendPathState {
   setPath(p: SendPath): void;
   to: LocalTarget;
   setContactKey(k: string): void;
-  setSlot(s: string): void;
-  slot: string;
   handle: LocalDeviceHandle | null;
   /** The route to hand to send(); null while no usable path is chosen. */
   route: SendRoute | null;
@@ -40,13 +38,12 @@ export function useSendPath(i: {
   const devices = useDevices();
   const [picked, setPicked] = useState<SendPath | null>(i.initial?.path ?? null);
   const [contactKey, setContactKey] = useState(i.initial?.to?.contactKey ?? '');
-  const [slot, setSlot] = useState(i.initial?.to?.channelIndex === undefined ? '' : String(i.initial.to.channelIndex));
   const views = Object.values(devices.handles).map(deviceView);
   const avail = availablePaths({ sendState: i.sendState, online: i.online, devices: views, target: i.target, identity: i.identity });
   const wanted = picked ?? defaultPath(avail, i.online);
   const path = wanted && avail.includes(wanted) ? wanted : null;
   const handle = path && path !== 'backend' ? (devices.handles[path] ?? null) : null;
-  const to: LocalTarget = i.target.kind === 'contact' ? { contactKey: contactKey || undefined } : { channelIndex: slot === '' ? undefined : Number(slot) };
+  const to: LocalTarget = { contactKey: contactKey || undefined };
   let route: SendRoute | null = null;
   let blocked: string | null = null;
   if (path === 'backend') route = { path: 'backend' };
@@ -62,8 +59,6 @@ export function useSendPath(i: {
     setPath: setPicked,
     to,
     setContactKey,
-    setSlot,
-    slot,
     handle,
     route,
     blocked,
@@ -115,11 +110,10 @@ export function SendPathControls({ s, target, idPrefix }: { s: SendPathState; ta
           </select>
         </label>
       )}
-      {local && target.kind === 'channel' && (
-        <label className="composer-field">
-          Channel slot on the device
-          <input type="number" min={0} max={255} step={1} inputMode="numeric" value={s.slot} onChange={(e) => s.setSlot(e.target.value)} />
-        </label>
+      {target.kind === 'channel' && (
+        <p className="state-meta" data-testid="channel-local-unavailable">
+          {CHANNEL_LOCAL_UNAVAILABLE}.
+        </p>
       )}
       {local && s.blocked && (
         <p className="state-meta" role="alert" data-testid="local-blocked">

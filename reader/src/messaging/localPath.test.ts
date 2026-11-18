@@ -33,15 +33,16 @@ describe('send paths: which are offered', () => {
     expect(availablePaths({ ...base, devices: [dev({ connected: false })] })).toEqual(['backend']);
   });
 
-  it('capabilities decide per kind: a device without direct send is not offered for a DM, one without channel send not for a channel', () => {
-    const noDirect = dev({ capabilities: ['message.send.channel'] });
-    const noChannel = dev({ capabilities: ['message.send.direct'] });
-    expect(availablePaths({ ...base, devices: [noDirect], target: DM })).toEqual(['backend']);
-    expect(availablePaths({ ...base, devices: [noDirect], target: CH })).toEqual(['backend', 'usb']);
-    expect(availablePaths({ ...base, devices: [noChannel], target: CH })).toEqual(['backend']);
-    expect(availablePaths({ ...base, devices: [noChannel], target: DM })).toEqual(['backend', 'usb']);
-    // a read-only role (a Repeater) has neither
+  it('capabilities decide: a device without direct send is not offered for a DM; a read-only role has none', () => {
+    expect(availablePaths({ ...base, devices: [dev({ capabilities: ['message.send.channel'] })], target: DM })).toEqual(['backend']);
+    expect(availablePaths({ ...base, devices: [dev({ capabilities: ['message.send.direct'] })], target: DM })).toEqual(['backend', 'usb']);
     expect(availablePaths({ ...base, devices: [dev({ capabilities: ['identity.read', 'status.read'] })] })).toEqual(['backend']);
+  });
+
+  it('a channel target never gets a local path, online or offline, whatever the device can do', () => {
+    const both = [dev({ path: 'ble' }), dev({ path: 'usb' })];
+    expect(availablePaths({ ...base, devices: both, target: CH })).toEqual(['backend']);
+    expect(availablePaths({ ...base, online: false, sendState: 'unavailable', devices: both, target: CH })).toEqual([]);
   });
 
   it('only the sending identity’s own device is offered', () => {

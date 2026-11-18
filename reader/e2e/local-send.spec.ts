@@ -128,6 +128,14 @@ test.describe(`${SIMULATED}: offline local sends are gated by the lease`, () => 
     expect(be.msg.posts).toHaveLength(0);
     await page.screenshot({ path: 'e2e-artifacts/local-send-offline-lease-valid.png' });
 
+    // A channel has no local path and no slot entry, offline either.
+    await page.getByRole('button', { name: /Demo Channel/ }).click();
+    await expect(page.getByTestId('channel-local-unavailable')).toContainText("Sending to a channel through a device needs the device's channel list (coming soon)");
+    await expect(page.getByRole('spinbutton')).toHaveCount(0);
+    await page.getByRole('textbox', { name: 'Message', exact: true }).fill('to a channel');
+    await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeDisabled();
+    expect(await sim.sendWrites()).toBe(1);
+
     // The attempt is in the encrypted cache with its path: after a reload and an unlock it is still there, nothing is sent again.
     await page.waitForTimeout(500);
     await page.reload();

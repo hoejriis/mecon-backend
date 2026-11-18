@@ -14,7 +14,7 @@
 import type { Identity, Target } from '../api/types';
 import { OfflineSendBlocked, offlineSendGuard } from '../offline/gate';
 import { isLocalPath, type LocalAttempt, type LocalFacts, type LocalPath, type LocalTarget } from './attemptStatus';
-import { deviceView, leaseOp, ownsIdentity, sendCapability, type AttemptFacts, type LocalDeviceHandle, type LocalSendAuth } from './localPath';
+import { CHANNEL_LOCAL_UNAVAILABLE, deviceView, leaseOp, ownsIdentity, sendCapability, type AttemptFacts, type LocalDeviceHandle, type LocalSendAuth } from './localPath';
 
 export type Preflight = { ok: true; auth: LocalSendAuth } | { ok: false; reason: string };
 
@@ -30,6 +30,7 @@ export function authFor(identity: Identity, target: Target): LocalSendAuth {
 
 /** Everything that can be decided without writing: device, capability, identity, destination, guard. */
 export function preflightLocal(handle: LocalDeviceHandle | null, identity: Identity | null, target: Target, to: LocalTarget): Preflight {
+  if (target.kind === 'channel') return { ok: false, reason: CHANNEL_LOCAL_UNAVAILABLE };
   if (!identity) return { ok: false, reason: 'No sending identity is selected.' };
   if (!handle) return { ok: false, reason: 'No device is connected.' };
   const view = deviceView(handle);
@@ -39,7 +40,6 @@ export function preflightLocal(handle: LocalDeviceHandle | null, identity: Ident
   }
   if (!ownsIdentity(view, identity)) return { ok: false, reason: 'The connected device is not the one this identity belongs to.' };
   if (target.kind === 'contact' && !to.contactKey) return { ok: false, reason: 'Choose which device contact to send to.' };
-  if (target.kind === 'channel' && (to.channelIndex === undefined || !Number.isInteger(to.channelIndex))) return { ok: false, reason: 'Choose the channel slot on the device.' };
   const auth = authFor(identity, target);
   const d = offlineSendGuard(auth);
   if (!d.allowed) return { ok: false, reason: d.reason };
@@ -107,10 +107,9 @@ export async function runLocalSend(handle: LocalDeviceHandle, a: LocalAttempt, i
   });
   try {
     const to = a.localTarget ?? {};
-    const facts =
-      target.kind === 'contact'
-        ? await handle.sendDirect({ ...ids, contactKey: to.contactKey ?? '', text: a.request.content.text, auth })
-        : await handle.sendChannel({ ...ids, channelIndex: to.channelIndex ?? -1, text: a.request.content.text, auth });
+    // No UI feeds a channel slot: a channel target never reaches the device from here.
+    if (target.kind !== 'contact') return onUpdate({ phase: 'rejected', error: { status: 0, code: 'channel_unavailable', message: CHANNEL_LOCAL_UNAVAILABLE, requestId: null, keyConflict: false } });
+    const facts = await handle.sendDirect({ ...ids, contactKey: to.contactKey ?? '', text: a.request.content.text, auth });
     onUpdate(patchFromFacts(facts));
     // The adapter keeps updating its own copy (the ACK, its timeout); follow it until it is final.
     const latest = follow() ?? facts;

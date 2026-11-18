@@ -361,9 +361,10 @@ export function MessagingProvider({
     [api, messaging],
   );
 
-  const refreshAttempt = useCallback(
+  /** GET /send-attempts/{id}: idempotent and read-only. The caller checks the send capability. */
+  const readAttempt = useCallback(
     async (a: LocalAttempt) => {
-      if (a.phase !== 'accepted' || !a.attempt || sendState !== 'available') return;
+      if (a.phase !== 'accepted' || !a.attempt) return;
       try {
         const fresh: SendAttempt = await api.getSendAttempt(a.attempt.id);
         patchAttempt(a.clientAttemptId, { attempt: fresh });
@@ -371,7 +372,15 @@ export function MessagingProvider({
         /* keep what we have; the next event or poll tries again */
       }
     },
-    [api, sendState, patchAttempt],
+    [api, patchAttempt],
+  );
+
+  const refreshAttempt = useCallback(
+    async (a: LocalAttempt) => {
+      if (sendState !== 'available') return;
+      await readAttempt(a);
+    },
+    [sendState, readAttempt],
   );
 
   /** Rehydration is read-only: this only ever calls GET (through refreshAttempt), never POST. */
@@ -401,9 +410,9 @@ export function MessagingProvider({
     pendingRefresh.current.clear();
     for (const id of ids) {
       const a = attemptsRef.current.find((x) => x.clientAttemptId === id);
-      if (a) void refreshAttempt(a);
+      if (a) void readAttempt(a);
     }
-  }, [messaging, sendState, rehydrateGen, refreshAttempt]);
+  }, [messaging, sendState, rehydrateGen, readAttempt]);
 
   const resetSnapshots = useCallback(() => {
     msgSeq.current.clear();

@@ -10,7 +10,7 @@ const sessions: DeviceSession[] = [];
 afterEach(() => sessions.splice(0).forEach((s) => s.dispose()));
 
 const contactDest = (prefix: string | null): BackendDest => ({ kind: 'contact', targetId: TARGET_ID, prefix });
-const channelDest = (name: string | null, over: Partial<Extract<BackendDest, { kind: 'channel' }>> = {}): BackendDest => ({ kind: 'channel', targetId: TARGET_ID, name, ownLinked: true, sameNameCount: 1, ...over });
+const channelDest = (name: string | null, over: Partial<Extract<BackendDest, { kind: 'channel' }>> = {}): BackendDest => ({ kind: 'channel', targetId: TARGET_ID, name, ownLinked: true, sameNameCount: 1, hash: null, ...over });
 
 async function usb(mock: MockCompanionOptions = {}, peer: { mecon?: boolean } = { mecon: true }) {
   const r = companionRig({ mock: { mecon: true, ...mock }, peer });
@@ -183,6 +183,25 @@ describe(`${S}: the send re-verifies the mapping, so an API caller cannot pass a
     await expect(r.session.sendChannel(channel('stale', { mapping: tok }))).rejects.toMatchObject({ code: 'unmapped_destination', message: expect.stringContaining('no longer matches') });
     untouched(r.mock, before);
     expect(r.session.mapDestination(channelDest('Crew'))).toMatchObject({ ok: false, code: 'channel_ambiguous' });
+  });
+
+  it('a token issued with a hash is re-checked with it: the device channel keeps its name and slot but its hash changes, so the write is refused', async () => {
+    const r = await usb({ channels: DEFAULT_CHANNELS });
+    const tok = tokenOf(r.session, channelDest('Crew', { hash: '5f' }));
+    // The channel on slot 1 is re-keyed on the device: same name, same slot, another hash.
+    r.mock.lists()!.channels.find((c) => c.slot === 1)!.hash = '77';
+    await r.session.refreshChannels();
+    expect(r.session.getSnapshot().deviceChannels).toMatchObject({ status: 'ready' });
+    const before = r.mock.writes.length;
+    await expect(r.session.sendChannel(channel('rekeyed', { mapping: tok }))).rejects.toMatchObject({ code: 'unmapped_destination', message: expect.stringContaining('no longer matches') });
+    untouched(r.mock, before);
+  });
+
+  it('a token issued with a hash writes once while the device still has that hash', async () => {
+    const r = await usb({ channels: DEFAULT_CHANNELS });
+    const tok = tokenOf(r.session, channelDest('Crew', { hash: '5f' }));
+    await r.session.sendChannel(channel('hashed', { mapping: tok }));
+    expect(r.mock.rf).toEqual([expect.objectContaining({ kind: 'channel', target: '1' })]);
   });
 
   it('the lease guard and the device identity still come first, and a mapping does not bypass them', async () => {

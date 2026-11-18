@@ -42,5 +42,8 @@ export function destFor(dir: Directory, target: Target, identity: Pick<Identity,
     name: ch ? ch.name : null,
     ownLinked,
     sameNameCount: ch ? dir.channels.filter((x) => x.name === ch.name).length : 0,
+    // A hash the Backend sent is kept as sent (even a malformed one): it then matches no device
+    // channel and the send is refused, never silently treated as "no hash".
+    hash: ch && typeof ch.hash === 'string' ? ch.hash : null,
   };
 }

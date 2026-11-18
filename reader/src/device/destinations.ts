@@ -11,13 +11,16 @@
  * weak to identify anyone and is refused.
  *
  * Channels: the device's `channel.list` (hoejriis/mecon-firmware docs/contract, class read, no
- * secret) gives slot, name and a one-byte hash. The Backend `Channel` has NO stable identifier
- * (id, name, visibility, favourite). The one-byte hash cannot be compared with anything the
- * Backend sends, and a name is not unique across fleets. So a channel matches only when ALL hold:
- *   1. the Backend channel is the caller's own linked channel (a conversation of the sending
- *      identity targets it),
- *   2. among the caller's Backend channels exactly one has this name,
- *   3. exactly one device channel has exactly this name (case-sensitive, byte for byte).
+ * secret) gives slot, name and a one-byte hash. The Backend `Channel` may carry the same
+ * non-secret one-byte `hash` (Reader API draft.8), which is a cross-check, not an identifier:
+ * a byte collides, and a name is not unique across fleets. So a channel matches only when:
+ *   A. the Backend channel has a `hash`: it is the caller's own linked channel, exactly one
+ *      device channel has that hash (two with one hash refuse), and that channel's name is
+ *      exactly the Backend channel's name (case-sensitive, byte for byte). A hash or a name
+ *      that disagrees refuses.
+ *   B. the Backend channel has no `hash` (null, absent): it is the caller's own linked channel,
+ *      among the caller's Backend channels exactly one has this name, and exactly one device
+ *      channel has exactly this name.
  * Anything else is refused with the reason. There is no fallback slot, ever.
  */
 
@@ -32,7 +35,7 @@ export interface DeviceContactRef {
 export interface DeviceChannelRef {
   slot: number;
   name: string;
-  /** The one-byte channel hash on air, 2 hex digits. Informational: the Backend has nothing to compare it with. */
+  /** The one-byte channel hash on air, 2 hex digits. Compared with the Backend channel's `hash` when it has one. */
   hash: string;
 }
 
@@ -55,6 +58,8 @@ export type BackendDest =
       ownLinked: boolean;
       /** How many of the caller's Backend channels have this name (at least 1 when `name` is set). */
       sameNameCount: number;
+      /** The Backend channel's one-byte hash (non-secret), or null when the Backend does not know it. */
+      hash: string | null;
     };
 
 export type Destination =
@@ -72,7 +77,10 @@ export type RefusalCode =
   | 'channel_not_linked'
   | 'channel_name_shared'
   | 'channel_not_on_device'
-  | 'channel_ambiguous';
+  | 'channel_ambiguous'
+  | 'channel_hash_mismatch'
+  | 'channel_hash_duplicate'
+  | 'channel_name_mismatch';
 
 export interface MapRefusal {
   ok: false;
@@ -108,6 +116,18 @@ export function matchContact(prefix: string | null | undefined, contacts: readon
   return refuse('ambiguous', `${candidates.length} contacts on your device match this contact's key prefix. Choose the right one.`, candidates);
 }
 
+function matchChannelByHash(name: string, hash: string, channels: readonly DeviceChannelRef[]): MapOutcome {
+  const same = channels.filter((c) => c.hash === hash);
+  if (same.length > 1) return refuse('channel_hash_duplicate', `${same.length} channels on your device share the channel hash ${hash}, so the device channel cannot be told apart.`);
+  if (same.length === 0) {
+    const named = channels.some((c) => c.name === name);
+    return refuse('channel_hash_mismatch', named ? `A channel named "${name}" is on your device, but its channel hash differs from this channel's, so it is not the same channel.` : `No channel on your device has the channel hash ${hash} of "${name}".`);
+  }
+  const c = same[0]!;
+  if (c.name !== name) return refuse('channel_name_mismatch', `The channel on your device with hash ${hash} is named "${c.name}", not "${name}", so it is not matched.`);
+  return { ok: true, destination: { kind: 'channel', slot: c.slot, name: c.name, hash: c.hash } };
+}
+
 export function matchChannel(dest: Extract<BackendDest, { kind: 'channel' }>, state: DeviceChannelsState): MapOutcome {
   if (dest.name === null) return refuse('channel_unknown', 'This channel is not known to the Reader, so it cannot be found on your device.');
   if (state.status !== 'ready') {
@@ -115,6 +135,7 @@ export function matchChannel(dest: Extract<BackendDest, { kind: 'channel' }>, st
     return refuse('channel_list_unavailable', `Sending to a channel through a device needs the device's channel list: ${why}`);
   }
   if (!dest.ownLinked) return refuse('channel_not_linked', "This channel isn't linked to the identity you send as, so it is not matched to a channel on your device.");
+  if (dest.hash !== null) return matchChannelByHash(dest.name, dest.hash, state.channels);
   if (dest.sameNameCount !== 1) return refuse('channel_name_shared', `${dest.sameNameCount} of your channels share the name "${dest.name}", so the device channel cannot be told apart.`);
   const matches = state.channels.filter((c) => c.name === dest.name);
   if (matches.length === 0) return refuse('channel_not_on_device', `No channel named "${dest.name}" is on your device.`);

@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { matchChannel, matchContact, matchDestination, MIN_PREFIX_HEX, type BackendDest, type DeviceChannelsState, type DeviceContactRef } from './destinations';
-import { COLLISION_CONTACTS, DEFAULT_CHANNELS, DUPLICATE_NAME_CHANNELS } from './sim/lists';
+import { COLLISION_CONTACTS, DEFAULT_CHANNELS, DUPLICATE_HASH_CHANNELS, DUPLICATE_NAME_CHANNELS } from './sim/lists';
 
 const S = 'Backend target to device destination (pure matcher)';
 const contacts: DeviceContactRef[] = COLLISION_CONTACTS.map((c) => ({ publicKey: c.key, name: c.name }));
 const ready = (channels = DEFAULT_CHANNELS): DeviceChannelsState => ({ status: 'ready', channels });
-const ch = (name: string | null, over: Partial<Extract<BackendDest, { kind: 'channel' }>> = {}): Extract<BackendDest, { kind: 'channel' }> => ({ kind: 'channel', targetId: 'chan_1', name, ownLinked: true, sameNameCount: 1, ...over });
+const ch = (name: string | null, over: Partial<Extract<BackendDest, { kind: 'channel' }>> = {}): Extract<BackendDest, { kind: 'channel' }> => ({ kind: 'channel', targetId: 'chan_1', name, ownLinked: true, sameNameCount: 1, hash: null, ...over });
 
 describe(`${S}: contacts by public key prefix`, () => {
   it('exactly one device key starts with the prefix: that full key is used', () => {
@@ -97,5 +97,53 @@ describe(`${S}: channels`, () => {
   it('matchDestination dispatches by kind', () => {
     expect(matchDestination({ kind: 'contact', targetId: 'c', prefix: 'b2b2b2' }, contacts, ready())).toMatchObject({ ok: true, destination: { kind: 'direct' } });
     expect(matchDestination(ch('Crew'), contacts, ready())).toMatchObject({ ok: true, destination: { kind: 'channel' } });
+  });
+});
+
+describe(`${S}: channels cross-checked with the one-byte channel hash`, () => {
+  it('a hash and a name that both match exactly one device channel: that slot', () => {
+    expect(matchChannel(ch('Crew', { hash: '5f' }), ready())).toEqual({ ok: true, destination: { kind: 'channel', slot: 1, name: 'Crew', hash: '5f' } });
+  });
+
+  it('with a hash, the Backend-side name count no longer decides (the hash tells the channels apart)', () => {
+    expect(matchChannel(ch('Crew', { hash: '5f', sameNameCount: 2 }), ready())).toMatchObject({ ok: true, destination: { slot: 1 } });
+  });
+
+  it('a hash no device channel has is refused, even though a channel of that name exists', () => {
+    const m = matchChannel(ch('Crew', { hash: 'aa' }), ready());
+    expect(m).toMatchObject({ ok: false, code: 'channel_hash_mismatch' });
+    expect(!m.ok && m.reason).toMatch(/channel hash differs/);
+  });
+
+  it('a hash no device channel has, and no namesake either: refused as a hash mismatch', () => {
+    expect(matchChannel(ch('Nope', { hash: 'aa' }), ready())).toMatchObject({ ok: false, code: 'channel_hash_mismatch' });
+  });
+
+  it('the name agrees but the hash is another channel’s: refused, never the namesake', () => {
+    // Crew is 5f on the device; the Backend says Crew is a3, which is the device channel named Ops.
+    const m = matchChannel(ch('Crew', { hash: 'a3' }), ready());
+    expect(m).toMatchObject({ ok: false, code: 'channel_name_mismatch' });
+    expect(!m.ok && m.reason).toMatch(/named "Ops", not "Crew"/);
+  });
+
+  it('two device channels with one hash are refused, even when one of them has the right name', () => {
+    const m = matchChannel(ch('Crew', { hash: '5f' }), ready(DUPLICATE_HASH_CHANNELS));
+    expect(m).toMatchObject({ ok: false, code: 'channel_hash_duplicate' });
+    expect(!m.ok && m.reason).toMatch(/2 channels on your device share the channel hash 5f/);
+  });
+
+  it('a malformed Backend hash matches nothing and refuses (it is never read as "no hash")', () => {
+    expect(matchChannel(ch('Crew', { hash: '5F' }), ready())).toMatchObject({ ok: false, code: 'channel_hash_mismatch' });
+    expect(matchChannel(ch('Crew', { hash: '' }), ready())).toMatchObject({ ok: false, code: 'channel_hash_mismatch' });
+  });
+
+  it('a hash does not lift the own-linked rule', () => {
+    expect(matchChannel(ch('Crew', { hash: '5f', ownLinked: false }), ready())).toMatchObject({ ok: false, code: 'channel_not_linked' });
+  });
+
+  it('a null hash falls back to the name rule: own linked, unique both sides', () => {
+    expect(matchChannel(ch('Crew', { hash: null }), ready())).toMatchObject({ ok: true, destination: { slot: 1 } });
+    expect(matchChannel(ch('Crew', { hash: null, sameNameCount: 2 }), ready())).toMatchObject({ ok: false, code: 'channel_name_shared' });
+    expect(matchChannel(ch('Ops', { hash: null }), ready(DUPLICATE_NAME_CHANNELS))).toMatchObject({ ok: false, code: 'channel_ambiguous' });
   });
 });

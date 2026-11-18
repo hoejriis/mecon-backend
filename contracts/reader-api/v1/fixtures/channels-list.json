@@ -1,0 +1,8 @@
+{
+  "items": [
+    { "id": "chan_demo_0001", "name": "Demo Channel", "visibility": "public", "favourite": true, "hash": "11" },
+    { "id": "chan_demo_0002", "name": "Quiet Private Channel", "visibility": "private", "hash": "5f" }
+  ],
+  "next_cursor": null,
+  "as_of": "2030-01-15T10:00:00Z"
+}

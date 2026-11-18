@@ -46,6 +46,13 @@ export const DUPLICATE_NAME_CHANNELS: SimChannel[] = [
   { slot: 3, name: 'Crew', hash: '5f' },
 ];
 
+/** Two device channels on one key (one hash `5f`) under different names, as a user can set up on a device. */
+export const DUPLICATE_HASH_CHANNELS: SimChannel[] = [
+  { slot: 0, name: 'Public', hash: '11' },
+  { slot: 1, name: 'Crew', hash: '5f' },
+  { slot: 2, name: 'Crew copy', hash: '5f' },
+];
+
 export const defaultTables = (): ListTables => ({ channels: DEFAULT_CHANNELS.map((c) => ({ ...c })), contacts: DEFAULT_CONTACTS.map((c) => ({ ...c })) });
 
 const cursorOf = (env: Envelope): number => {

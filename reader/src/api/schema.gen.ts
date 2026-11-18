@@ -566,6 +566,11 @@ export interface components {
         IdentityList: components["schemas"]["ListMeta"] & {
             items: components["schemas"]["Identity"][];
         };
+        /**
+         * @description What a send or a conversation is addressed to. For `kind: contact`,
+         *     `id` is the `Contact.id` of the peer (the same opaque id `GET
+         *     /contacts` lists). For `kind: channel`, `id` is the `Channel.id`.
+         */
         Target: {
             /** @enum {string} */
             kind: "contact" | "channel";
@@ -585,6 +590,9 @@ export interface components {
          *     `unread_count` counts every row of the conversation newer than the
          *     caller's read mark; the mark belongs to the caller's own side of the
          *     conversation, so marking one conversation read never changes another.
+         *
+         *     `target.id` of a contact conversation equals the `Contact.id` of the
+         *     peer; of a channel conversation, the `Channel.id`.
          */
         Conversation: {
             id: components["schemas"]["OpaqueId"];
@@ -649,6 +657,17 @@ export interface components {
             /** @enum {string} */
             visibility: "public" | "private";
             favourite?: boolean;
+            /**
+             * @description The one-byte channel hash: the same value a device's `channel.list`
+             *     reports for the same channel (the first byte of the SHA-256 of the
+             *     channel key, as two lowercase hex digits). Non-secret: one byte
+             *     reveals nothing usable about the key. A client may compare it with
+             *     the hash a device reports as a cross-check that the device holds
+             *     the same channel; it is not an identifier (channels can collide on
+             *     it). `null`, or absent, when the Backend does not know it; a
+             *     client then has no hash to compare.
+             */
+            hash?: string | null;
         };
         ChannelList: components["schemas"]["ListMeta"] & {
             items: components["schemas"]["Channel"][];

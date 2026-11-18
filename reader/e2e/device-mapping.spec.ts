@@ -50,6 +50,38 @@ test.describe(`${SIMULATED}: local sends find their destination on the device, o
     expect(violations).toEqual([]);
   });
 
+  test('a channel whose Backend hash and name both match the device is sent once, to that slot', async ({ page }) => {
+    const sim = await installSim(page, { sim: { mecon: true, channels: true } });
+    const msg = await mockMessagingBackend(page, { identityPrefix: OWN_KEY_PREFIX, channelName: 'Crew', channelHash: '5f' }); // Crew is slot 1, hash 5f on the device
+    await openChannel(page);
+    await connectBluetooth(page);
+    await page.getByRole('radio', { name: 'Bluetooth' }).check();
+    await expect(page.getByTestId('device-destination')).toHaveText('Device channel: Crew, found on your device.');
+    await page.getByRole('textbox', { name: 'Message', exact: true }).fill('hello hashed crew');
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(page.getByText('You · not yet in history · via Bluetooth')).toBeVisible();
+    await expect.poll(() => sim.sendWrites()).toBe(1);
+    expect(await sim.rfCount()).toBe(1);
+    const rf = await page.evaluate(() => (window as unknown as { __ble: { mock: { rf: unknown[] } } }).__ble.mock.rf);
+    expect(rf).toEqual([expect.objectContaining({ kind: 'channel', target: '1' })]);
+    expect(msg.posts).toHaveLength(0);
+  });
+
+  test('a channel whose Backend hash differs from the device channel of the same name is refused: zero writes, the reason is shown', async ({ page }) => {
+    const sim = await installSim(page, { sim: { mecon: true, channels: true } });
+    const msg = await mockMessagingBackend(page, { identityPrefix: OWN_KEY_PREFIX, channelName: 'Crew', channelHash: 'aa' }); // the device's Crew is 5f
+    await openChannel(page);
+    await connectBluetooth(page);
+    await expect(page.getByTestId('local-unavailable-ble')).toHaveText('Not offered through Bluetooth: A channel named "Crew" is on your device, but its channel hash differs from this channel\'s, so it is not the same channel.');
+    await expect(page.getByRole('radio', { name: 'Bluetooth' })).toHaveCount(0);
+    await page.getByRole('textbox', { name: 'Message', exact: true }).fill('must not go out on the other Crew');
+    await page.getByRole('button', { name: 'Send', exact: true }).click(); // the only path is the Backend
+    await expect.poll(() => msg.posts.length).toBe(1);
+    expect(await sim.sendWrites()).toBe(0);
+    expect(await sim.rfCount()).toBe(0);
+    expect((await sim.writeCodes()).filter((c) => c === 2 || c === 3)).toEqual([]);
+  });
+
   test('an ambiguous channel (two device channels with the same name) is refused: no Bluetooth path, the reason is shown, zero writes', async ({ page }) => {
     const sim = await installSim(page, { sim: { mecon: true, channels: DUPLICATE_NAME_CHANNELS } });
     const msg = await mockMessagingBackend(page, { identityPrefix: OWN_KEY_PREFIX, channelName: 'Ops' });

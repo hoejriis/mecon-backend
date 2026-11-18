@@ -15,7 +15,7 @@ const DM: Target = { kind: 'contact', id: 'c_alice' };
 const CH: Target = { kind: 'channel', id: 'chan_t' };
 /** The Backend side of each send: Alice's key prefix, and the own, uniquely named channel `Crew` (the device's slot 1). */
 const DM_DEST: BackendDest = { kind: 'contact', targetId: DM.id, prefix: 'a1a1a1' };
-const CH_DEST: BackendDest = { kind: 'channel', targetId: CH.id, name: 'Crew', ownLinked: true, sameNameCount: 1 };
+const CH_DEST: BackendDest = { kind: 'channel', targetId: CH.id, name: 'Crew', ownLinked: true, sameNameCount: 1, hash: null };
 const destOf = (t: Target): BackendDest => (t.kind === 'contact' ? DM_DEST : CH_DEST);
 const sessions: DeviceSession[] = [];
 afterEach(() => {

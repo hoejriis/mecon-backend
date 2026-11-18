@@ -24,7 +24,7 @@ Run from `reader/`:
 | `npm test` | Vitest unit tests (jsdom, Testing Library). |
 | `npm run build` | Typecheck and production build into `dist/`. |
 | `npm run gen:api` | Regenerate `reader/src/api/schema.gen.ts` from `contracts/reader-api/v1/openapi.yaml` (openapi-typescript, pinned exactly). The output is committed; a unit test fails when it is stale (`npm run gen:api:check` does the same check alone). |
-| `npm run e2e` | Builds, serves with `vite preview` under the production CSP, and runs headless Chromium at 390x844, 820x1180 and 1440x900. Screenshots go to `e2e-artifacts/` (gitignored). `e2e/updates.spec.ts` builds two production builds with different commits and serves them from a small server (`e2e/swapServer.ts`) that swaps the served build, to exercise the service worker update lifecycle. |
+| `npm run e2e` | Builds, serves with `vite preview` under the production CSP, and runs headless Chromium at 390x844, 820x1180 and 1440x900. Screenshots go to `e2e-artifacts/` (gitignored). `e2e/updates.spec.ts` builds two production builds with different commits and serves them from a small server (`e2e/swapServer.ts`) that swaps the served build, to exercise the service worker update lifecycle. `e2e/rollback.spec.ts` rolls that server back to builds with no worker (built with `MECON_SW=off`, which leaves the `mecon-service-worker` plugin out and is a test-only flag) and to one serving the kill switch. |
 
 Docker image, built from the repository root:
 
@@ -147,8 +147,55 @@ drafts or uncertain attempts.
   host at an earlier directory. The host-side tooling is outside this
   repository. Installed clients treat that as a newer-commit-differs case: the
   worker of the older build is a different `sw.js`, so it installs, waits and
-  is offered through the same banner. A rollback therefore needs no special
-  client step, and never clears caches or data.
+  is offered through the same banner. A rollback to a release that still ships
+  a worker therefore needs no special client step, and never clears caches or
+  data. Rolling back below the first worker release is covered next.
+- **Rolling back below the first service-worker release.** A release with no
+  `/sw.js` (v0.1.0 and v0.2.0) is not a "different worker": on the host an
+  unknown path falls back to `index.html` (`try_files {path} /index.html`), so
+  `/sw.js` answers 200 `text/html`. The browser's update check cannot parse that
+  as a script, so the installed worker stays registered and keeps answering
+  navigations with its cached shell. What the browser then does by itself
+  (tested in `reader/e2e/rollback.spec.ts`, headless Chromium, host-shaped
+  server):
+  - The stale-shell check (above) fetches `/version.json`. A rolled-back build
+    that has the file names another commit; one that predates it (v0.1.0) is
+    answered with 404 or with `text/html` by the fallback, which the check
+    treats as "a different build" (`UNVERSIONED`). With nothing at risk the page
+    unregisters the worker, deletes its caches and reloads onto the rolled-back
+    build within about 3.5 s of the navigation (3.3 s measured: the repair's
+    fixed 3 s wait plus reload; the bound the test enforces is 15 s). After that
+    the stale shell is never served again: the next navigation is a network
+    request.
+  - With a draft, an uncertain attempt or an open BLE link the page does **not**
+    reload, unregister or clear anything; the confirmed-update banner appears
+    and states what would be lost. After the user confirms, the same repair runs.
+  - A tab that is never navigated and has no check running keeps its shell
+    until it is; nothing reaches into an open tab.
+
+  **Kill switch.** To make a rolled-back host drop the worker without relying on
+  the page's own check (for example for clients older than the stale-shell
+  check), the host operator copies `deploy/sw-unregister.js` into the rollback
+  target directory as `sw.js` (or serves that file at `/sw.js`; it must not be
+  cached: the host already sends `Cache-Control: no-cache` outside `/assets/`).
+  A browser that installed a Reader worker fetches it on its next update check
+  (any navigation, or the hourly and on-focus checks), and the kill-switch
+  installs with `skipWaiting`, deletes every cache and unregisters itself on
+  activation. It deliberately never navigates or reloads a page and has no
+  `fetch` or `message` handler: a worker cannot see unsent drafts, so open tabs
+  keep running untouched, and the next navigation the user makes is served by
+  the network, that is by the rolled-back build. A tab that had the worker may
+  show the "Updated in another tab, reload when ready" banner meanwhile.
+  Remove the file again when rolling forward to a release with its own worker.
+  To roll forward after a rollback, nothing is needed: the new build's `sw.js`
+  replaces the kill-switch's registration, or installs fresh.
+
+  **Backend without the Reader API.** While `/api/reader/v1/*` answers 404 (or
+  the network fails), the signed-out screen shows "Could not reach the Backend".
+  The session load (a read-only `GET`) is retried by itself, first after 5 s,
+  then 10 s, 20 s, 40 s and every 60 s, and stops on a session or a 401. No
+  write is retried. The worker never handles `/api/`, so no cache holds that
+  state and a reload once the API is back shows the login form.
 - **Client rollback.** The previous version's cache is retained until the new
   version has booted and is the only tab (above); a failed install never
   replaces the running version.

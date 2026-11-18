@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, statSync } from 'node:fs';
-import { createServer, type Server } from 'node:http';
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { dirname, extname, join, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -17,10 +17,10 @@ function productionCsp(): string {
 }
 
 /** Builds the Reader into `outDir` with the given commit stamp (production build, real sw.js). */
-export function buildReader(outDir: string, commit: string): void {
+export function buildReader(outDir: string, commit: string, opts: { sw?: boolean } = {}): void {
   execFileSync('npx', ['vite', 'build', '--outDir', outDir, '--emptyOutDir', '--logLevel', 'error'], {
     cwd: READER,
-    env: { ...process.env, RENDER_GIT_COMMIT: commit },
+    env: { ...process.env, RENDER_GIT_COMMIT: commit, MECON_SW: opts.sw === false ? 'off' : 'on' },
     stdio: 'pipe',
   });
 }
@@ -39,6 +39,8 @@ export interface SwapServer {
   deploy(dir: string): void;
   /** Paths the server was asked for, in order. */
   requests: string[];
+  /** Delay every /sw.js answer (ms), to widen the window of a worker update check. */
+  setSwDelay(ms: number): void;
   close(): Promise<void>;
 }
 
@@ -51,7 +53,13 @@ export async function startSwapServer(initialDir: string): Promise<SwapServer> {
   let root = initialDir;
   const csp = productionCsp();
   const requests: string[] = [];
+  let swDelay = 0;
   const server: Server = createServer((req, res) => {
+    const delay = (req.url ?? '').split('?')[0] === '/sw.js' ? swDelay : 0;
+    if (delay > 0) setTimeout(() => handle(req, res), delay);
+    else handle(req, res);
+  });
+  const handle = (req: IncomingMessage, res: ServerResponse): void => {
     const path = decodeURIComponent((req.url ?? '/').split('?')[0]!);
     requests.push(path);
     if (path === '/api/e2e-probe') {
@@ -73,13 +81,14 @@ export async function startSwapServer(initialDir: string): Promise<SwapServer> {
       'Cache-Control': path.startsWith('/assets/') ? 'public, max-age=31536000, immutable' : 'no-cache',
     });
     res.end(body);
-  });
+  };
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
   const port = (server.address() as AddressInfo).port;
   return {
     url: `http://127.0.0.1:${port}`,
     deploy: (dir) => void (root = dir),
     requests,
+    setSwDelay: (ms) => void (swDelay = ms),
     close: () => new Promise<void>((r) => (server.closeAllConnections(), server.close(() => r()))),
   };
 }

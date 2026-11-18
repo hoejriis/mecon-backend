@@ -3,6 +3,13 @@ import { hasBlockers, type Blockers } from './update/guards';
 export const VERSION_URL = '/version.json';
 export const REPAIR_KEY = 'mecon.reader.stale-repair';
 export const SW_UPDATE_WAIT_MS = 3000;
+/**
+ * Stands for "the host serves a build that has no /version.json": it answered
+ * 404, or 200 text/html through its SPA fallback. A release from before the
+ * file existed (the rollback target v0.1.0) looks like this, and a worker-held
+ * shell of a newer build must still recover onto it.
+ */
+export const UNVERSIONED = 'unversioned';
 
 export type StaleOutcome =
   | 'skipped-null-commit'
@@ -32,7 +39,9 @@ export interface StaleDeps {
 async function fetchServedCommit(f: typeof fetch): Promise<string | null | undefined> {
   try {
     const res = await f(VERSION_URL, { cache: 'no-store', credentials: 'same-origin' });
+    if (res.status === 404) return UNVERSIONED;
     if (!res.ok) return undefined;
+    if ((res.headers.get('content-type') ?? '').toLowerCase().startsWith('text/html')) return UNVERSIONED;
     const body: unknown = await res.json();
     if (body && typeof body === 'object' && 'commit' in body) {
       const c = (body as { commit: unknown }).commit;

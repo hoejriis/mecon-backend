@@ -5,6 +5,9 @@ import { BUILD_COMMIT } from './buildInfo';
 import { Header } from './components/Header';
 import { LoginScreen } from './components/LoginScreen';
 import { TabBar } from './components/TabBar';
+import { ContactsPage } from './routes/ChatsPage';
+import { Loading } from './components/States';
+import { SkipLink } from './components/SkipLink';
 import { TabPage } from './routes/TabPage';
 import { runStaleShellCheck } from './staleShell';
 import { TABS } from './tabs';
@@ -12,9 +15,11 @@ import { TABS } from './tabs';
 export function Shell() {
   return (
     <div className="shell">
+      <SkipLink />
       <Header />
-      <main className="content">
+      <main className="content" id="main" tabIndex={-1}>
         <Routes>
+          <Route path="/chats/contacts" element={<ContactsPage />} />
           <Route path="/" element={<Navigate to={TABS[0]!.path} replace />} />
           {TABS.map((tab) => (
             <Route key={tab.id} path={tab.path} element={<TabPage tab={tab} />} />
@@ -37,9 +42,10 @@ export function App() {
   if (status === 'loading') {
     return (
       <div className="shell">
+        <SkipLink />
         <Header />
-        <main className="content">
-          <p className="empty-body pane" role="status">Loading…</p>
+        <main className="content" id="main" tabIndex={-1}>
+          <div className="pane"><Loading /></div>
         </main>
       </div>
     );

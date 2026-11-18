@@ -3,19 +3,11 @@ import { useAuth } from '../auth/AuthContext';
 import type { CapabilityState, Device } from '../api/types';
 import { BUILD_COMMIT } from '../buildInfo';
 import type { TabDef } from '../tabs';
+import { Empty, ErrorState, Forbidden, Loading, Offline, Unavailable, useOnline } from '../components/States';
+import { ChatsList } from './ChatsPage';
 
-const CAP_COPY: Record<Exclude<CapabilityState, 'available'>, [string, string]> = {
-  unavailable: ['Not available', 'This Backend does not provide this yet.'],
-  forbidden: ['Not permitted', 'Your account does not have access to this.'],
-};
-
-function Empty({ title, body }: { title: string; body: string }) {
-  return (
-    <div className="empty" role="status">
-      <p className="empty-title">{title}</p>
-      {body && <p className="empty-body">{body}</p>}
-    </div>
-  );
+function CapState({ state }: { state: Exclude<CapabilityState, 'available'> }) {
+  return state === 'forbidden' ? <Forbidden /> : <Unavailable />;
 }
 
 function batteryText(pct: number | null | undefined): string {
@@ -29,7 +21,7 @@ function NodeList({ items }: { items: Device[] }) {
       {items.map((d) => (
         <li key={d.id} className="node">
           <p className="node-label">{d.label}</p>
-          <p className="empty-body">
+          <p className="state-body">
             {d.role} · {d.reachability} · battery {batteryText(d.battery_pct)}
           </p>
         </li>
@@ -40,12 +32,13 @@ function NodeList({ items }: { items: Device[] }) {
 
 function NodesBody({ state }: { state: CapabilityState }) {
   const { devices, loadDevices } = useAuth();
+  const online = useOnline();
   useEffect(() => {
     if (state === 'available') void loadDevices();
   }, [state, loadDevices]);
-  if (state !== 'available') return <Empty title={CAP_COPY[state][0]} body={CAP_COPY[state][1]} />;
-  if (devices.status === 'error') return <Empty title="Could not load nodes" body={devices.message} />;
-  if (devices.status !== 'ready') return <Empty title="Loading nodes…" body="" />;
+  if (state !== 'available') return <CapState state={state} />;
+  if (devices.status === 'error') return online ? <ErrorState title="Could not load nodes" body={devices.message} /> : <Offline />;
+  if (devices.status !== 'ready') return online ? <Loading label="Loading nodes" /> : <Offline />;
   return <NodeList items={devices.items} />;
 }
 
@@ -74,7 +67,7 @@ function SettingsBody() {
       <button type="button" className="btn" onClick={() => void signOut()}>
         Sign out
       </button>
-      <p className="empty-body build-stamp">
+      <p className="state-body build-stamp">
         Build: {BUILD_COMMIT ? BUILD_COMMIT.slice(0, 12) : 'local'}
       </p>
     </div>
@@ -86,10 +79,13 @@ export function TabPage({ tab }: { tab: TabDef }) {
   const state: CapabilityState | null =
     tab.capability && session ? session.capabilities[tab.capability] ?? 'unavailable' : null;
 
+  const online = useOnline();
   let body;
   if (tab.id === 'settings') body = <SettingsBody />;
+  else if (tab.id === 'chats' && state) body = <ChatsList state={state} />;
   else if (tab.id === 'nodes' && state) body = <NodesBody state={state} />;
-  else if (state && state !== 'available') body = <Empty title={CAP_COPY[state][0]} body={CAP_COPY[state][1]} />;
+  else if (state && state !== 'available') body = <CapState state={state} />;
+  else if (state === 'available' && !online) body = <Offline />;
   else if (state === 'available') {
     body = (
       <Empty
@@ -105,9 +101,9 @@ export function TabPage({ tab }: { tab: TabDef }) {
         <h1 id={`h-${tab.id}`}>{tab.listTitle}</h1>
         {body}
       </div>
-      <div className="pane pane-detail" aria-label={`${tab.label} detail`}>
-        <p className="empty-body">Nothing selected.</p>
-      </div>
+      <section className="pane pane-detail" aria-label={`${tab.label} detail`}>
+        <p className="state-body">Nothing selected.</p>
+      </section>
     </section>
   );
 }

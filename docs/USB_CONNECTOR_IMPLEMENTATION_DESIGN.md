@@ -56,9 +56,13 @@ Updated 18 November 2026. Nothing below has run against hardware or the private 
 | Stage | State |
 | --- | --- |
 | C0 contract and fixtures | **Draft published** in `contracts/connector/v1` (mapping, schemas, synthetic fixtures, validator in the contracts CI). Topic names are provisional and open questions Q1 to Q6 in `mapping.json` are for the Backend and firmware owners. The fake serial device and fake and real-mosquitto broker harness are in `connector/tests`. |
-| C1 transport | **Core implemented** in `connector/` (Python; see [ADR-019](ARCHITECTURE_DECISIONS.md)): serial selection by stable id, bounded framing, transparent forwarding both ways, one broker session with fallback and backoff, bounded queues with counted drops, health and metrics. Verified with unit tests, fakes and a real mosquitto in CI, plus a mutation check of the transport-safety rules. Not verified on a USB device, a Pi or against the Backend. |
+| C1 transport | **Core implemented** in `connector/` (Python; see "Runtime choice" below): serial selection by stable id, bounded framing, transparent forwarding both ways, one broker session with fallback and backoff, bounded queues with counted drops, health and metrics. Verified with unit tests, fakes and a real mosquitto in CI, plus a mutation check of the transport-safety rules. Not verified on a USB device, a Pi or against the Backend. |
 | C2 local deployment | Not started. A container image exists; systemd packaging, USB permissions on a real Pi, TLS secret handling and Pi Zero 2 W measurements are open. |
 | C3 interoperability | Not started. Needs the Backend's topic and ACL mapping, a real public-firmware device, and the dual-transport decision. |
 | C4 acceptance | Not started. |
 
 Related: [Reader MVP2 design](READER_MVP2_DESIGN.md), [components](COMPONENTS.md), [deployments](DEPLOYMENTS.md), [ADR](ARCHITECTURE_DECISIONS.md).
+
+## Runtime choice
+
+An engineering choice, not an accepted product decision: the Connector is Python 3.11+ with hash-pinned dependencies (`paho-mqtt`, `pyserial`), a single-process bridge loop plus paho's network thread, and a non-root multi-arch container. Both dependencies are pure Python, so a Pi Zero 2 W needs no per-platform native serial module; the framing rules stay small, testable functions. Interpreter memory on a Pi Zero 2 W is not yet measured. It forwards device envelopes unchanged and never replays a device command: a publish with an unknown outcome is counted, not resent. Contract: `contracts/connector/v1` (draft, topic names provisional).

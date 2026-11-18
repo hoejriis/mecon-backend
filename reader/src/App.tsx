@@ -5,7 +5,8 @@ import { BUILD_COMMIT } from './buildInfo';
 import { Header } from './components/Header';
 import { LoginScreen } from './components/LoginScreen';
 import { TabBar } from './components/TabBar';
-import { ContactsPage } from './routes/ChatsPage';
+import { MessagingProvider } from './messaging/MessagingContext';
+import { ChatsRoutes, ContactsPage } from './routes/ChatsPage';
 import { Loading } from './components/States';
 import { SkipLink } from './components/SkipLink';
 import { TabPage } from './routes/TabPage';
@@ -25,8 +26,10 @@ export function Shell() {
       <SkipLink />
       <Header />
       <main className="content" id="main" tabIndex={-1}>
+        <MessagingProvider>
         <Routes>
           <Route path="/chats/contacts" element={<ContactsPage />} />
+          <Route path="/chats/*" element={<ChatsRoutes />} />
           <Route path="/" element={<Navigate to={TABS[0]!.path} replace />} />
           {BleDevPage && (
             <Route
@@ -38,11 +41,12 @@ export function Shell() {
               }
             />
           )}
-          {TABS.map((tab) => (
+          {TABS.filter((t) => t.id !== 'chats').map((tab) => (
             <Route key={tab.id} path={tab.path} element={<TabPage tab={tab} />} />
           ))}
           <Route path="*" element={<Navigate to={TABS[0]!.path} replace />} />
         </Routes>
+        </MessagingProvider>
       </main>
       <TabBar />
     </div>

@@ -8,7 +8,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { ApiError, createApiClient } from '../api/client';
+import { ApiError, createApiClient, type ApiClient } from '../api/client';
 import type { Device, Session } from '../api/types';
 import { clearPending, loadPending, savePending, type PendingLogin } from './pendingLogin';
 
@@ -28,6 +28,10 @@ export interface AuthValue {
   status: AuthStatus;
   session: Session | null;
   devices: DevicesState;
+  /** The session-aware client; M2 calls are gated by session.capabilities. */
+  api: ApiClient;
+  /** Refetch GET /session (capabilities may have changed). */
+  refreshSession(): Promise<Session | null>;
   loginPhase: LoginPhase;
   loginMessage: string | null;
   signOutError: string | null;
@@ -217,10 +221,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [api]);
 
+  const refreshSession = useCallback(async () => {
+    try {
+      const s = await api.getSession();
+      setSession(s);
+      return s;
+    } catch {
+      return null; // a 401 already ran dropSession
+    }
+  }, [api]);
+
   const value: AuthValue = {
     status,
     session,
     devices,
+    api,
+    refreshSession,
     loginPhase,
     loginMessage,
     signOutError,

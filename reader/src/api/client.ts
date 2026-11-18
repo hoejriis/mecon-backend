@@ -1,9 +1,17 @@
 import type {
   ApiErrorBody,
+  Capabilities,
+  CapabilityState,
+  ChannelList,
+  ConversationList,
   DeviceList,
   Health,
+  IdentityList,
   LoginStarted,
   LoginState,
+  MessageList,
+  SendAttempt,
+  SendRequest,
   Session,
 } from './types';
 
@@ -26,8 +34,54 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Thrown, before any request is made, when the session does not advertise
+ * the capability an operation needs as `available`.
+ */
+export class CapabilityError extends Error {
+  readonly capability: keyof Capabilities;
+  readonly state: CapabilityState | 'unknown';
+  constructor(capability: keyof Capabilities, state: CapabilityState | 'unknown') {
+    super(`Capability ${capability} is ${state}`);
+    this.name = 'CapabilityError';
+    this.capability = capability;
+    this.state = state;
+  }
+}
+
+/**
+ * A POST whose outcome the Reader cannot know: the request may or may not
+ * have reached the Backend (network error, timeout, 5xx, unreadable answer).
+ * Never a reason to mint a new attempt id.
+ */
+export class AmbiguousSendError extends Error {
+  readonly cause: unknown;
+  constructor(cause: unknown) {
+    super('The send request got no usable answer');
+    this.name = 'AmbiguousSendError';
+    this.cause = cause;
+  }
+}
+
+export const SEND_TIMEOUT_MS = 20_000;
+
+export interface PageOpts {
+  cursor?: string | null;
+  limit?: number;
+}
+
+export interface SendResult {
+  attempt: SendAttempt;
+  /** true for 201 (created), false for 200 (idempotent repeat of an existing attempt). */
+  created: boolean;
+}
+
 export interface ApiClientOptions {
   fetchImpl?: typeof fetch;
+  /** Capabilities to start from (tests); normally learned from GET /session. */
+  initialCapabilities?: Capabilities | null;
+  /** Abort a send POST after this long (ambiguous outcome). */
+  sendTimeoutMs?: number;
   /** Called on any 401, before the error is thrown. */
   onUnauthorized?: () => void;
 }
@@ -39,6 +93,23 @@ export interface ApiClient {
   getSession(): Promise<Session>;
   logout(): Promise<void>;
   listDevices(): Promise<DeviceList>;
+  // M2 (draft) operations. Each throws CapabilityError without a request unless
+  // the needed capability is `available`.
+  listIdentities(): Promise<IdentityList>;
+  listConversations(page?: PageOpts): Promise<ConversationList>;
+  listMessages(conversationId: string, page?: PageOpts): Promise<MessageList>;
+  listChannels(): Promise<ChannelList>;
+  /**
+   * POST one attempt. The Idempotency-Key is the request's client_attempt_id.
+   * Calling it again with the same SendRequest is the idempotent re-POST that
+   * learns an attempt's fate; it never creates another attempt. Throws
+   * AmbiguousSendError when the outcome is unknown, ApiError otherwise (a 409
+   * is a key/body mismatch bug and is never retried here).
+   */
+  createSendAttempt(req: SendRequest): Promise<SendResult>;
+  getSendAttempt(attemptId: string): Promise<SendAttempt>;
+  /** Open the SSE stream (raw Response; parse with api/sse). */
+  openEvents(opts: { lastEventId?: string | null; signal?: AbortSignal }): Promise<Response>;
   /** Forget the held CSRF token (signed out). */
   reset(): void;
 }
@@ -58,11 +129,32 @@ export function createApiClient(opts: ApiClientOptions = {}): ApiClient {
   const doFetch = (input: string, init?: RequestInit) =>
     (opts.fetchImpl ?? fetch)(input, init);
   let csrfToken: string | null = null;
+  // Learned from every GET /session; every M2 call is checked against it.
+  let capabilities: Capabilities | null = opts.initialCapabilities ?? null;
 
   async function send(path: string, init: RequestInit): Promise<Response> {
     const res = await doFetch(`${API_BASE}${path}`, { credentials: 'same-origin', ...init });
-    if (res.status === 401) opts.onUnauthorized?.();
+    if (res.status === 401) {
+      capabilities = null;
+      opts.onUnauthorized?.();
+    }
     return res;
+  }
+
+  function need(...caps: Array<keyof Capabilities>) {
+    const c = capabilities;
+    for (const name of caps) {
+      const state = c ? c[name] ?? 'unavailable' : 'unknown';
+      if (state !== 'available') throw new CapabilityError(name, state);
+    }
+  }
+
+  function pageQuery(page?: PageOpts): string {
+    const q = new URLSearchParams();
+    if (page?.cursor) q.set('cursor', page.cursor);
+    if (page?.limit) q.set('limit', String(page.limit));
+    const s = q.toString();
+    return s ? `?${s}` : '';
   }
 
   async function json<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -78,6 +170,7 @@ export function createApiClient(opts: ApiClientOptions = {}): ApiClient {
       cache: 'no-store',
     });
     csrfToken = session.csrf_token;
+    capabilities = session.capabilities;
     return session;
   }
 
@@ -117,8 +210,82 @@ export function createApiClient(opts: ApiClientOptions = {}): ApiClient {
       if (!res.ok) throw await readError(res);
     },
     listDevices: () => json<DeviceList>('/devices', { cache: 'no-store' }),
+    async listIdentities() {
+      need('messaging');
+      return json<IdentityList>('/identities', { cache: 'no-store' });
+    },
+    async listConversations(page) {
+      need('messaging');
+      return json<ConversationList>(`/conversations${pageQuery(page)}`, { cache: 'no-store' });
+    },
+    async listMessages(conversationId, page) {
+      need('messaging');
+      return json<MessageList>(
+        `/conversations/${encodeURIComponent(conversationId)}/messages${pageQuery(page)}`,
+        { cache: 'no-store' },
+      );
+    },
+    async listChannels() {
+      need('messaging');
+      return json<ChannelList>('/channels', { cache: 'no-store' });
+    },
+    async createSendAttempt(req) {
+      need('messaging', 'send');
+      // One serialized body, reused as-is by the CSRF retry inside write().
+      const body = JSON.stringify(req);
+      const ctl = new AbortController();
+      const timer = setTimeout(() => ctl.abort(), opts.sendTimeoutMs ?? SEND_TIMEOUT_MS);
+      let res: Response;
+      let text: string;
+      try {
+        res = await write('/send-attempts', {
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+            'Idempotency-Key': req.client_attempt_id,
+          },
+          body,
+          signal: ctl.signal,
+        });
+        if (!res.ok && res.status < 500) throw await readError(res);
+        text = await res.text();
+      } catch (e) {
+        if (e instanceof ApiError) throw e;
+        throw new AmbiguousSendError(e);
+      } finally {
+        clearTimeout(timer);
+      }
+      if (res.status >= 500) throw new AmbiguousSendError(new ApiError(res.status, null, 'Server error'));
+      let attempt: SendAttempt;
+      try {
+        attempt = JSON.parse(text) as SendAttempt;
+      } catch (e) {
+        throw new AmbiguousSendError(e);
+      }
+      if (attempt?.client_attempt_id !== req.client_attempt_id) {
+        throw new AmbiguousSendError(new Error('Answer is for a different attempt'));
+      }
+      return { attempt, created: res.status === 201 };
+    },
+    async getSendAttempt(id) {
+      need('messaging', 'send');
+      return json<SendAttempt>(`/send-attempts/${encodeURIComponent(id)}`, { cache: 'no-store' });
+    },
+    async openEvents({ lastEventId, signal }) {
+      need('messaging', 'events');
+      return send('/events', {
+        method: 'GET',
+        headers: {
+          Accept: 'text/event-stream',
+          ...(lastEventId ? { 'Last-Event-ID': lastEventId } : {}),
+        },
+        cache: 'no-store',
+        signal,
+      });
+    },
     reset() {
       csrfToken = null;
+      capabilities = null;
     },
   };
 }

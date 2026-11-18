@@ -1,0 +1,44 @@
+name: release
+# Pushing a tag vX.Y.Z builds the Reader with the tagged commit stamped in,
+# and attaches mecon-reader-dist-vX.Y.Z.tar.gz plus its .sha256 to a GitHub
+# release. Static hosts (F2 included) deploy that tarball; the container
+# image is for other deployers and is built from reader/Dockerfile.
+on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+permissions:
+  contents: write
+jobs:
+  dist:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: reader/package-lock.json
+      - name: Build
+        working-directory: reader
+        env:
+          RENDER_GIT_COMMIT: ${{ github.sha }}
+        run: |
+          npm ci
+          npm run typecheck
+          npm test
+          npm run build
+          grep -rq "${GITHUB_SHA:0:12}" dist/assets || { echo "commit stamp missing from bundle"; exit 1; }
+      - name: Package
+        run: |
+          name="mecon-reader-dist-${GITHUB_REF_NAME}"
+          tar -C reader/dist -czf "${name}.tar.gz" .
+          sha256sum "${name}.tar.gz" > "${name}.tar.gz.sha256"
+          cat "${name}.tar.gz.sha256"
+      - name: Publish release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          name="mecon-reader-dist-${GITHUB_REF_NAME}"
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 \
+            || gh release create "$GITHUB_REF_NAME" --verify-tag --title "$GITHUB_REF_NAME" --notes "Release notes to follow."
+          gh release upload "$GITHUB_REF_NAME" "${name}.tar.gz" "${name}.tar.gz.sha256" --clobber

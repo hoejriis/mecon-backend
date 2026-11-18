@@ -130,7 +130,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** (M2 draft) Messaging identities the caller may use */
+        /**
+         * (M2 draft) Messaging identities the caller may use
+         * @description Not paged: the whole list is returned with `next_cursor: null`.
+         */
         get: operations["listIdentities"];
         put?: never;
         post?: never;
@@ -243,11 +246,14 @@ export interface paths {
         };
         /**
          * (M2 draft) Authorized contacts
-         * @description **Draft, pending an owner scoping decision.** It is not yet settled
-         *     whether this is a mesh-global directory (every signed-in user sees
-         *     every heard node) or is scoped to the caller's fleet and assignments
-         *     plus favourites. Neither is promised until the decision is recorded
-         *     here. History cursors on this endpoint are stable and never expire.
+         * @description Scoping (owner decision, 2026-11-18): public sources are available
+         *     to everyone; fleet users decide whether they share their
+         *     observations; contacts are always shared within a fleet and never
+         *     across fleets. There is no administrator exception in this API. A
+         *     caller sees public-source contacts, contacts held by a device in one
+         *     of their fleets (at any age), contacts heard recently by their
+         *     fleet's observers, and the peers of their own conversations. History
+         *     cursors on this endpoint are stable and never expire.
          */
         get: operations["listContacts"];
         put?: never;
@@ -265,7 +271,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** (M2 draft) Public and private channels the caller may read */
+        /**
+         * (M2 draft) Public and private channels the caller may read
+         * @description Not paged: the whole list is returned with `next_cursor: null`.
+         */
         get: operations["listChannels"];
         put?: never;
         post?: never;
@@ -485,10 +494,18 @@ export interface components {
         };
         /**
          * @description `id` is derived server-side and is opaque: clients never parse or
-         *     construct it, and it may change only through a resync. When the same
-         *     peer is reachable through an enrolled pair of identities that the
-         *     Backend has merged, the pair is exposed as one conversation (one
+         *     construct it, and it may change only through a resync. Ids are per
+         *     caller: two callers may see the same thread under different ids. When
+         *     the same peer is reachable through an enrolled pair of identities that
+         *     the Backend has merged, the pair is exposed as one conversation (one
          *     `id`, one entry in lists), not two.
+         *
+         *     `identity_id` is the caller's own identity in this conversation. For a
+         *     channel conversation it is the caller's identity the Backend uses for
+         *     that channel; a caller with no identity has no conversations.
+         *     `unread_count` counts every row of the conversation newer than the
+         *     caller's read mark; the mark belongs to the caller's own side of the
+         *     conversation, so marking one conversation read never changes another.
          */
         Conversation: {
             id: components["schemas"]["OpaqueId"];
@@ -515,7 +532,10 @@ export interface components {
              *     information.
              */
             identity_id: components["schemas"]["OpaqueId"] | null;
-            /** @enum {string} */
+            /**
+             * @description From the caller's perspective, including on the other party's copy in a merged pair.
+             * @enum {string}
+             */
             direction: "inbound" | "outbound";
             sender_label?: string | null;
             /** @enum {string} */

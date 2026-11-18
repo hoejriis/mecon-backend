@@ -31,7 +31,7 @@ export function installFakeBluetooth(target: object, mock: MockCompanion = new M
 
   const device = new EventTarget() as EventTarget & { id: string; name: string; gatt: unknown };
   device.id = 'synthetic-device-1';
-  device.name = 'MeshCore-Synthetic';
+  device.name = mock.deviceName;
 
   const rx = new EventTarget() as EventTarget & Record<string, unknown>;
   const tx = new EventTarget() as EventTarget & Record<string, unknown>;

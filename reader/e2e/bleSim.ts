@@ -31,19 +31,26 @@ export interface SimHandle {
   sendWrites(): Promise<number>;
   rfCount(): Promise<number>;
   totalWrites(): Promise<number>;
+  /** The operation names of every 0x7F interface request the device received. */
+  ifaceOps(): Promise<string[]>;
+  /** First byte (command code) of every write, in order. */
+  writeCodes(): Promise<number[]>;
 }
 
-export async function installSim(page: Page, opts: { sim?: object; dev?: object } = {}): Promise<SimHandle> {
+export async function installSim(page: Page, opts: { sim?: object; dev?: object; session?: object } = {}): Promise<SimHandle> {
   await page.addInitScript((o) => {
     const w = window as unknown as Record<string, unknown>;
     w.__BLE_SIM_OPTS = o.sim;
     w.__BLE_DEV_OPTS = o.dev;
-  }, { sim: opts.sim ?? {}, dev: { responseTimeoutMs: 400, connectTimeoutMs: 400, ...(opts.dev ?? {}) } });
+    w.__BLE_SESSION_OPTS = o.session;
+  }, { sim: opts.sim ?? {}, session: { detect: { stepTimeoutMs: 400 }, companion: { responseTimeoutMs: 400, connectTimeoutMs: 400 }, ...(opts.session ?? {}) }, dev: { responseTimeoutMs: 400, connectTimeoutMs: 400, ...(opts.dev ?? {}) } });
   await page.addInitScript({ content: await fakeBluetoothScript() });
-  type W = { __ble: { mock: { sendWrites(): unknown[]; rf: unknown[]; writes: unknown[] } } };
+  type W = { __ble: { mock: { sendWrites(): unknown[]; rf: unknown[]; writes: Uint8Array[]; ifaceRequests: Array<{ op?: string }> } } };
   return {
     sendWrites: () => page.evaluate(() => (window as unknown as W).__ble.mock.sendWrites().length),
     rfCount: () => page.evaluate(() => (window as unknown as W).__ble.mock.rf.length),
     totalWrites: () => page.evaluate(() => (window as unknown as W).__ble.mock.writes.length),
+    ifaceOps: () => page.evaluate(() => (window as unknown as W).__ble.mock.ifaceRequests.map((r) => String(r.op))),
+    writeCodes: () => page.evaluate(() => (window as unknown as W).__ble.mock.writes.map((w) => w[0]!)),
   };
 }

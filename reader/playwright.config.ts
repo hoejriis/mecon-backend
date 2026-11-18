@@ -6,13 +6,13 @@ export default defineConfig({
   reporter: [['list'], ['./e2e/bleMatrixReporter.ts']],
   use: { baseURL: 'http://127.0.0.1:4173' },
   projects: [
-    { name: 'chromium', use: { ...devices['Desktop Chrome'] }, testIgnore: /(ble|usb)\.spec\.ts/ },
+    { name: 'chromium', use: { ...devices['Desktop Chrome'] }, testIgnore: /(ble|usb|ble-device)\.spec\.ts/ },
     // Android-oriented BLE simulation: Android Chrome user agent, mobile viewport, fake Web Bluetooth.
     // Runs against the dev server because the BLE harness route exists only in dev builds.
     {
       name: 'android-ble-sim',
       use: { ...devices['Pixel 7'], baseURL: 'http://127.0.0.1:4174' },
-      testMatch: /ble\.spec\.ts/,
+      testMatch: /ble(-device)?\.spec\.ts/,
     },
     // Laptop-Chromium USB simulation: desktop UA, fake Web Serial. Runs against the dev server (the harness route exists only in dev builds).
     {

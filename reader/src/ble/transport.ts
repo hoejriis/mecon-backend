@@ -25,7 +25,9 @@ export type BleErrorCode =
   /** USB: the port went away (cable pulled, board reset into its bootloader, permission revoked). */
   | 'port_lost'
   /** The detected device does not support this operation (capabilities gate features, not roles). */
-  | 'unsupported_capability';
+  | 'unsupported_capability'
+  /** The link's trust does not allow this class of operation (a BLE link of unknown PIN: reads only). */
+  | 'link_not_trusted';
 
 export class BleError extends Error {
   constructor(

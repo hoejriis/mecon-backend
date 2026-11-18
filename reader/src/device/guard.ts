@@ -1,4 +1,4 @@
-import { BleError, type DisconnectReason, type Unsubscribe } from '../ble/transport';
+import { BleError, type CompanionTransport, type DisconnectReason, type Unsubscribe } from '../ble/transport';
 import { CMD, MAX_FRAME_SIZE } from '../ble/protocol';
 import { SERIAL_HEADER_SIZE, SERIAL_MARKER_TO_DEVICE } from '../ble/serialFraming';
 import { CLI_READ_ONLY_LINES } from './cliText';
@@ -35,6 +35,49 @@ function jsonRead(text: string): string {
 }
 
 /**
+ * Decides whether one Companion frame (no serial wrapper: this is what a BLE write carries, and
+ * what sits inside a serial frame) is something the read-only probe may send. Allowed: the
+ * Companion app start (1) and device query (22), and CMD_MECON (0x7F) carrying one read-only
+ * interface request (MECON_READ_OPS) in a single frame. Throws BleError('bad_argument') otherwise.
+ */
+export function classifyProbeFrame(p: Uint8Array): Classified {
+  if (p.length === 0) throw new BleError('bad_argument', 'probe refused a write: empty');
+  const code = p[0]!;
+  if (PROBE_COMPANION_CODES.includes(code)) return { label: `frame:${code}` };
+  if (code === CMD_MECON) {
+    if (p.length < 5 || p[2] !== 0 || p[3] !== 1) throw new BleError('bad_argument', 'probe refused a write: interface request must be one frame');
+    return { label: `frame-iface:${jsonRead(new TextDecoder().decode(p.subarray(4)))}` };
+  }
+  throw new BleError('bad_argument', `probe refused a write: command code ${code}`);
+}
+
+/**
+ * Wraps a frame transport (BLE) so that every write must pass classifyProbeFrame before it
+ * reaches the link. Everything else passes through unchanged.
+ */
+export function guardFrames(inner: CompanionTransport, log: string[] = []): CompanionTransport {
+  return {
+    get kind() {
+      return inner.kind;
+    },
+    get support() {
+      return inner.support;
+    },
+    requestDevice: () => inner.requestDevice(),
+    connect: () => inner.connect(),
+    async write(frame: Uint8Array): Promise<void> {
+      const c = classifyProbeFrame(frame);
+      log.push(c.label);
+      await inner.write(frame);
+    },
+    disconnect: () => inner.disconnect(),
+    onFrame: (cb) => inner.onFrame(cb),
+    onDisconnect: (cb) => inner.onDisconnect(cb),
+    onPhase: inner.onPhase ? (cb) => inner.onPhase!(cb) : undefined,
+  };
+}
+
+/**
  * Decides whether one write is something the read-only probe may send, and
  * names it. Throws BleError('bad_argument') for everything else. A write is one
  * unit: a single text line ending in one CR, or a single serial frame whose
@@ -52,14 +95,7 @@ export function classifyProbeWrite(bytes: Uint8Array): Classified {
     if (bytes.length < SERIAL_HEADER_SIZE + 1) return refuse('short frame');
     const len = bytes[1]! | (bytes[2]! << 8);
     if (len > MAX_FRAME_SIZE || bytes.length !== SERIAL_HEADER_SIZE + len) return refuse('frame length mismatch');
-    const p = bytes.subarray(SERIAL_HEADER_SIZE);
-    const code = p[0]!;
-    if (PROBE_COMPANION_CODES.includes(code)) return { label: `frame:${code}` };
-    if (code === CMD_MECON) {
-      if (p.length < 5 || p[2] !== 0 || p[3] !== 1) return refuse('interface request must be one frame');
-      return { label: `frame-iface:${jsonRead(new TextDecoder().decode(p.subarray(4)))}` };
-    }
-    return refuse(`command code ${code}`);
+    return classifyProbeFrame(bytes.subarray(SERIAL_HEADER_SIZE));
   }
   // Text: printable ASCII, exactly one terminating CR.
   if (bytes[bytes.length - 1] !== 0x0d) return refuse('text line without a single terminating CR');

@@ -41,7 +41,10 @@ test('signed out: full read-only probe on the production build, report is saniti
   expect(json.readOnly).toBe(true);
   expect(json.navigatorBluetoothPresent).toBe(true);
   expect(json.hello.firmwareVersion).toBe(10);
-  expect(json.commandCodesSent.sort((a: number, b: number) => a - b)).toEqual([1, 22]);
+  // A stock Companion (the default simulated peer): the interface hello (0x7F) goes first and is answered with an error frame.
+  expect(json.commandCodesSent.sort((a: number, b: number) => a - b)).toEqual([1, 22, 127]);
+  expect(json.commandsSent).toEqual(['frame-iface:hello', 'frame:22', 'frame:1']);
+  expect(json.detected).toMatchObject({ firmware: 'unknown', role: 'companion', companionBinary: true });
   expect(json.selfInfo).toMatchObject({ publicKeyPresent: true, nodeNamePresent: true, locationPresent: true });
   for (const bad of SENSITIVE) expect(text, bad).not.toContain(bad);
 
@@ -52,7 +55,7 @@ test('signed out: full read-only probe on the production build, report is saniti
   // Nothing was sent that could transmit: no send commands, no simulated RF.
   expect(await sim.sendWrites()).toBe(0);
   expect(await sim.rfCount()).toBe(0);
-  expect(await sim.totalWrites()).toBe(2);
+  expect(await sim.totalWrites()).toBe(3);
   expect(problems).toEqual([]);
   await axeClean(page);
 });
@@ -93,4 +96,55 @@ test('linked from Settings only, not from the tab bar', async ({ page }) => {
   await page.getByRole('link', { name: 'Bluetooth diagnostics' }).click();
   await expect(page).toHaveURL(/\/probe\/ble$/);
   await expect(page.getByRole('heading', { level: 1, name: 'Bluetooth diagnostics' })).toBeVisible();
+});
+
+const SIM = 'SIMULATED — not hardware verified';
+
+async function runProbeFor(page: Page, sim: object) {
+  await mockBackend(page);
+  const handle = await installSim(page, { sim, dev: { responseTimeoutMs: 400 } });
+  await page.goto('/probe/ble');
+  await page.getByRole('button', { name: 'Connect and run probe' }).click();
+  await expect(page.getByRole('button', { name: 'Run again' })).toBeVisible({ timeout: 20_000 });
+  const text = await page.getByLabel('Sanitized report (JSON)').inputValue();
+  return { handle, text, json: JSON.parse(text) };
+}
+
+test(`${SIM}: MECON Companion over BLE: the report carries firmware, role and capabilities, and only read requests were sent`, async ({ page }) => {
+  const { handle, text, json } = await runProbeFor(page, { mecon: true });
+  for (const id of ['environment', 'chooser', 'connect', 'deviceQuery', 'selfInfo', 'disconnect']) expect(await status(page, id), id).toBe('pass');
+  expect(json.probe.version).toBe(2);
+  expect(json.linkTrust).toBe('unknown');
+  expect(json.detected).toMatchObject({ transport: 'ble', trust: 'unknown', firmware: 'mecon', role: 'companion', roleSource: 'hello', interfaceVersion: '1.0', companionBinary: true });
+  expect(json.detected.capabilities).toEqual(expect.arrayContaining(['identity.read', 'status.read', 'clock.read', 'message.send.direct']));
+  expect(json.detected.firmwareVersion).toMatch(/^v1\.18\.0-mecon/);
+  await expect(page.getByTestId('probe-detected')).toContainText('MECON firmware v1.18.0-mecon');
+  await expect(page.getByTestId('probe-detected')).toContainText('role companion');
+  expect(json.commandsSent).toEqual(['frame-iface:hello', 'frame:22', 'frame:1']);
+  expect(await handle.ifaceOps()).toEqual(['hello']);
+  expect(await handle.writeCodes()).toEqual([127, 22, 1]);
+  expect(await handle.sendWrites()).toBe(0);
+  expect(await handle.rfCount()).toBe(0);
+  for (const bad of ['Synthetic Node', 'MeshCore-Synthetic', 'synthetic-device-1', 'ab'.repeat(16), 'cd'.repeat(32)]) expect(text, bad).not.toContain(bad);
+  await axeClean(page);
+});
+
+test(`${SIM}: stock Companion over BLE: detected as not MECON, the native probe steps still pass`, async ({ page }) => {
+  const { handle, json } = await runProbeFor(page, {});
+  expect(json.detected).toMatchObject({ firmware: 'unknown', role: 'companion', roleSource: 'companion frames', companionBinary: true, interfaceVersion: null });
+  await expect(page.getByTestId('probe-detected')).toContainText('Not MECON firmware or older');
+  for (const id of ['deviceQuery', 'selfInfo']) expect(await status(page, id), id).toBe('pass');
+  expect(await handle.ifaceOps()).toEqual([]);
+  expect(await handle.sendWrites()).toBe(0);
+});
+
+test(`${SIM}: unknown device over BLE: nothing answers, reported as unknown, nothing sent beyond the read-only hello and query`, async ({ page }) => {
+  test.setTimeout(60_000); // two 8 s answer windows on the production defaults
+  const { handle, json } = await runProbeFor(page, { silent: true });
+  expect(json.detected).toMatchObject({ firmware: 'unknown', role: 'unknown', capabilities: [] });
+  await expect(page.getByTestId('probe-detected')).toContainText('Unknown device');
+  expect(await status(page, 'deviceQuery')).toBe('fail');
+  expect(await status(page, 'selfInfo')).toBe('unknown');
+  expect(await handle.writeCodes()).toEqual([127, 22]);
+  expect(await handle.sendWrites()).toBe(0);
 });

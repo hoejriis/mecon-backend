@@ -26,6 +26,7 @@ const UsbProbePage = lazy(() => import('./device/probe/UsbProbePage'));
 
 const UsbDevPage = import.meta.env.DEV ? lazy(() => import('./device/UsbDevPage')) : null;
 const BleDevPage = import.meta.env.DEV ? lazy(() => import('./ble/BleDevPage')) : null;
+const BleSessionDevPage = import.meta.env.DEV ? lazy(() => import('./ble/BleSessionDevPage')) : null;
 
 export function Shell() {
   return (
@@ -44,6 +45,16 @@ export function Shell() {
               element={
                 <Suspense fallback={null}>
                   <BleDevPage />
+                </Suspense>
+              }
+            />
+          )}
+          {BleSessionDevPage && (
+            <Route
+              path="/dev/ble-session"
+              element={
+                <Suspense fallback={null}>
+                  <BleSessionDevPage />
                 </Suspense>
               }
             />

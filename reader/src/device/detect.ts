@@ -1,10 +1,11 @@
-import { decodeFrame, encodeDeviceQuery } from '../ble/protocol';
+import { decodeFrame, encodeDeviceQuery, type DeviceInfo } from '../ble/protocol';
 import { SerialDeframer, encodeSerialFrame } from '../ble/serialFraming';
-import { BleError } from '../ble/transport';
+import { BleError, type CompanionTransport } from '../ble/transport';
 import { LineSplitter, cliReplyText, encodeCliLine, parseMeconVersion, parseRoleReply } from './cliText';
-import { guardBytes } from './guard';
+import { guardBytes, guardFrames } from './guard';
 import { MeconReassembler, buildRequest, encodeMeconFrames, encodeMeconLine, parseHello, parseMeconLine, type Envelope, type HelloInfo } from './meconIface';
 import type { ByteTransport } from './serialBytes';
+import { linkTrustOf, type LinkTrust } from './trust';
 
 /**
  * Device identification after the port is open. Role-agnostic and truthful:
@@ -22,6 +23,13 @@ import type { ByteTransport } from './serialBytes';
  *  4. If a Companion answered or step 3 stayed silent: the Companion binary device query,
  *     which proves the binary driver (messaging) works on this port.
  * Anything that answers none of these is reported `unknown`.
+ *
+ * Over BLE (`detectBleDevice`) the same identification runs without the console steps, since
+ * BLE carries no console (only Companions have BLE, and the interface rides in 0x7F frames as
+ * on USB): the interface hello as 0x7F frames, then the Companion device query. Nothing is
+ * inferred from the BLE device name, which is never read here. The BLE link's PIN state is not
+ * observable from a browser, so its trust is `unknown` (see trust.ts), and a device may refuse
+ * even hello on such a link (`interfaceRefused`).
  */
 export type Capability =
   | 'identity.read'
@@ -37,6 +45,10 @@ export type Capability =
 export type DeviceRole = 'companion' | 'repeater' | 'room' | 'sensor' | 'unknown';
 
 export interface DetectedDevice {
+  /** The link the detection ran over. */
+  transport: 'usb' | 'ble';
+  /** How far the link is trusted (trust.ts). USB: trusted. BLE: unknown, the PIN is not observable. */
+  trust: LinkTrust;
   firmware: 'mecon' | 'unknown';
   firmwareVersion: string | null;
   role: DeviceRole;
@@ -49,6 +61,12 @@ export interface DetectedDevice {
   consoleCli: boolean;
   /** The device answered Companion binary frames (messaging driver available). */
   companionBinary: boolean;
+  /** The device interface answered hello with `refused`: it is there, and does not trust this link. Not an identification. */
+  interfaceRefused: boolean;
+  /** What the Companion device query answered (binary driver), when it did. */
+  deviceInfo: DeviceInfo | null;
+  /** The error name when the device answered the Companion device query with an error frame. */
+  companionError: string | null;
   /** Operations and streams the device listed in hello. */
   interfaceOps: string[];
   deviceIdPresent: boolean;
@@ -89,6 +107,84 @@ function capsFromHello(h: HelloInfo): Capability[] {
 /** Capabilities of the Companion binary driver. Present only when the device answered binary frames. */
 export const COMPANION_BINARY_CAPS: readonly Capability[] = Object.freeze(['contacts.read', 'messages.receive', 'message.send.direct', 'message.send.channel']);
 
+export function newDetected(transport: 'usb' | 'ble', sent: string[]): DetectedDevice {
+  return {
+    transport,
+    trust: linkTrustOf(transport),
+    firmware: 'unknown',
+    firmwareVersion: null,
+    role: 'unknown',
+    roleSource: null,
+    hardware: null,
+    interfaceVersion: null,
+    carriage: null,
+    consoleCli: false,
+    companionBinary: false,
+    interfaceRefused: false,
+    deviceInfo: null,
+    companionError: null,
+    interfaceOps: [],
+    deviceIdPresent: false,
+    nodeKeyPresent: false,
+    capabilities: [],
+    evidence: [],
+    commandsSent: sent,
+    linkLost: false,
+    summary: '',
+  };
+}
+
+/** Reads a hello answer into the result. Only a successful hello identifies MECON firmware and its role. */
+export function applyHello(d: DetectedDevice, env: Envelope, carriage: 'console-line' | 'companion-frames'): boolean {
+  if (env.status === 'refused') {
+    d.interfaceRefused = true;
+    d.evidence.push(`hello over ${carriage} was refused by the device (${String(env.error ?? 'no reason')})`);
+    return false;
+  }
+  const h = parseHello(env);
+  if (!h) {
+    d.evidence.push(`hello over ${carriage} answered status ${String(env.status)} without a usable result`);
+    return false;
+  }
+  d.firmware = 'mecon';
+  d.carriage = carriage;
+  d.interfaceVersion = h.interfaceVersion;
+  d.firmwareVersion = h.firmware;
+  d.hardware = h.hardware;
+  d.interfaceOps = h.capabilities;
+  d.deviceIdPresent = h.deviceIdPresent;
+  d.nodeKeyPresent = h.nodeKeyPresent;
+  d.capabilities = capsFromHello(h);
+  if (h.role) {
+    d.role = h.role;
+    d.roleSource = 'hello';
+  } else d.evidence.push(`hello reported a role this Reader does not know: ${h.roleRaw.slice(0, 20)}`);
+  d.evidence.push(`hello answered over ${carriage}: interface ${h.interfaceVersion}`);
+  return true;
+}
+
+type QueryAnswer = { info: DeviceInfo | null; error?: string };
+/** A device-query answer: device info, or an error frame (the device speaks Companion frames but refused). */
+function queryAnswer(frame: Uint8Array): QueryAnswer | null {
+  const f = decodeFrame(frame);
+  if (f.kind === 'deviceInfo') return { info: f.info };
+  return f.kind === 'error' ? { info: null, error: f.name } : null;
+}
+
+/** The device answered Companion binary frames: the messaging driver is available. */
+function applyBinary(d: DetectedDevice, a: QueryAnswer): void {
+  d.companionBinary = true;
+  d.deviceInfo = a.info;
+  d.companionError = a.error ?? null;
+  d.evidence.push('answered the Companion device query with Companion frames');
+  for (const c of COMPANION_BINARY_CAPS) if (!d.capabilities.includes(c)) d.capabilities.push(c);
+  if (!d.capabilities.includes('identity.read')) d.capabilities.push('identity.read');
+  if (d.role === 'unknown') {
+    d.role = 'companion';
+    d.roleSource = 'companion frames';
+  }
+}
+
 export async function detectDevice(raw: ByteTransport, opts: DetectOptions = {}): Promise<DetectedDevice> {
   const timeout = opts.stepTimeoutMs ?? 1500;
   const sent: string[] = [];
@@ -110,25 +206,7 @@ export async function detectDevice(raw: ByteTransport, opts: DetectOptions = {})
     poke();
   });
 
-  const d: DetectedDevice = {
-    firmware: 'unknown',
-    firmwareVersion: null,
-    role: 'unknown',
-    roleSource: null,
-    hardware: null,
-    interfaceVersion: null,
-    carriage: null,
-    consoleCli: false,
-    companionBinary: false,
-    interfaceOps: [],
-    deviceIdPresent: false,
-    nodeKeyPresent: false,
-    capabilities: [],
-    evidence: [],
-    commandsSent: sent,
-    linkLost: false,
-    summary: '',
-  };
+  const d = newDetected('usb', sent);
   let seq = 0;
 
   /** Writes one unit, then waits for the first later event that `pick` accepts. */
@@ -208,49 +286,11 @@ export async function detectDevice(raw: ByteTransport, opts: DetectOptions = {})
   };
   const cli = (line: string) => ask(`console ${line}`, encodeCliLine(line), (e) => (e.kind === 'line' ? cliReplyText(e.line) : null));
 
-  const takeHello = (env: Envelope, carriage: 'console-line' | 'companion-frames'): boolean => {
-    if (env.status === 'refused') {
-      d.evidence.push(`hello over ${carriage} was refused by the device (${String(env.error ?? 'no reason')})`);
-      return false;
-    }
-    const h = parseHello(env);
-    if (!h) {
-      d.evidence.push(`hello over ${carriage} answered status ${String(env.status)} without a usable result`);
-      return false;
-    }
-    d.firmware = 'mecon';
-    d.carriage = carriage;
-    d.interfaceVersion = h.interfaceVersion;
-    d.firmwareVersion = h.firmware;
-    d.hardware = h.hardware;
-    d.interfaceOps = h.capabilities;
-    d.deviceIdPresent = h.deviceIdPresent;
-    d.nodeKeyPresent = h.nodeKeyPresent;
-    d.capabilities = capsFromHello(h);
-    if (h.role) {
-      d.role = h.role;
-      d.roleSource = 'hello';
-    } else d.evidence.push(`hello reported a role this Reader does not know: ${h.roleRaw.slice(0, 20)}`);
-    d.evidence.push(`hello answered over ${carriage}: interface ${h.interfaceVersion}`);
-    return true;
-  };
+  const takeHello = (env: Envelope, carriage: 'console-line' | 'companion-frames'): boolean => applyHello(d, env, carriage);
 
   const binaryProbe = async (): Promise<boolean> => {
-    const ok = await ask('Companion device query (binary frames)', [encodeSerialFrame(encodeDeviceQuery())], (e) => {
-      if (e.kind !== 'frame') return null;
-      const f = decodeFrame(e.frame);
-      return f.kind === 'deviceInfo' || f.kind === 'error' ? true : null;
-    });
-    if (ok) {
-      d.companionBinary = true;
-      d.evidence.push('answered the Companion device query with Companion frames');
-      for (const c of COMPANION_BINARY_CAPS) if (!d.capabilities.includes(c)) d.capabilities.push(c);
-      if (!d.capabilities.includes('identity.read')) d.capabilities.push('identity.read');
-      if (d.role === 'unknown') {
-        d.role = 'companion';
-        d.roleSource = 'companion frames';
-      }
-    }
+    const ok = await ask('Companion device query (binary frames)', [encodeSerialFrame(encodeDeviceQuery())], (e) => (e.kind === 'frame' ? queryAnswer(e.frame) : null));
+    if (ok) applyBinary(d, ok);
     return !!ok;
   };
 
@@ -295,10 +335,100 @@ export async function detectDevice(raw: ByteTransport, opts: DetectOptions = {})
   return d;
 }
 
+export interface BleDetectOptions extends Pick<DetectOptions, 'stepTimeoutMs' | 'onStep'> {
+  /** Trust of the link, when the platform can tell. Default: unknown, because Web Bluetooth cannot read the PIN state. */
+  trust?: LinkTrust;
+}
+
+/**
+ * The same identification over a connected Companion frame link (BLE), without the console
+ * steps: BLE carries no console. Every write goes through the read-only frame guard. The
+ * transport must already be connected (`requestDevice` and `connect` done by the caller). The
+ * BLE device name is never read: role, firmware and capabilities come only from answers.
+ */
+export async function detectBleDevice(raw: CompanionTransport, opts: BleDetectOptions = {}): Promise<DetectedDevice> {
+  const timeout = opts.stepTimeoutMs ?? 3000;
+  const sent: string[] = [];
+  const link = guardFrames(raw, sent);
+  const frames: Uint8Array[] = [];
+  const waiters: Array<() => void> = [];
+  const reasm = new MeconReassembler();
+  let lost = false;
+  const poke = () => waiters.splice(0).forEach((w) => w());
+  const offFrame = link.onFrame((f) => {
+    frames.push(f);
+    poke();
+  });
+  const offDisc = link.onDisconnect(() => {
+    lost = true;
+    poke();
+  });
+  const d = newDetected('ble', sent);
+  d.trust = opts.trust ?? 'unknown';
+
+  async function ask<T>(label: string, unit: Uint8Array[], pick: (f: Uint8Array) => T | null): Promise<T | null> {
+    if (lost) return null;
+    opts.onStep?.(label);
+    const mark = frames.length;
+    try {
+      for (const u of unit) await link.write(u);
+    } catch (e) {
+      if (e instanceof BleError && e.code === 'bad_argument') throw e; // a guard refusal is a bug, never swallowed
+      d.evidence.push(`${label}: write failed (${e instanceof BleError ? e.code : 'error'})`);
+      return null;
+    }
+    const deadline = Date.now() + timeout;
+    let i = mark;
+    for (;;) {
+      for (; i < frames.length; i++) {
+        const r = pick(frames[i]!);
+        if (r !== null) return r;
+      }
+      if (lost) return null;
+      const left = deadline - Date.now();
+      if (left <= 0) return null;
+      await new Promise<void>((res) => {
+        const t = setTimeout(res, left);
+        waiters.push(() => {
+          clearTimeout(t);
+          res();
+        });
+      });
+    }
+  }
+
+  try {
+    const id = 'rd-ble-1';
+    const env = await ask('interface hello (Companion 0x7F frames over BLE)', encodeMeconFrames(1, buildRequest(id, 'hello')), (f): { env: Envelope } | { stock: true } | null => {
+      const text = reasm.push(f);
+      if (text === null) return decodeFrame(f).kind === 'error' ? { stock: true } : null; // a Companion error frame: it does not know 0x7F
+      try {
+        const e = JSON.parse(text) as Envelope;
+        return e && e.id === id ? { env: e } : null;
+      } catch {
+        return null;
+      }
+    });
+    if (env && 'env' in env) applyHello(d, env.env, 'companion-frames');
+    else if (env) d.evidence.push('hello over Companion frames was answered with a Companion error frame: no device interface');
+    else if (!lost) d.evidence.push('hello over Companion frames got no interface answer');
+    const q = await ask('Companion device query (binary frames over BLE)', [encodeDeviceQuery()], queryAnswer);
+    if (q) applyBinary(d, q);
+  } finally {
+    offFrame();
+    offDisc();
+  }
+  d.linkLost = lost;
+  if (lost) d.evidence.push('the link was lost during detection');
+  d.summary = summarize(d);
+  return d;
+}
+
 export function summarize(d: DetectedDevice): string {
   const caps = d.capabilities.length ? d.capabilities.join(', ') : 'none';
   if (d.firmware === 'mecon' && d.interfaceVersion) return `MECON firmware ${d.firmwareVersion ?? '(version not reported)'}, role ${d.role}, interface ${d.interfaceVersion}, capabilities: ${caps}`;
   if (d.firmware === 'mecon') return `MECON firmware ${d.firmwareVersion ?? ''} (device interface did not answer), role ${d.role}, capabilities: ${caps}`;
+  if (d.interfaceRefused) return `Untrusted link (default PIN or Hardened device): the MECON device interface refused hello, so firmware and role are not established; role ${d.role}, capabilities: ${caps}. Pair with the device's own PIN for full identification`;
   if (d.companionBinary || d.consoleCli) return `Not MECON firmware or older: unknown firmware, role ${d.role}, capabilities: ${caps}`;
   return 'Unknown device: nothing answered the read-only identification requests';
 }

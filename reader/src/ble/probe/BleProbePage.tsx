@@ -89,7 +89,7 @@ export default function BleProbePage() {
           <h1 id="probe-h">Bluetooth diagnostics</h1>
           <p>
             This page checks whether this browser can talk to a MeshCore Companion over Bluetooth. It only <strong>reads</strong>: it
-            connects, asks the Companion who it is, and disconnects.
+            connects, asks the Companion who it is (the MECON device-interface hello, then the Companion device query), and disconnects.
           </p>
           <p className="notice">
             Nothing is transmitted over radio. No message, advert or setting is sent or changed, and nothing is stored. You do not need to sign in.
@@ -103,6 +103,14 @@ export default function BleProbePage() {
               <StepRow key={s.id} s={s} />
             ))}
           </ol>
+          <h2>Detected device</h2>
+          <p className="state-body" data-testid="probe-detected">
+            {raw?.detected ? raw.detected.summary : 'Not identified yet.'}
+          </p>
+          <p className="state-body">
+            A browser cannot see the Bluetooth PIN, so this link counts as unknown trust: the probe sends read requests only, and a device
+            on a default PIN may refuse even the hello.
+          </p>
           <h2>Report</h2>
           <p className="state-body">
             The report holds no device name, node name, keys, location, Bluetooth id or PIN. Copy it and post it on the tracking Issue.

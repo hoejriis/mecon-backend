@@ -1,0 +1,21 @@
+{
+	admin off
+	auto_https off
+}
+
+import /etc/caddy/reader-headers.caddy
+
+:8080 {
+	root * /srv
+	import reader_headers
+
+	# Backend proxy, enabled once the Reader talks to a Backend. Set BACKEND_URL
+	# at run time (for example https://mecon.cloud).
+	# handle /api/* {
+	# 	reverse_proxy {$BACKEND_URL}
+	# }
+
+	encode zstd gzip
+	try_files {path} /index.html
+	file_server
+}

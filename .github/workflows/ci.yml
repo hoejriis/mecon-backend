@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  reader:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: reader
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: reader/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm run e2e
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: reader-e2e-screenshots
+          path: reader/e2e-artifacts/*.png
+          if-no-files-found: warn
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -f reader/Dockerfile --build-arg RENDER_GIT_COMMIT="${GITHUB_SHA}" -t mecon-reader:ci .
+      - name: Smoke test
+        run: |
+          docker run -d --name reader-smoke -p 8080:8080 mecon-reader:ci
+          for i in $(seq 1 20); do
+            curl -fsS -o /dev/null http://127.0.0.1:8080/ && break
+            sleep 1
+          done
+          code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/)
+          test "$code" = 200
+          curl -sI http://127.0.0.1:8080/ | tee headers.txt
+          grep -i "^content-security-policy:.*default-src 'self'" headers.txt
+          grep -i "^x-content-type-options: nosniff" headers.txt
+      - name: Container logs
+        if: failure()
+        run: docker logs reader-smoke

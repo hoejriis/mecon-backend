@@ -89,7 +89,8 @@ describe(`${S}: detection`, () => {
     expect(await r.session.connect()).toEqual({ ok: true, error: null });
     const d = r.session.getSnapshot().detected!;
     expect(d).toMatchObject({ firmware: 'unknown', interfaceRefused: true, companionBinary: true, role: 'companion', roleSource: 'companion frames', capabilities: expect.not.arrayContaining(['status.read']) });
-    expect(d.summary).toMatch(/refused hello \(link not trusted\)/);
+    expect(d.summary).toMatch(/^Untrusted link \(default PIN or Hardened device\)/);
+    expect(d.summary).toMatch(/Pair with the device.s own PIN/);
     expect(d.evidence.join(' ')).toMatch(/refused by the device \(untrusted-transport\)/);
     expect(r.session.can('status.read')).toBe(false);
   });

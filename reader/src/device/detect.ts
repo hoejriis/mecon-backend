@@ -428,7 +428,7 @@ export function summarize(d: DetectedDevice): string {
   const caps = d.capabilities.length ? d.capabilities.join(', ') : 'none';
   if (d.firmware === 'mecon' && d.interfaceVersion) return `MECON firmware ${d.firmwareVersion ?? '(version not reported)'}, role ${d.role}, interface ${d.interfaceVersion}, capabilities: ${caps}`;
   if (d.firmware === 'mecon') return `MECON firmware ${d.firmwareVersion ?? ''} (device interface did not answer), role ${d.role}, capabilities: ${caps}`;
-  if (d.interfaceRefused) return `MECON device interface refused hello (link not trusted): firmware and role not established; role ${d.role}, capabilities: ${caps}`;
+  if (d.interfaceRefused) return `Untrusted link (default PIN or Hardened device): the MECON device interface refused hello, so firmware and role are not established; role ${d.role}, capabilities: ${caps}. Pair with the device's own PIN for full identification`;
   if (d.companionBinary || d.consoleCli) return `Not MECON firmware or older: unknown firmware, role ${d.role}, capabilities: ${caps}`;
   return 'Unknown device: nothing answered the read-only identification requests';
 }

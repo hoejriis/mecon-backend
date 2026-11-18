@@ -152,3 +152,85 @@ test.describe('service worker (safe updates)', () => {
     await context.close();
   });
 });
+
+test.describe('signed out: Map and device code stay out of reach', () => {
+  // Chunk names are hashed (name-HASH.js); match on the stem.
+  const DEVICE_CHUNK = /\/assets\/(BleProbePage|UsbProbePage|detect|detectReport|factory|webBluetoothTransport|webSerialTransport)-[^/]*\.js/;
+
+  test('device lazy chunks are not loaded on the signed-out shell or the signed-out /map', async ({ page, request }) => {
+    test.skip(!(await apiRouted(request)), NOT_ROUTED);
+    const loaded: string[] = [];
+    page.on('request', (r) => {
+      const m = DEVICE_CHUNK.exec(new URL(r.url()).pathname);
+      if (m) loaded.push(m[1]!);
+    });
+    for (const path of ['/', '/map', '/chats']) {
+      await page.goto(path);
+      await expect(page.getByLabel('Email address')).toBeVisible();
+    }
+    expect(loaded, 'device chunks requested while signed out').toEqual([]);
+  });
+
+  test('the entry chunk has no Web Serial port request either', async ({ request }) => {
+    const html = await (await request.get('/')).text();
+    const entry = /<script[^>]+type="module"[^>]+src="(\/assets\/[^"]+\.js)"/.exec(html)?.[1];
+    expect(entry, 'entry script in index.html').toBeTruthy();
+    const js = await (await request.get(entry!)).text();
+    expect(js.includes('requestPort')).toBe(false);
+  });
+
+  test('signed-out /map shows no Map, no tab navigation and makes no observation request', async ({ page, request }) => {
+    test.skip(!(await apiRouted(request)), `${NOT_ROUTED}; the shell shows a Backend-unreachable state, not the login screen`);
+    const observationCalls: string[] = [];
+    page.on('request', (r) => {
+      if (new URL(r.url()).pathname.startsWith('/api/observations/')) observationCalls.push(r.url());
+    });
+    await page.goto('/map');
+    // Not reachable signed out: the login form is all there is.
+    await expect(page.getByLabel('Email address')).toBeVisible();
+    await expect(page.getByRole('navigation', { name: 'Main' })).toHaveCount(0);
+    await expect(page.locator('svg.obs-map')).toHaveCount(0);
+    await expect(page.locator('.obs-row')).toHaveCount(0);
+    expect(observationCalls).toEqual([]);
+  });
+});
+
+test.describe('service worker registration', () => {
+  test('the worker registers at scope / from /sw.js and reaches the activated state', async ({ browser, request }) => {
+    test.skip((await request.get('/sw.js')).status() !== 200, 'host serves a build without a service worker');
+    const context = await browser.newContext({ serviceWorkers: 'allow' });
+    const page = await context.newPage();
+    await page.goto('/');
+    const read = () =>
+      page.evaluate(async () => {
+        const r = await navigator.serviceWorker.ready;
+        return { scope: new URL(r.scope).pathname, script: new URL(r.active?.scriptURL ?? 'about:blank').pathname, state: r.active?.state ?? null };
+      });
+    // `ready` resolves while the worker may still be activating: wait for the final state.
+    await expect.poll(async () => (await read()).state).toBe('activated');
+    expect(await read()).toEqual({ scope: '/', script: '/sw.js', state: 'activated' });
+    await context.close();
+  });
+});
+
+test.describe('probes stay reachable without sign-in', () => {
+  test('/probe/usb renders its read-only page, with no CSP violation', async ({ page }) => {
+    const violations: string[] = [];
+    page.on('console', (m) => {
+      if (m.text().includes('Content Security Policy')) violations.push(m.text());
+    });
+    await page.goto('/probe/usb');
+    await expect(page.getByRole('heading', { level: 1, name: 'USB diagnostics' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Connect and run probe' })).toBeVisible();
+    await expect(page.getByLabel('Email address')).toHaveCount(0);
+    expect(violations).toEqual([]);
+  });
+
+  test('/probe/ble and /probe/usb answer 200 as the HTML shell', async ({ request }) => {
+    for (const p of ['/probe/ble', '/probe/usb']) {
+      const res = await request.get(p);
+      expect(res.status(), p).toBe(200);
+      expect(res.headers()['content-type'], p).toContain('text/html');
+    }
+  });
+});

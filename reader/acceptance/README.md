@@ -25,8 +25,8 @@ Without the two session variables the signed-in suite (`authenticated.spec.ts`) 
 
 ## What runs
 
-- `public.spec.ts`: read-only GETs and page loads, no sign-in. Checks that depend on the Reader API are skipped with the note "API not routed yet" while `/api/reader/v1/health` still answers 404.
-- `authenticated.spec.ts`: Settings, device isolation between A and B, and logout. Logout ends session A, so mint a fresh one for each run. The suite sends no message; send journeys are manual rows in the matrix.
+- `public.spec.ts`: read-only GETs and page loads, no sign-in, including the service worker, the signed-out Map and device-chunk boundaries, and the probes. Checks that depend on the Reader API are skipped with the note "API not routed yet" while `/api/reader/v1/health` still answers 404.
+- `authenticated.spec.ts`: Settings, device isolation between A and B, Chats lists, mark-read (the only write: the test user's own read mark), the send path with no device connected, Map capability gating, and logout. Logout ends session A, so mint a fresh one for each run. The suite sends no message; send journeys are manual rows in the matrix.
 
 ## No secrets in output
 

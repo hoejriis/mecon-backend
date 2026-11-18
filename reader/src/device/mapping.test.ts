@@ -3,7 +3,7 @@ import { MockCompanion, MockTransport, type MockCompanionOptions } from '../ble/
 import type { BackendDest, DestinationToken } from './destinations';
 import { TARGET_ID, authFor, companionRig, repeaterRig, wait } from './rig.test-util';
 import { DeviceSession } from './session';
-import { COLLISION_CONTACTS, DEFAULT_CHANNELS, DUPLICATE_NAME_CHANNELS } from './sim/lists';
+import { COLLISION_CONTACTS, DEFAULT_CHANNELS, DUPLICATE_HASH_CHANNELS, DUPLICATE_NAME_CHANNELS } from './sim/lists';
 
 const S = 'SIMULATED — not hardware verified: Backend target to device destination at the session';
 const sessions: DeviceSession[] = [];
@@ -194,6 +194,21 @@ describe(`${S}: the send re-verifies the mapping, so an API caller cannot pass a
     expect(r.session.getSnapshot().deviceChannels).toMatchObject({ status: 'ready' });
     const before = r.mock.writes.length;
     await expect(r.session.sendChannel(channel('rekeyed', { mapping: tok }))).rejects.toMatchObject({ code: 'unmapped_destination', message: expect.stringContaining('no longer matches') });
+    untouched(r.mock, before);
+  });
+
+  it('two device channels on one hash: no token is issued, and none can be minted for a send', async () => {
+    const r = await usb({ channels: DUPLICATE_HASH_CHANNELS });
+    expect(r.session.mapDestination(channelDest('Crew', { hash: '5f' }))).toMatchObject({ ok: false, code: 'channel_hash_duplicate' });
+  });
+
+  it('a second device channel on the token’s hash appears after the token was issued: the write is refused', async () => {
+    const r = await usb({ channels: DEFAULT_CHANNELS });
+    const tok = tokenOf(r.session, channelDest('Crew', { hash: '5f' }));
+    r.mock.lists()!.channels.push({ slot: 5, name: 'Crew copy', hash: '5f' });
+    await r.session.refreshChannels();
+    const before = r.mock.writes.length;
+    await expect(r.session.sendChannel(channel('dup', { mapping: tok }))).rejects.toMatchObject({ code: 'unmapped_destination' });
     untouched(r.mock, before);
   });
 

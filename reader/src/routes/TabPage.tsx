@@ -5,6 +5,7 @@ import type { CapabilityState, Device } from '../api/types';
 import { BUILD_COMMIT } from '../buildInfo';
 import type { TabDef } from '../tabs';
 import { OfflineSettings } from '../offline/OfflineSettings';
+import { MapView } from '../map/MapView';
 import { Empty, ErrorState, Forbidden, Loading, Offline, Unavailable, useOnline } from '../components/States';
 
 function CapState({ state }: { state: Exclude<CapabilityState, 'available'> }) {
@@ -101,6 +102,16 @@ export function TabPage({ tab }: { tab: TabDef }) {
       />
     );
   } else body = <Empty title={tab.emptyTitle} body={tab.emptyBody} />;
+
+  // The Map is one column: the pins and the list must both show on a phone, where the detail pane is hidden.
+  if (tab.id === 'map' && state === 'available' && online) {
+    return (
+      <section className="pane map-page" aria-labelledby="h-map">
+        <h1 id="h-map">{tab.listTitle}</h1>
+        <MapView />
+      </section>
+    );
+  }
 
   return (
     <section className="split" aria-labelledby={`h-${tab.id}`}>

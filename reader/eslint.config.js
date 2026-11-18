@@ -4,7 +4,7 @@ import reactHooks from 'eslint-plugin-react-hooks';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  { ignores: ['dist', 'e2e-artifacts', 'node_modules', 'playwright-report', 'test-results', 'src/api/schema.gen.ts'] },
+  { ignores: ['dist', 'e2e-artifacts', 'node_modules', 'playwright-report', 'test-results', 'src/api/schema.gen.ts', 'src/api/observations.gen.ts'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   { files: ['src/sw/sw.js'], languageOptions: { sourceType: 'script', globals: { ...globals.serviceworker } } },

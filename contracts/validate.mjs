@@ -7,7 +7,13 @@ import { parse } from 'yaml';
 import Ajv2020 from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
 
-const docs = ['reader-api/v1/openapi.yaml'];
+const docs = ['reader-api/v1/openapi.yaml', 'observations/v1/openapi.yaml'];
+// Privacy: no observation fixture or schema may carry these fields (see the contract's description).
+const FORBIDDEN_KEY = /route|path|hop|relay|hash|payload|content|text|transmitter|sender|raw|bytes/i;
+const forbiddenKeys = (v, trail = '') =>
+  v && typeof v === 'object'
+    ? Object.entries(v).flatMap(([k, c]) => (FORBIDDEN_KEY.test(k) ? [trail + k] : []).concat(forbiddenKeys(c, `${trail}${k}.`)))
+    : [];
 let failures = 0;
 let checked = 0;
 
@@ -65,6 +71,24 @@ for (const docPath of docs) {
     } else {
       console.log('ok   lease payload decoded from fixtures/lease-issued.json');
     }
+  }
+  if (docPath.startsWith('observations/')) {
+    const schemaKeys = forbiddenKeys(
+      Object.fromEntries(Object.entries(doc.components.schemas).map(([k, v]) => [k, v.properties ?? {}])),
+    );
+    if (schemaKeys.length) {
+      failures++;
+      console.error('FAIL observation schema has forbidden fields:', schemaKeys.join(', '));
+    }
+    for (const f of readdirSync(join(base, 'fixtures')).filter((f) => f.endsWith('.json'))) {
+      const bad = forbiddenKeys(JSON.parse(readFileSync(join(base, 'fixtures', f), 'utf8')));
+      if (bad.length) {
+        failures++;
+        console.error(`FAIL ${f} has forbidden fields: ${bad.join(', ')}`);
+      }
+    }
+    checked++;
+    console.log('ok   observation schemas and fixtures carry no route/content/hash/transmitter fields');
   }
   const fixturesDir = join(base, 'fixtures');
   for (const f of readdirSync(fixturesDir).filter((f) => f.endsWith('.json'))) {

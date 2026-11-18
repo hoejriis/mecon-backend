@@ -1,4 +1,5 @@
 import type { components } from './schema.gen';
+import type { components as obs } from './observations.gen';
 
 type S = components['schemas'];
 export type Session = S['Session'];
@@ -30,3 +31,12 @@ export type LeaseOperation = S['LeaseOperation'];
 export type LeaseIssued = S['LeaseIssued'];
 export type LeaseKey = S['LeaseKey'];
 export type LeaseKeyList = S['LeaseKeyList'];
+
+// Live observation API (authorized projection), contracts/observations/v1.
+export type Observer = obs['schemas']['Observer'];
+export type ObserverList = obs['schemas']['ObserverList'];
+export type ObserverLocation = obs['schemas']['Location'];
+export type ObserverFreshness = obs['schemas']['Freshness'];
+export type Reception = obs['schemas']['Reception'];
+export type ObservationSnapshot = obs['schemas']['Snapshot'];
+export type ObservationEvent = obs['schemas']['ObservationEvent'];

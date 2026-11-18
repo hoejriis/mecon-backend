@@ -85,3 +85,56 @@ describe('checkStaleShell', () => {
     expect(t.reload).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('checkStaleShell reconciled with the update guards', () => {
+  const blocked = { drafts: 1, uncertainAttempts: 0, bleConnected: false };
+  const clear = { drafts: 0, uncertainAttempts: 0, bleConnected: false };
+
+  it('drafts present before the check: no repair, no reload, banner notified, attempt not consumed', async () => {
+    const t = setup({ commit: B }, A);
+    const onBlocked = vi.fn();
+    expect(await checkStaleShell({ ...t.deps, getBlockers: () => blocked, onBlocked })).toBe('needs-confirmation');
+    expect(onBlocked).toHaveBeenCalledWith(blocked);
+    expect(t.reload).not.toHaveBeenCalled();
+    expect(t.registration.unregister).not.toHaveBeenCalled();
+    expect(t.deleted).toEqual([]);
+    expect(t.store.get(REPAIR_KEY)).toBeUndefined();
+  });
+
+  it.each([
+    ['uncertain attempts', { ...clear, uncertainAttempts: 2 }],
+    ['a BLE connection', { ...clear, bleConnected: true }],
+  ])('%s block the repair too', async (_n, b) => {
+    const t = setup({ commit: B }, A);
+    expect(await checkStaleShell({ ...t.deps, getBlockers: () => b })).toBe('needs-confirmation');
+    expect(t.reload).not.toHaveBeenCalled();
+    expect(t.deleted).toEqual([]);
+  });
+
+  it('a draft typed during the 3 s wait stops the repair before it unregisters or reloads', async () => {
+    const t = setup({ commit: B }, A);
+    let b = clear;
+    const deps = { ...t.deps, getBlockers: () => b, wait: async () => void (b = blocked) };
+    expect(await checkStaleShell(deps)).toBe('needs-confirmation');
+    expect(t.registration.update).toHaveBeenCalled();
+    expect(t.registration.unregister).not.toHaveBeenCalled();
+    expect(t.deleted).toEqual([]);
+    expect(t.reload).not.toHaveBeenCalled();
+  });
+
+  it('nothing to lose: the repair still happens by itself', async () => {
+    const t = setup({ commit: B }, A);
+    expect(await checkStaleShell({ ...t.deps, getBlockers: () => clear })).toBe('repaired');
+    expect(t.reload).toHaveBeenCalledTimes(1);
+    expect(t.deleted).toEqual(['c1', 'c2']);
+  });
+
+  it('a downloaded waiting version is activated the normal way, keeping the caches', async () => {
+    const t = setup({ commit: B }, A);
+    const activateWaiting = vi.fn(() => true);
+    expect(await checkStaleShell({ ...t.deps, getBlockers: () => clear, activateWaiting })).toBe('activated-waiting');
+    expect(t.registration.unregister).not.toHaveBeenCalled();
+    expect(t.deleted).toEqual([]);
+    expect(t.reload).not.toHaveBeenCalled();
+  });
+});

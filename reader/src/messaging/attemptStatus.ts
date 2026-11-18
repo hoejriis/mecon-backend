@@ -161,3 +161,19 @@ export function describeAttempt(a: LocalAttempt, targetKind: 'contact' | 'channe
           };
   }
 }
+
+/**
+ * An attempt whose outcome a reload would leave the user unable to follow:
+ * still in flight, or ended without a known outcome (ambiguous, unknown or
+ * timed out). A superseded attempt was already replaced by a new user action.
+ * Such attempts keep their server-side identity; the Reader never resends them.
+ */
+export function isUncertainAttempt(a: LocalAttempt): boolean {
+  if (a.supersededBy) return false;
+  if (a.phase === 'posting' || a.phase === 'ambiguous') return true;
+  if (a.phase === 'rejected') return false;
+  const s = a.attempt;
+  if (!s) return true;
+  if (s.status === 'unknown' || s.status === 'timed_out') return s.status_evidence.source !== 'unsupported';
+  return !describeAttempt(a, a.request.target.kind).terminal;
+}

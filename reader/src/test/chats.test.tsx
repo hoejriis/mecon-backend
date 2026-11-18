@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { App } from '../App';
 import { AuthProvider } from '../auth/AuthContext';
 import type { SendRequest } from '../api/types';
+import { collectBlockers } from '../update/guards';
 import { createBackend, fx, json, sessionWith, type Backend } from './backend';
 import {
   attemptFor,
@@ -406,5 +407,48 @@ describe('send safety in the UI', () => {
     expect(JSON.stringify({ ...localStorage })).not.toMatch(/secret words/);
     expect(JSON.stringify({ ...sessionStorage })).not.toMatch(/secret words/);
     await waitFor(() => expect(screen.getByLabelText('Message')).toHaveValue('secret words'));
+  });
+});
+
+describe('update guards from the messaging state', () => {
+  it('counts a non-empty draft, then an in-flight attempt, and counts nothing for a blank draft', async () => {
+    routes();
+    b.on('POST /send-attempts', (() => new Response(JSON.stringify(attemptFor(b.calls.at(-1)!.body, 'queued')), { status: 201 })));
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    await openDm(user);
+    expect(collectBlockers()).toMatchObject({ drafts: 0, uncertainAttempts: 0 });
+    await user.type(screen.getByLabelText('Message'), '   ');
+    expect(collectBlockers().drafts).toBe(0);
+    await user.clear(screen.getByLabelText('Message'));
+    await user.type(screen.getByLabelText('Message'), 'unsent words');
+    expect(collectBlockers().drafts).toBe(1);
+    await user.click(screen.getByRole('button', { name: 'Send' }));
+    await screen.findByText('Queued');
+    // the draft was consumed by the send; the queued attempt has no final outcome
+    expect(collectBlockers()).toMatchObject({ drafts: 0, uncertainAttempts: 1 });
+  });
+
+  it('counts an ambiguous (unknown) attempt', async () => {
+    routes();
+    b.on('POST /send-attempts', (() => {
+      throw new TypeError('Failed to fetch');
+    }));
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    await openDm(user);
+    await user.type(screen.getByLabelText('Message'), 'maybe sent');
+    await user.click(screen.getByRole('button', { name: 'Send' }));
+    await screen.findByText('Outcome unknown — not resent');
+    expect(collectBlockers().uncertainAttempts).toBe(1);
+  });
+
+  it('removes its guard when the messaging view unmounts', async () => {
+    routes();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const r = mount();
+    await user.click(await screen.findByRole('link', { name: /Demo Peer \(merged pair\)/ }));
+    await user.type(await screen.findByLabelText('Message'), 'gone soon');
+    expect(collectBlockers().drafts).toBe(1);
+    r.unmount();
+    expect(collectBlockers().drafts).toBe(0);
   });
 });

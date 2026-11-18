@@ -143,7 +143,10 @@ describe('rehydration after a reload', () => {
     expect(text('rejected')).toBe('Not sent');
     expect(text('queued')).toBe('Queued');
     expect(text('unknown')).toBe('Outcome unknown — not resent');
-    expect(live.attemptsFor(TARGET).map((a) => a.clientAttemptId).sort()).toEqual(records.map((r) => r.clientAttemptId).sort());
+    // The probe's captured context can lag the DOM by a render on a slow runner: wait for it too.
+    await waitFor(() =>
+      expect(live.attemptsFor(TARGET).map((a) => a.clientAttemptId).sort()).toEqual(records.map((r) => r.clientAttemptId).sort()),
+    );
     expect(live.attemptsFor(TARGET).find((a) => a.clientAttemptId === `${A}posting`)!.request).toEqual(records[0]!.request);
     await act(async () => new Promise((r) => setTimeout(r, 150)));
     expect(posts()).toHaveLength(0);

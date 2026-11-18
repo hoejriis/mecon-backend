@@ -21,7 +21,10 @@ import { TABS } from './tabs';
 // production build drops this import and the whole BLE module graph with it.
 // Read-only BLE probe (/probe/ble): its own lazy chunk, so the main bundle stays BLE-free.
 const BleProbePage = lazy(() => import('./ble/probe/BleProbePage'));
+// Read-only USB probe (/probe/usb): its own lazy chunk; Web Serial code stays out of the main bundle.
+const UsbProbePage = lazy(() => import('./device/probe/UsbProbePage'));
 
+const UsbDevPage = import.meta.env.DEV ? lazy(() => import('./device/UsbDevPage')) : null;
 const BleDevPage = import.meta.env.DEV ? lazy(() => import('./ble/BleDevPage')) : null;
 
 export function Shell() {
@@ -41,6 +44,16 @@ export function Shell() {
               element={
                 <Suspense fallback={null}>
                   <BleDevPage />
+                </Suspense>
+              }
+            />
+          )}
+          {UsbDevPage && (
+            <Route
+              path="/dev/usb"
+              element={
+                <Suspense fallback={null}>
+                  <UsbDevPage />
                 </Suspense>
               }
             />
@@ -81,6 +94,14 @@ export function App() {
         element={
           <Suspense fallback={<Loading />}>
             <BleProbePage />
+          </Suspense>
+        }
+      />
+      <Route
+        path="/probe/usb"
+        element={
+          <Suspense fallback={<Loading />}>
+            <UsbProbePage />
           </Suspense>
         }
       />

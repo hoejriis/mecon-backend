@@ -17,13 +17,19 @@ import {
   type IncomingDirectMessage,
   type SelfInfo,
 } from './protocol';
-import { BleError, type BleDeviceInfo, type BleErrorCode, type BleTransport } from './transport';
+import { BleError, type BleDeviceInfo, type BleErrorCode, type CompanionTransport, type DisconnectReason, type TransportKind } from './transport';
 
 /**
- * Truthful BLE state for the Reader. Every fact below is its own observation and
+ * Truthful Companion state for the Reader, over BLE or USB (the transport's
+ * `kind`; every attempt records it as `path`). The adapter is transport-neutral:
+ * the same facts and the same send-safety rules apply on both, and an attempt is
+ * never moved from one transport to the other or to the Backend. (The names
+ * `BleAdapter`, `bleConnection` and `BleSnapshot` predate USB and are kept so
+ * existing code and tests do not change.)
+ * Every fact below is its own observation and
  * is NEVER inferred from another one:
  *
- *  - bleConnection:  what the GATT link is doing right now.
+ *  - bleConnection:  what the link (GATT or serial port) is doing right now.
  *  - deviceAccepted: the Companion answered the command with an accepting frame.
  *                    It is not evidence that anything went out over the radio.
  *  - rfTransmitted:  evidence the radio transmitted. The protocol subset used here
@@ -46,11 +52,20 @@ import { BleError, type BleDeviceInfo, type BleErrorCode, type BleTransport } fr
  * Nothing is persisted by this module: no storage API is used and no key material
  * is held (public keys of contacts only, in memory).
  */
-export type BleConnection = 'unsupported' | 'idle' | 'requesting' | 'connected' | 'disconnected' | 'denied';
+/**
+ * Link states. `busy` and `unplugged` occur on USB only: `busy` is a chosen port
+ * that is already open elsewhere; `unplugged` is the browser's `disconnect`
+ * event for the port (cable pulled, board reset, or permission revoked: the
+ * browser does not say which).
+ */
+export type LinkState = 'unsupported' | 'idle' | 'requesting' | 'connected' | 'disconnected' | 'denied' | 'busy' | 'unplugged';
+export type BleConnection = LinkState;
 
 export interface AttemptFacts {
   clientDraftId: string;
   clientAttemptId: string;
+  /** The transport this attempt was (or would have been) written to. Never changes. */
+  path: TransportKind;
   kind: 'direct' | 'channel';
   /** Hex key prefix (direct) or channel index as text (channel). */
   target: string;
@@ -74,7 +89,9 @@ export type InboxMessage =
   | { kind: 'channel'; message: IncomingChannelMessage };
 
 export interface BleSnapshot {
-  bleConnection: BleConnection;
+  /** Which transport this adapter drives. */
+  transportKind: TransportKind;
+  bleConnection: LinkState;
   device: BleDeviceInfo | null;
   /** True once hello (app start, device query, contacts) completed on this link. */
   helloComplete: boolean;
@@ -95,7 +112,7 @@ export interface BackendSendPort {
 }
 
 export interface BleAdapterOptions {
-  transport: BleTransport;
+  transport: CompanionTransport;
   responseTimeoutMs?: number;
   connectTimeoutMs?: number;
   nowSec?: () => number;
@@ -114,7 +131,7 @@ interface Inflight {
 }
 
 export class BleAdapter {
-  private readonly transport: BleTransport;
+  private readonly transport: CompanionTransport;
   private readonly responseTimeoutMs: number;
   private readonly connectTimeoutMs: number;
   private readonly nowSec: () => number;
@@ -140,6 +157,7 @@ export class BleAdapter {
     this.nowSec = opts.nowSec ?? (() => Math.floor(Date.now() / 1000));
     this.backendPath = opts.backendPath;
     this.snap = {
+      transportKind: this.transport.kind,
       bleConnection: this.transport.support === 'supported' ? 'idle' : 'unsupported',
       device: null,
       helloComplete: false,
@@ -151,7 +169,7 @@ export class BleAdapter {
       attempts: [],
     };
     this.offs.push(this.transport.onFrame((b) => this.handleBytes(b)));
-    this.offs.push(this.transport.onDisconnect(() => this.handleDisconnect()));
+    this.offs.push(this.transport.onDisconnect((reason) => this.handleDisconnect(reason)));
   }
 
   // -- store ---------------------------------------------------------------
@@ -214,7 +232,7 @@ export class BleAdapter {
       device = await chooser;
     } catch (e) {
       const code = e instanceof BleError ? e.code : 'connect_failed';
-      const next: BleConnection = code === 'permission_denied' || code === 'gesture_required' ? 'denied' : code === 'unsupported' ? 'unsupported' : 'idle';
+      const next: LinkState = code === 'permission_denied' || code === 'gesture_required' ? 'denied' : code === 'unsupported' ? 'unsupported' : 'idle';
       this.set({ bleConnection: next, lastError: code });
       return { ok: false, error: code };
     }
@@ -238,7 +256,7 @@ export class BleAdapter {
     } catch (e) {
       void this.transport.disconnect();
       const code = e instanceof BleError ? e.code : 'connect_failed';
-      this.set({ bleConnection: 'disconnected', lastError: code });
+      this.set({ bleConnection: code === 'port_busy' ? 'busy' : 'disconnected', lastError: code });
       return { ok: false, error: code };
     }
     if (epoch !== this.linkEpoch) return { ok: false, error: 'disconnected' };
@@ -262,10 +280,10 @@ export class BleAdapter {
     await this.transport.disconnect();
   }
 
-  private handleDisconnect(): void {
+  private handleDisconnect(reason?: DisconnectReason): void {
     this.linkEpoch++;
     const wasLive = this.snap.bleConnection === 'connected' || this.snap.bleConnection === 'requesting';
-    if (wasLive) this.set({ bleConnection: 'disconnected', helloComplete: false });
+    if (wasLive) this.set({ bleConnection: reason === 'port_lost' ? 'unplugged' : 'disconnected', helloComplete: false });
     const f = this.inflight;
     this.inflight = null;
     f?.fail(new BleError('disconnected'));
@@ -398,7 +416,8 @@ export class BleAdapter {
     const err = await this.exchange(encodeGetContacts(), (f) => {
       if (f.kind === 'contactsStart') return 'more';
       if (f.kind === 'contact') {
-        found.push(f.contact);
+        // A duplicated notification must not list a contact twice.
+        if (!found.some((c) => c.publicKey === f.contact.publicKey)) found.push(f.contact);
         return 'more';
       }
       if (f.kind === 'endOfContacts') return 'done';
@@ -493,6 +512,7 @@ export class BleAdapter {
     const a: AttemptFacts = {
       clientDraftId: ids.clientDraftId,
       clientAttemptId: ids.clientAttemptId,
+      path: this.transport.kind,
       kind,
       target,
       writeIssued: false,
@@ -573,6 +593,10 @@ export class BleAdapter {
     return this.backendPath;
   }
 }
+
+/** Transport-neutral names for the BLE-era exports. */
+export { BleAdapter as CompanionAdapter };
+export type { BleSnapshot as CompanionSnapshot, BleAdapterOptions as CompanionAdapterOptions };
 
 export function newId(prefix: string): string {
   const c = (globalThis as { crypto?: Crypto }).crypto;

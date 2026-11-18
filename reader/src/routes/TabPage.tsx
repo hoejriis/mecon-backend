@@ -70,6 +70,9 @@ function SettingsBody() {
       <p>
         <Link to="/probe/ble">Bluetooth diagnostics</Link>
       </p>
+      <p>
+        <Link to="/probe/usb">USB diagnostics</Link>
+      </p>
       <p className="state-body build-stamp">
         Build: {BUILD_COMMIT ? BUILD_COMMIT.slice(0, 12) : 'local'}
       </p>

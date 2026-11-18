@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: MECON Reader API
-  version: 1.0.0-draft.7
+  version: 1.0.0-draft.8
   summary: Interface between the MECON Reader and an authorized MECON Backend.
   description: |
     Machine-readable form of docs/READER_API_CONTRACT.md. Target specification,
@@ -349,6 +349,9 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ChannelList' }
+              examples:
+                withHash: { externalValue: fixtures/channels-list.json }
+                hashUnknown: { externalValue: fixtures/channels-list-no-hash.json }
         '401': { $ref: '#/components/responses/Unauthenticated' }
 
   /send-attempts:
@@ -747,6 +750,10 @@ components:
             items: { type: array, items: { $ref: '#/components/schemas/Identity' } }
 
     Target:
+      description: |
+        What a send or a conversation is addressed to. For `kind: contact`,
+        `id` is the `Contact.id` of the peer (the same opaque id `GET
+        /contacts` lists). For `kind: channel`, `id` is the `Channel.id`.
       type: object
       required: [kind, id]
       properties:
@@ -768,6 +775,9 @@ components:
         `unread_count` counts every row of the conversation newer than the
         caller's read mark; the mark belongs to the caller's own side of the
         conversation, so marking one conversation read never changes another.
+
+        `target.id` of a contact conversation equals the `Contact.id` of the
+        peer; of a channel conversation, the `Channel.id`.
       type: object
       required: [id, identity_id, target, title, unread_count, last_activity_at]
       properties:
@@ -853,6 +863,18 @@ components:
         name: { type: string }
         visibility: { type: string, enum: [public, private] }
         favourite: { type: boolean }
+        hash:
+          type: [string, 'null']
+          pattern: '^[0-9a-f]{2}$'
+          description: |
+            The one-byte channel hash: the same value a device's `channel.list`
+            reports for the same channel (the first byte of the SHA-256 of the
+            channel key, as two lowercase hex digits). Non-secret: one byte
+            reveals nothing usable about the key. A client may compare it with
+            the hash a device reports as a cross-check that the device holds
+            the same channel; it is not an identifier (channels can collide on
+            it). `null`, or absent, when the Backend does not know it; a
+            client then has no hash to compare.
     ChannelList:
       allOf:
         - $ref: '#/components/schemas/ListMeta'

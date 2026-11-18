@@ -61,8 +61,8 @@ export function mapDirect(s: DeviceSession, prefix = 'a1a1a1', pick?: string): D
 }
 
 /** A destination token for a channel (own, uniquely named) by its name on the device. */
-export function mapChannel(s: DeviceSession, name = 'Crew'): DestinationToken {
-  const m = s.mapDestination({ kind: 'channel', targetId: TARGET_ID, name, ownLinked: true, sameNameCount: 1 });
+export function mapChannel(s: DeviceSession, name = 'Crew', hash: string | null = null): DestinationToken {
+  const m = s.mapDestination({ kind: 'channel', targetId: TARGET_ID, name, ownLinked: true, sameNameCount: 1, hash });
   if (!m.ok) throw new Error(`test setup: ${m.reason}`);
   return m.token;
 }

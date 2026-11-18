@@ -61,6 +61,16 @@ describe('contacts and channels for matching a target on a device offline', () =
     expect(JSON.stringify(await store.keys(''))).not.toContain('a1a1a1');
   });
 
+  it('a channel hash is cached with the channel (and a null one stays null), so the cross-check works offline', async () => {
+    const { cache, store, keys } = await open();
+    const withHash: Channel = { ...channel('ch_1', 'Crew'), hash: '5f' };
+    const unknown: Channel = { ...channel('ch_2', 'Ops'), hash: null };
+    await reconcile(cache, snap({ channels: [withHash, unknown] }));
+    const again = await OfflineCache.open(store, keys);
+    if (!again.ok) throw new Error('q');
+    expect((await again.cache.getDirectory()).channels).toEqual([withHash, unknown]);
+  });
+
   it('a list that did not load leaves the cached one alone (a failed load never empties it); a list that loaded replaces it', async () => {
     const { cache } = await open();
     await reconcile(cache, snap({ contacts: [contact('ct_1', 'a1a1a1')], channels: [channel('ch_1', 'Crew')] }));

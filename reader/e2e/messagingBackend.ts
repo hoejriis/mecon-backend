@@ -34,7 +34,7 @@ const page = (items: unknown[], next: string | null = null) => ({ items, next_cu
  */
 export async function mockMessagingBackend(
   page_: Page,
-  opts: { identityPrefix?: string; channelName?: string; contactPrefix?: string } = {},
+  opts: { identityPrefix?: string; channelName?: string; channelHash?: string | null; contactPrefix?: string } = {},
 ): Promise<MsgBackend> {
   const session = fixture('session-device-user');
   session.capabilities = { devices: 'available', messaging: 'available', send: 'available', events: 'available', observations: 'unavailable' };
@@ -61,7 +61,7 @@ export async function mockMessagingBackend(
       content: { kind: 'text', text: 'Hello from the peer' }, attempt_id: null,
     },
   ];
-  const channels = [{ id: 'chan_demo_0001', name: opts.channelName ?? 'Demo Channel', visibility: 'public' }];
+  const channels = [{ id: 'chan_demo_0001', name: opts.channelName ?? 'Demo Channel', visibility: 'public', ...(opts.channelHash === undefined ? {} : { hash: opts.channelHash }) }];
   // The DM peer of the demo conversation is Alice on the synthetic device (key prefix a1a1a1).
   const contacts = [{ id: 'contact_demo_0001', display_name: 'Demo Peer', public_key_prefix: opts.contactPrefix ?? 'a1a1a1', kind: 'companion', last_heard_at: '2030-01-15T09:58:00Z' }];
 

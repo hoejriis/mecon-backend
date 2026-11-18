@@ -1,0 +1,52 @@
+# MECON USB Connector: example configuration. Every value is a placeholder.
+# Validate with:  python -m mecon_connector --check-config --config config.toml
+
+[device]
+# "companion": the Companion's framed USB serial. "console": a Repeater or Room server console.
+# Never auto-detected: detecting the role would mean reading the device's payloads.
+mode = "companion"
+baud = 115200
+# A stable id, not a /dev/ttyUSB0 path. List what the host sees with:  python -m mecon_connector --list-ports
+select = { by_id = "usb-REPLACE_WITH_YOUR_DEVICE_ID-*" }
+# select = { vid = 0x303A, pid = 0x1001, usb_serial = "REPLACE" }
+
+[mqtt]
+# The broker login's client id. Required; never generated.
+client_id = "example-connector-1"
+# The topic root provisioned for this device by whoever runs the broker and Backend.
+# Provisional: the Backend owns the real mapping (see contracts/connector/v1).
+topic_root = "example/device-root"
+upstream_qos = 1
+
+# The first broker is the primary; the rest are fallbacks, tried in order. One session at a time.
+[[mqtt.brokers]]
+name = "primary"
+host = "broker.example.invalid"
+port = 8883
+tls = true
+ca_file = "/etc/mecon-connector/ca.pem"
+username = "example-connector-1"
+password_file = "/etc/mecon-connector/broker-password"   # a file, mode 600; the value is never in this config
+
+# [[mqtt.brokers]]
+# name = "lan"
+# host = "broker.lan.example.invalid"
+# tls = true
+# ca_file = "/etc/mecon-connector/lan-ca.pem"
+
+[downlink]
+# Forwarding broker messages to the device makes the broker's publishers act as the device's local
+# cable caller. Set true only for an enrolled device whose broker ACL lets only the Backend publish.
+enabled = false
+
+[queues]
+upstream_max_messages = 64
+upstream_max_bytes = 262144
+upstream_ttl_s = 60
+downlink_max_messages = 8
+downlink_ttl_s = 5
+
+[health]
+enabled = true
+bind = "127.0.0.1"
+port = 9464

@@ -5,7 +5,7 @@
   "license": "Apache-2.0",
   "scripts": {
     "lint": "redocly lint reader-api/v1/openapi.yaml --skip-rule=operation-4xx-response --skip-rule=info-license-strict",
-    "validate": "node validate.mjs",
+    "validate": "node validate.mjs && node validate-connector.mjs",
     "test": "npm run lint && npm run validate"
   },
   "devDependencies": {

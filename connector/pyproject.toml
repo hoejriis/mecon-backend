@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mecon-connector"
+version = "0.1.0"
+description = "Transparent USB serial-to-MQTT Connector for MECON public firmware devices"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+dependencies = ["paho-mqtt==2.2.0", "pyserial==3.5"]
+
+[project.scripts]
+mecon-connector = "mecon_connector.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-p no:cacheprovider"
+markers = ["integration: needs a real mosquitto (see tests/test_integration_mosquitto.py)"]

@@ -32,6 +32,7 @@
 | ADR-016 | User lifecycle | Disabling a user revokes application access immediately; their private data is recoverably retained for 30 days, then deleted; assigned devices become unassigned. Offline radio revocation is constrained by physical/cryptographic realities. | [Access](ACCESS_MODEL.md), [Security](SECURITY_AND_PRIVACY.md) |
 | ADR-017 | Sessions | Email magic-link login establishes a device session targeting 30 days, with immediate revocation on explicit logout or disablement. | [Security](SECURITY_AND_PRIVACY.md) |
 | ADR-018 | Backend pairing | One Backend creates a short-lived pairing code, the other redeems it; both retain mutually authenticated instance keys. | [Target architecture](TARGET_ARCHITECTURE.md) |
+| ADR-019 | USB Connector runtime | The public Connector is Python 3.11+ with hash-pinned dependencies (paho-mqtt, pyserial), a single-process loop, and a non-root multi-arch container. It forwards device envelopes unchanged and never replays a device command: a publish with an unknown outcome is counted, not resent. Contract: `contracts/connector/v1`, draft, topic names provisional. | [Connector README](../connector/README.md), [implementation design](USB_CONNECTOR_IMPLEMENTATION_DESIGN.md) |
 
 ## Confirmed refinements — 17 November 2026
 

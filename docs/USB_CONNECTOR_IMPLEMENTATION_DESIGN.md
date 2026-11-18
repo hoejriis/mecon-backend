@@ -49,4 +49,16 @@ Publish a versioned **USB↔MQTT interoperability contract** and synthetic seria
 
 Private Backend topic/ACL/envelope mapping and device-control-link arbitration; public firmware native USB framing and capability matrix; Pi Zero 2 W actual resource measurements; broker TLS credentials and test environment. These are **contract/verification dependencies**, not new product decisions. No public Backend rewrite, Reader UI or full broker deployment required to implement C0/C1.
 
+## Status
+
+Updated 18 November 2026. Nothing below has run against hardware or the private Backend.
+
+| Stage | State |
+| --- | --- |
+| C0 contract and fixtures | **Draft published** in `contracts/connector/v1` (mapping, schemas, synthetic fixtures, validator in the contracts CI). Topic names are provisional and open questions Q1 to Q6 in `mapping.json` are for the Backend and firmware owners. The fake serial device and fake and real-mosquitto broker harness are in `connector/tests`. |
+| C1 transport | **Core implemented** in `connector/` (Python; see [ADR-019](ARCHITECTURE_DECISIONS.md)): serial selection by stable id, bounded framing, transparent forwarding both ways, one broker session with fallback and backoff, bounded queues with counted drops, health and metrics. Verified with unit tests, fakes and a real mosquitto in CI, plus a mutation check of the transport-safety rules. Not verified on a USB device, a Pi or against the Backend. |
+| C2 local deployment | Not started. A container image exists; systemd packaging, USB permissions on a real Pi, TLS secret handling and Pi Zero 2 W measurements are open. |
+| C3 interoperability | Not started. Needs the Backend's topic and ACL mapping, a real public-firmware device, and the dual-transport decision. |
+| C4 acceptance | Not started. |
+
 Related: [Reader MVP2 design](READER_MVP2_DESIGN.md), [components](COMPONENTS.md), [deployments](DEPLOYMENTS.md), [ADR](ARCHITECTURE_DECISIONS.md).

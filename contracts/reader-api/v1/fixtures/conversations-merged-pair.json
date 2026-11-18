@@ -1,0 +1,14 @@
+{
+  "next_cursor": null,
+  "as_of": "2030-01-15T10:00:00Z",
+  "items": [
+    {
+      "id": "conv_demo_0001",
+      "identity_id": "ident_demo_0001",
+      "target": { "kind": "contact", "id": "contact_demo_0001" },
+      "title": "Demo Peer (merged pair)",
+      "unread_count": 2,
+      "last_activity_at": "2030-01-15T09:58:00Z"
+    }
+  ]
+}

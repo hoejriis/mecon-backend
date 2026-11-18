@@ -1,0 +1,6 @@
+{
+  "code": "cursor_expired",
+  "message": "The event cursor is outside retention; reload snapshots.",
+  "request_id": "req_demo_0410",
+  "retryable": false
+}

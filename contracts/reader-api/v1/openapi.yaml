@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: MECON Reader API
-  version: 1.0.0-draft.1
+  version: 1.0.0-draft.2
   summary: Interface between the MECON Reader and an authorized MECON Backend.
   description: |
     Machine-readable form of docs/READER_API_CONTRACT.md. Target specification,
@@ -91,7 +91,10 @@ paths:
       description: |
         `approved` is returned exactly once, with `Set-Cookie` for the session;
         later polls return `delivered`. Over the per-source limit the response
-        reads `pending` (no oracle). Unknown or expired ids read `expired`.
+        reads `pending` (no oracle). An unknown but well-formed `request_id` reads
+        `pending` until the request lifetime would have ended, then `expired`,
+        so a decoy poll cannot reveal that no mail was sent. Malformed or old
+        ids, and expired requests, read `expired` at once.
       security: []
       parameters:
         - name: request_id
@@ -184,6 +187,10 @@ paths:
       tags: [messaging]
       operationId: listConversations
       summary: (M2 draft) Authorized conversation summaries
+      description: |
+        Cursors on this endpoint are stable history cursors and never expire;
+        there is no 410 here. A merged enrolled pair is one conversation (see
+        `Conversation`).
       parameters:
         - $ref: '#/components/parameters/Cursor'
         - $ref: '#/components/parameters/Limit'
@@ -193,6 +200,8 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ConversationList' }
+              examples:
+                mergedPair: { externalValue: fixtures/conversations-merged-pair.json }
         '401': { $ref: '#/components/responses/Unauthenticated' }
 
   /conversations/{conversation_id}/messages:
@@ -200,6 +209,10 @@ paths:
       tags: [messaging]
       operationId: listMessages
       summary: (M2 draft) Messages in one authorized conversation
+      description: |
+        History cursors are stable and never expire; there is no 410 here.
+        Channel messages carry `identity_id: null` and only `sender_label` as
+        sender information.
       parameters:
         - name: conversation_id
           in: path
@@ -213,6 +226,8 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/MessageList' }
+              examples:
+                channelNullIdentity: { externalValue: fixtures/messages-channel-null-identity.json }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
 
@@ -221,6 +236,12 @@ paths:
       tags: [messaging]
       operationId: listContacts
       summary: (M2 draft) Authorized contacts
+      description: |
+        **Draft, pending an owner scoping decision.** It is not yet settled
+        whether this is a mesh-global directory (every signed-in user sees
+        every heard node) or is scoped to the caller's fleet and assignments
+        plus favourites. Neither is promised until the decision is recorded
+        here. History cursors on this endpoint are stable and never expire.
       parameters:
         - $ref: '#/components/parameters/Cursor'
         - $ref: '#/components/parameters/Limit'
@@ -254,7 +275,10 @@ paths:
         One logical attempt. The Backend chooses transmitting origins; the
         Reader never selects gateways. Same `Idempotency-Key` with the same
         body returns the existing attempt; with a different body returns 409.
-        A BLE-path attempt is never posted here.
+        A BLE-path attempt is never posted here. Until the Backend ships
+        multi-origin coordination it sends only through the caller's own
+        assigned Companion (single origin), so `status_evidence.per_origin`
+        is absent.
       parameters:
         - $ref: '#/components/parameters/Csrf'
         - name: Idempotency-Key
@@ -273,6 +297,9 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/SendAttempt' }
+              examples:
+                deviceUnknown: { externalValue: fixtures/send-attempt-device-unknown.json }
+                unsupportedTransmitted: { externalValue: fixtures/send-attempt-unsupported-transmitted.json }
         '200':
           description: Idempotent repeat of an existing attempt
           content:
@@ -290,6 +317,7 @@ paths:
       tags: [messaging]
       operationId: getSendAttempt
       summary: (M2 draft) Send attempt and its evidenced state
+      description: Never show `unknown` as failed; see `SendStatus`.
       parameters:
         - name: attempt_id
           in: path
@@ -312,8 +340,17 @@ paths:
       description: |
         `text/event-stream`. Each `data:` line is one `EventEnvelope`. Resume
         with the standard `Last-Event-ID` header or `cursor`. An expired cursor
-        yields 410; the Reader then reloads snapshots. Heartbeats are SSE
-        comments. Private content is never replayed after revocation.
+        yields 410; the Reader then reloads snapshots. Private content is never
+        replayed after revocation.
+
+        **Cursor expiry is per endpoint.** Only `/events` cursors expire (410
+        `cursor_expired`). History cursors on `/conversations`, `/messages`,
+        `/contacts` and `/devices` are stable and never expire.
+
+        **Heartbeat.** While idle the Backend sends an SSE comment line
+        (`: heartbeat`) at least every 25 seconds, so a client can tell an idle
+        stream from a dead one. The Reader treats 2 missed intervals (no bytes
+        for 50 s) as dead and reconnects with `Last-Event-ID`.
       parameters:
         - $ref: '#/components/parameters/Cursor'
         - name: Last-Event-ID
@@ -327,7 +364,13 @@ paths:
             text/event-stream:
               schema: { $ref: '#/components/schemas/EventEnvelope' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
-        '410': { $ref: '#/components/responses/Gone' }
+        '410':
+          description: Cursor expired or outside retention; reload snapshots
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              examples:
+                expired: { externalValue: fixtures/error-410-events.json }
 
 components:
   securitySchemes:
@@ -528,6 +571,12 @@ components:
         id: { $ref: '#/components/schemas/OpaqueId' }
 
     Conversation:
+      description: |
+        `id` is derived server-side and is opaque: clients never parse or
+        construct it, and it may change only through a resync. When the same
+        peer is reachable through an enrolled pair of identities that the
+        Backend has merged, the pair is exposed as one conversation (one
+        `id`, one entry in lists), not two.
       type: object
       required: [id, identity_id, target, title, unread_count, last_activity_at]
       properties:
@@ -551,7 +600,14 @@ components:
       properties:
         message_id: { $ref: '#/components/schemas/OpaqueId' }
         conversation_id: { $ref: '#/components/schemas/OpaqueId' }
-        identity_id: { $ref: '#/components/schemas/OpaqueId' }
+        identity_id:
+          description: |
+            Required (non-null) for the caller's own direct messages. Null on
+            channel traffic, where `sender_label` is the only sender
+            information.
+          oneOf:
+            - $ref: '#/components/schemas/OpaqueId'
+            - type: 'null'
         direction: { type: string, enum: [inbound, outbound] }
         sender_label: { type: [string, 'null'] }
         source_path: { type: string, enum: [backend, ble, unknown] }
@@ -630,6 +686,12 @@ components:
         receipt). `unknown` and `timed_out` do not prove non-transmission; the
         Reader never resends automatically.
 
+        `unknown` and `timed_out` are reported only when the device itself
+        reports them (`status_evidence.source: device`, public-firmware
+        Companions). Legacy gateways (`source: unsupported`) map only to
+        `queued`, `transmitted`, `acked` or `failed`. The Reader must never
+        show `unknown` as failed.
+
     SendAttempt:
       type: object
       required: [id, client_attempt_id, path, identity_id, status, status_evidence, created_at, updated_at]
@@ -641,7 +703,7 @@ components:
         status: { $ref: '#/components/schemas/SendStatus' }
         status_evidence:
           type: object
-          required: [accepted_at]
+          required: [accepted_at, source]
           description: What the Backend has actually seen. No gateway identities or fleet topology.
           properties:
             accepted_at: { $ref: '#/components/schemas/Timestamp' }
@@ -649,6 +711,29 @@ components:
             transmissions: { type: integer, minimum: 0 }
             acked_at: { type: [string, 'null'], format: date-time }
             detail: { type: [string, 'null'] }
+            source:
+              type: string
+              enum: [device, unsupported]
+              description: |
+                `device`: the status was reported by the transmitting device
+                itself. `unsupported`: the origin cannot report device-level
+                status (legacy gateway); only queued, transmitted, acked or
+                failed can occur.
+            per_origin:
+              type: array
+              description: |
+                Optional, absent until the Backend's multi-origin coordination
+                ships. Until then the Backend sends only through the caller's
+                own assigned Companion and the top-level fields describe that
+                single origin. Items never expose gateway identities.
+              items:
+                type: object
+                required: [origin_ordinal, status, transmitted_at]
+                additionalProperties: false
+                properties:
+                  origin_ordinal: { type: integer, minimum: 0, description: 'Position within this attempt only; not a gateway identifier.' }
+                  status: { $ref: '#/components/schemas/SendStatus' }
+                  transmitted_at: { type: [string, 'null'], format: date-time }
         created_at: { $ref: '#/components/schemas/Timestamp' }
         updated_at: { $ref: '#/components/schemas/Timestamp' }
 

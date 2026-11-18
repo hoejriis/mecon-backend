@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { createApiClient } from '../api/client';
 import type { Target } from '../api/types';
@@ -75,7 +75,9 @@ async function reload(
   const opened = await OfflineCache.open(store, keys);
   if (!opened.ok) throw new Error('quarantined');
   const caps = sessionWith({ messaging: 'available', send, events: 'unavailable' });
-  const api = createApiClient({ fetchImpl: b.fetchMock as unknown as typeof fetch, initialCapabilities: caps.capabilities });
+  // The client is deliberately permissive (send available), so a GET that gets through can only be stopped by the provider's own gate.
+  const permissive = sessionWith({ messaging: 'available', send: 'available', events: 'unavailable' });
+  const api = createApiClient({ fetchImpl: b.fetchMock as unknown as typeof fetch, initialCapabilities: permissive.capabilities });
   const auth = { status: 'signedIn', session: caps, api, refreshSession: async () => undefined } as unknown as AuthValue;
   const off = { unlockedUserId: USER, cache: opened.cache } as unknown as OfflineValue;
   render(
@@ -193,6 +195,20 @@ describe('drafts keep their id through a reload', () => {
     expect((JSON.parse(posts()[0]!.body!) as { client_draft_id: string }).client_draft_id).toBe('draft-real-1');
     // The consumed draft's record goes away; it is not left behind to be restored again.
     await waitFor(async () => expect((await cache.listDrafts()).filter((x) => x.draftId === 'draft-real-1')).toHaveLength(0));
+  });
+
+  it('a draft typed before a reload is written under its own id and comes back with that id', async () => {
+    const s = await seeded();
+    const cache = await reload(s.store, s.keys);
+    act(() => live.loadConversations());
+    await waitFor(() => expect(live.conversations.status).toBe('ready'));
+    act(() => live.setDraftText(TARGET, 'typed in session one'));
+    const id = live.draftIdFor(TARGET)!;
+    await waitFor(async () => expect((await cache.listDrafts()).map((x) => x.draftId)).toEqual([id]));
+    cleanup(); // the page goes away; the encrypted cache stays
+    await reload(s.store, s.keys);
+    await waitFor(() => expect(live.draftText(TARGET)).toBe('typed in session one'));
+    expect(live.draftIdFor(TARGET)).toBe(id);
   });
 
   it('a legacy draft:<target> record is restored under a new real id and rewritten', async () => {

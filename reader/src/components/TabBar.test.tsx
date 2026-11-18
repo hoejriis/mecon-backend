@@ -1,12 +1,29 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import { App } from '../App';
+import { AuthContext, type AuthValue } from '../auth/AuthContext';
+import { Shell } from '../App';
+import { fx } from '../test/backend';
+
+const signedIn: AuthValue = {
+  status: 'signedIn',
+  session: fx.session as AuthValue['session'],
+  devices: { status: 'idle' },
+  loginPhase: 'idle',
+  loginMessage: null,
+  signOutError: null,
+  submitEmail: async () => {},
+  restartLogin: () => {},
+  signOut: async () => {},
+  loadDevices: async () => {},
+};
 
 function renderAt(path: string) {
   return render(
     <MemoryRouter initialEntries={[path]}>
-      <App />
+      <AuthContext.Provider value={signedIn}>
+        <Shell />
+      </AuthContext.Provider>
     </MemoryRouter>,
   );
 }
@@ -47,8 +64,8 @@ describe('TabBar', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'Nodes' })).toBeInTheDocument();
   });
 
-  it('shows an honest not-connected placeholder', () => {
+  it('shows an honest unavailable state for a capability the Backend lacks', () => {
     renderAt('/chats');
-    expect(screen.getByText('Not connected to a Backend')).toBeInTheDocument();
+    expect(screen.getByText('Not available')).toBeInTheDocument();
   });
 });

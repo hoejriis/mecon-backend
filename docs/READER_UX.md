@@ -1,10 +1,10 @@
 # Reader UX — familiar to MeshCore users, distinctly MECON
 
-> **Approved MVP1 implementation baseline (17 November 2026):** [MVP1 implementation design](MVP1_IMPLEMENTATION_DESIGN.md) governs milestone order, navigation, privacy, map, F2 deployment and acceptance. Older illustrative or five-tab descriptions are superseded where conflicting. Real hardware and Backend API conformance still require verification.
+> **Normative baseline (17 November 2026):** [MVP1 implementation design](MVP1_IMPLEMENTATION_DESIGN.md) governs milestone order, navigation, privacy, map, restricted deployment and acceptance. Real hardware and Backend API conformance still require verification.
 
 **Status:** Design specification, not a completed UI.
 
-## Navigation — owner-approved 17 November 2026
+## Navigation
 
 **Device User web Reader:** follow [MeshCore One](https://github.com/Avi0n/MeshCoreOne) as closely as practicable, using original React/TypeScript components and official MECON branding under Apache-2.0. Persistent bottom navigation on all viewports: **Chats / Nodes / Map / Tools / Settings**. Channels live within Chats, following MC1. Responsive desktop/tablet layouts may use split panes while retaining the five-tab organization. Contacts, Companion selection and account functions follow MC1-familiar workflows. Do not copy GPLv3 application source or protected assets.
 

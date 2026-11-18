@@ -29,7 +29,8 @@ Bluefy browser (Safari has no Web Bluetooth).
 6. Wait until every step shows a result and the button says **Run again**.
 7. Tap **Copy report**. If copying is blocked, select the text in the report
    box and copy it by hand.
-8. Paste the report as a comment on Issue #2 of this repository, with the
+8. Send the report to the maintainers (for example as a comment on the Bluefy
+   hardware-evidence thread in this repository's issue tracker), with the
    phone model, iOS version, Bluefy version and the Companion's firmware
    version.
 
@@ -75,7 +76,7 @@ MAC-like strings and six-digit numbers. Read the report before you post it.
 
 ## Evidence
 
-Results are recorded as evidence in Issue #2 (Bluefy on iPhone and iPad). A
+Results are recorded as hardware evidence for Bluefy on iPhone and iPad (see the [acceptance matrix](MVP1_ACCEPTANCE.md)). A
 run on real hardware is evidence for that browser, device and firmware only.
 Runs against the simulated Companion in the test suite are labelled SIMULATED
 and are not hardware evidence.

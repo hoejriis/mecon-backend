@@ -14,7 +14,7 @@
 
 ## Reader / Backend contract
 
-Versioned HTTPS REST and WebSocket for account/session/capabilities, authorized messages/channels/contacts, assigned devices, send attempts/outcomes, selected offline synchronization later. Server-side enforcement is authoritative. Reader is normally served with Backend; MVP1 may use a separate development origin against the existing MECON Backend compatibility API.
+Versioned HTTPS REST and WebSocket for account/session/capabilities, authorized messages/channels/contacts, assigned devices, send attempts/outcomes, selected offline synchronization later. Server-side enforcement is authoritative. Reader is normally served with Backend; MVP1 is served from a separate, access-restricted origin (`reader.mecon.cloud`) against the existing MECON Backend compatibility API ([Reader API contract](READER_API_CONTRACT.md), [OpenAPI](../contracts/reader-api/v1/openapi.yaml)); see [availability](MVP1_PLAN.md#restricted-reader-deployment-and-availability).
 
 ## Backend / broker / device
 
@@ -32,10 +32,10 @@ Native MeshCore semantics remain canonical. Generic firmware contracts live in [
 
 The existing MECON Backend is the **sole implementation owner** of a versioned live packet API, to be documented with **public synthetic schemas and fixtures**. It serves two different privacy projections over common normalized reception/provenance events:
 
-- **Anonymous public projection:** public catalogue, approved node profile/coordinates, bounded live SSE and short-lived non-identifying observation links for the [MeshContinuum public map](documented work). No raw packets, observer identities, keys, private coordinates, source endpoints or privileged metadata.
-- **Authenticated capability-scoped projection:** per-authorized-user/fleet/Admin reception evidence, multi-observer packet details, optional bounded live capture and RF analytics for future [Fleet Owner](documented work) and [Admin](documented work) Reader interfaces. Operational privileges do not grant another user's private plaintext.
+- **Anonymous public projection:** public catalogue, approved node profile/coordinates, bounded live SSE and short-lived non-identifying observation links for the [MeshContinuum public map](https://github.com/hoejriis/MeshContinuum). No raw packets, observer identities, keys, private coordinates, source endpoints or privileged metadata.
+- **Authenticated capability-scoped projection:** per-authorized-user/fleet/Admin reception evidence, multi-observer packet details, optional bounded live capture and RF analytics for future web-only [Fleet Owner](FLEET_OWNER_EXPERIENCE.md) and [Admin](ADMIN_EXPERIENCE.md) interfaces (not Device User Reader tabs). Operational privileges do not grant another user's private plaintext.
 
-Both contracts specify version, event/cursor identity, dedup/provenance, snapshot + stream reconciliation, reconnect, heartbeat, backpressure, clock confidence, retention, expiry and revocation. The website and Reader never subscribe to Backend MQTT or its SQLite database directly. **This is a contract target, not a published or verified endpoint.**
+Both contracts specify version, event/cursor identity, dedup/provenance, snapshot + stream reconciliation, reconnect, heartbeat, backpressure, clock confidence, retention, expiry and revocation. The website and Reader never subscribe to Backend MQTT or its SQLite database directly. **This is a contract target, not a published or verified endpoint.** See the [live observation contract](LIVE_OBSERVATION_API_CONTRACT.md).
 
 ## Transitional ownership during the MECON Backend period
 

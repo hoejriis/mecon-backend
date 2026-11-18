@@ -1,15 +1,15 @@
 # Device User — target product experience
 
-**Target UX; only the Bluefy-first Reader GUI is MVP1.**
+**Target UX; only the Device User Reader GUI (Bluefy-targeted) is MVP1.** Navigation is the five bottom tabs Chats / Nodes / Map / Tools / Settings; see the [Reader interaction specification](READER_UX.md).
 
 ## Everyday tasks
 
 A Device User opens MECON Reader and immediately recognizes the MeshCore concepts of Chats, Channels, Contacts and Companion. The first experience is a familiar messaging client with original MECON iconography and visual treatment, not a copied MeshCore interface. In Bluefy on iPhone/iPad, the user can connect to an authorized Companion over BLE where hardware/browser support is proven; when signed in, they can also use authorized online Backend history and messaging. Desktop browser is secondary.
 
-- **Chats:** read and send direct messages, switch conversations, see true send/ACK/unknown status; no invented read receipts.
-- **Channels:** public and authorized private channels; distinguish channel keys/membership from favourites.
-- **Contacts:** adverts and contact information where supported, open conversation and manage authorized contacts.
-- **Companion:** assigned devices, active identity, battery, BLE and Backend connection, supported actions and clear reconnect.
+- **Chats (Channels inside Chats):** read and send direct messages, switch conversations, see true send/ACK/unknown status; no invented read receipts.
+- **Channels** (within Chats): public and authorized private channels; distinguish channel keys/membership from favourites.
+- **Contacts** (reached from Chats and Nodes): adverts and contact information where supported, open conversation and manage authorized contacts.
+- **Companion** (Nodes, Tools and Settings): assigned devices, active identity, battery, BLE and Backend connection, supported actions and clear reconnect.
 - **Settings:** personal preferences, accessibility, session, transport and privacy explanation.
 
 The user sees **messages** to a public channel or one of their authorized identities/private channels, **not raw observations** or a fleet's packet analytics.

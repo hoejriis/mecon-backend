@@ -29,7 +29,8 @@ import { BleError, type BleDeviceInfo, type BleErrorCode, type BleTransport } fr
  *  - rfTransmitted:  evidence the radio transmitted. The protocol subset used here
  *                    has no frame that carries such evidence, so this stays false
  *                    ("not observed") unless recordRfTransmitEvidence() is called.
- *                    UNVERIFIED: whether firmware reports TX evidence over BLE.
+ *                    Native Companion frames carry no RF evidence (Issue #5); only the
+ *                    interface's 0x7F message frames over a trusted link would.
  *  - dmAck:          the recipient's native ACK (PUSH_CODE_SEND_CONFIRMED) for this
  *                    attempt's tag. Not a read receipt. Channel sends never get one.
  *  - unknown:        the outcome of the write is not known (link lost, timeout or
@@ -451,13 +452,22 @@ export class BleAdapter {
 
   // -- send ----------------------------------------------------------------
   sendDirect(input: { clientDraftId: string; clientAttemptId: string; contactKey: string; text: string }): Promise<AttemptFacts> {
+    // A manual retry of the same draft is a new attempt with the next firmware
+    // attempt number, so it is a distinct native packet with its own ACK.
+    const firmwareAttempt = Math.min(255, this.snap.attempts.filter((x) => x.clientDraftId === input.clientDraftId).length);
     return this.send('direct', input, input.contactKey.slice(0, KEY_PREFIX_SIZE * 2), () =>
-      encodeSendDirect(input.contactKey, input.text, this.nowSec()),
+      encodeSendDirect(input.contactKey, input.text, this.nowSec(), firmwareAttempt),
     );
   }
 
   sendChannel(input: { clientDraftId: string; clientAttemptId: string; channelIndex: number; text: string }): Promise<AttemptFacts> {
-    return this.send('channel', input, String(input.channelIndex), () => encodeSendChannel(input.channelIndex, input.text, this.nowSec()));
+    return this.send('channel', input, String(input.channelIndex), () => {
+      // The firmware prepends "<own name>: " and cuts the whole at 160 bytes
+      // without telling us; without our own name we cannot size the text.
+      const name = this.snap.selfInfo?.name;
+      if (name === undefined) throw new FrameEncodeError('bad_argument', 'own name unknown: read self info before a channel send');
+      return encodeSendChannel(input.channelIndex, input.text, this.nowSec(), name);
+    });
   }
 
   /**

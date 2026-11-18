@@ -113,3 +113,42 @@ test.describe('browser behaviour', () => {
     expect(js.includes('requestdevice')).toBe(false);
   });
 });
+
+test.describe('service worker (safe updates)', () => {
+  // Skipped on a host still serving a build without a worker (before v0.3.1).
+  const hasWorker = async (request: import('@playwright/test').APIRequestContext) => (await request.get('/sw.js')).status() === 200;
+
+  test('/sw.js is served same-origin as JavaScript and always revalidated', async ({ request }) => {
+    test.skip(!(await hasWorker(request)), 'host serves a build without a service worker');
+    const res = await request.get('/sw.js');
+    expect(res.headers()['content-type'] ?? '').toMatch(/javascript/);
+    expect(res.headers()['cache-control'] ?? '').toMatch(/no-cache|no-store|max-age=0/);
+  });
+
+  test('the worker controls the page, caches the served commit, never caches /api, and serves the shell offline', async ({ browser, request }) => {
+    test.skip(!(await hasWorker(request)), 'host serves a build without a service worker');
+    const version = (await (await request.get('/version.json')).json()) as { commit: string | null };
+    const context = await browser.newContext({ serviceWorkers: 'allow' });
+    const page = await context.newPage();
+    await page.goto('/');
+    await page.evaluate(() => navigator.serviceWorker.ready);
+    await page.reload();
+    expect(await page.evaluate(() => Boolean(navigator.serviceWorker.controller))).toBe(true);
+    const cached = await page.evaluate(async () => {
+      const out: Record<string, string[]> = {};
+      for (const name of await self.caches.keys()) {
+        const c = await self.caches.open(name);
+        out[name] = (await c.keys()).map((r: Request) => new URL(r.url).pathname);
+      }
+      return out;
+    });
+    const names = Object.keys(cached);
+    expect(names.some((n) => version.commit !== null && n.includes(version.commit)), `a cache named for ${version.commit}: ${names.join(', ')}`).toBe(true);
+    const cachedPaths = Object.values(cached).flat();
+    expect(cachedPaths.filter((p) => p.startsWith('/api/'))).toEqual([]);
+    await context.setOffline(true);
+    await page.goto('/chats');
+    await expect(page.locator('body')).toContainText(/Reader/);
+    await context.close();
+  });
+});

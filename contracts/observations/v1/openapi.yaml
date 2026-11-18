@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: MECON Live Observation API (authorized projection)
-  version: 1.0.0-draft.1
+  version: 1.0.0-draft.2
   summary: Session-authenticated, capability-scoped view of observer locations and packet receptions.
   description: |
     Machine-readable form of the authorized projection described in
@@ -109,7 +109,8 @@ paths:
         an earlier snapshot: only receptions after it are returned. An expired
         `since` is a 410 `cursor_expired`; the client then asks again without
         `since`. After `expires_at` the snapshot and its cursor must not be
-        treated as current.
+        treated as current; `expires_at` is when the snapshot's cursor stops
+        being accepted (the server keeps a bounded window, about a day).
       parameters:
         - $ref: '#/components/parameters/Scope'
         - name: since
@@ -277,7 +278,11 @@ components:
         precision_m:
           type: number
           minimum: 0
-          description: Radius in metres within which the true position lies.
+          description: |
+            Radius in metres within which the true position lies. The server
+            coarsens by observer class (for example, finer for the caller's own
+            fleet than for an approved public source); a client must not assume
+            a finer position than this.
 
     Freshness:
       type: object
@@ -352,12 +357,19 @@ components:
           type: string
           enum: [lora, mqtt, usb, ble, unknown]
           description: How the observer heard it.
-        rssi: { type: [integer, 'null'], minimum: -200, maximum: 0 }
+        rssi:
+          type: [integer, 'null']
+          minimum: -200
+          maximum: 0
+          description: Rounded to an integer; null when unknown or outside this range.
         snr: { type: [number, 'null'], minimum: -60, maximum: 60 }
         provenance:
           type: string
           enum: [own_fleet, shared_fleet, approved_public_source]
-          description: Which rule made the observer visible to the caller.
+          description: |
+            Which rule made the observer visible to the caller.
+            `shared_fleet` appears only where the Backend implements cross-fleet
+            observation sharing (opt-in, off by default).
 
     Snapshot:
       type: object
@@ -376,7 +388,9 @@ components:
       description: |
         The SSE envelope. `reception` is present exactly when `kind` is
         `reception`, and then `reception.event_id` equals `event_id`. The two
-        control kinds carry no observation data.
+        control kinds carry no observation data, and their `event_id` is not a
+        resume point: resuming from it answers 410, and the client starts again
+        from a fresh snapshot.
       type: object
       required: [event_id, kind, occurred_at, version]
       additionalProperties: false

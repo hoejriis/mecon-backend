@@ -35,3 +35,7 @@ A previously authenticated, locally unlocked Device User with a **valid, Backend
 
 ## Open technical parameters, not new owner product decisions
 Offline lease maximum duration and secure issuance/validation; exact trusted local unlock mechanism; firmware USB protocol mapping and board/browser matrix; cache quotas and retention defaults; update rollback retention. Validate and document these before claiming end-to-end acceptance.
+
+## Local send path: what is built (simulated only)
+
+The Chats composer offers Backend, Bluetooth and USB as an explicit choice per send, listing only the paths that can carry that send. Offline, only a local path can exist and `offlineSendGuard` must permit it (valid lease naming the operation, identity, device and channel); with no valid lease the screen is read-only and says why. Local direct-message sends show the device's separate facts (accepted, radio transmitted only on evidence, recipient ACK) and an uncertain outcome is unknown: never resent, never rerouted. Everything here is verified only against simulated devices and a simulated Backend; no hardware, no real lease issuer. Known limits: local channel sends are not offered (the Reader cannot yet learn the device's channel slot, and a wrong slot would transmit to the wrong channel; the UI says it needs the device's channel list); the Backend contract carries no contact public key, so the user picks the recipient of a local direct message from the connected device's own contact list; and the offline screen offers local sends from the cached conversation only.

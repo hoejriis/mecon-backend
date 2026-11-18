@@ -21,8 +21,10 @@ import type {
   Target,
 } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
+import { useDevices } from '../device/DeviceContext';
 import { registerUpdateGuard } from '../update/guards';
-import { describeAttempt, isUncertainAttempt, type LocalAttempt } from './attemptStatus';
+import { describeAttempt, isUncertainAttempt, pathOf, type LocalAttempt, type LocalPath, type LocalTarget } from './attemptStatus';
+import { preflightLocal, runLocalSend } from './localSend';
 import {
   DEFAULT_RETRY_DELAYS_MS,
   newAttemptId,
@@ -83,6 +85,14 @@ export type DeepLink =
   | { status: 'notfound' }
   | { status: 'error'; error: string; requestId: string | null };
 
+/**
+ * The path of ONE send, chosen by the user for that send. There is no default here: a caller
+ * must say where the message goes, and nothing in the Reader changes it afterwards.
+ */
+export type SendRoute = { path: 'backend' } | { path: LocalPath; to: LocalTarget };
+/** `ok: false` means nothing was sent, nothing was written to any device, and the draft is kept. */
+export type SendResult = { ok: true } | { ok: false; reason: string };
+
 export interface MessagingValue {
   messaging: boolean;
   sendState: 'available' | 'unavailable' | 'forbidden';
@@ -125,11 +135,14 @@ export interface MessagingValue {
    * capability is available. Only the explicit "Send again" makes a new attempt.
    */
   rehydrate(records: LocalAttempt[]): void;
-  /** Explicit Send tap: a new attempt id, same draft id until it is sent. */
-  send(target: Target, identityId: string): void;
-  /** Explicit "Send again": a NEW attempt id for the same draft. */
-  sendAgain(clientAttemptId: string): void;
-  /** Re-POST the SAME attempt (same key, same body) to learn its fate. */
+  /** Explicit Send tap on the chosen path: a new attempt id, same draft id until it is sent. */
+  send(target: Target, identityId: string, route: SendRoute): SendResult;
+  /**
+   * Explicit "Send again": a NEW attempt id for the same draft, on the path the user picks for it
+   * (the same one or another; never chosen by the Reader).
+   */
+  sendAgain(clientAttemptId: string, route: SendRoute): SendResult;
+  /** Re-POST the SAME Backend attempt (same key, same body) to learn its fate. Local attempts have nothing to re-check. */
   recheck(clientAttemptId: string): void;
 }
 
@@ -155,6 +168,9 @@ export function MessagingProvider({
   pollMs = 4000,
 }: MessagingProviderProps) {
   const { api, session, refreshSession } = useAuth();
+  const devices = useDevices();
+  const devicesRef = useRef(devices);
+  devicesRef.current = devices;
   const caps = session?.capabilities;
   const messaging = caps?.messaging === 'available';
   const sendState = caps?.send ?? 'unavailable';
@@ -390,8 +406,13 @@ export function MessagingProvider({
       const have = new Set(attemptsRef.current.map((a) => a.clientAttemptId));
       const fresh = records
         .filter((r) => !have.has(r.clientAttemptId))
-        // An attempt in flight when the page died has an unknown outcome.
-        .map((r): LocalAttempt => (r.phase === 'posting' ? { ...r, phase: 'ambiguous' } : r));
+        // An attempt in flight when the page died has an unknown outcome. So does a local attempt the
+        // device accepted but whose ACK was still awaited: the session that watched it is gone.
+        .map((r): LocalAttempt =>
+          r.phase === 'posting' || (pathOf(r) !== 'backend' && r.phase === 'local' && !describeAttempt(r, r.request.target.kind).terminal)
+            ? { ...r, phase: 'ambiguous' }
+            : r,
+        );
       if (fresh.length === 0) return;
       attemptsRef.current = [...attemptsRef.current, ...fresh].sort((a, b) => a.createdAt - b.createdAt);
       setAttempts(attemptsRef.current);
@@ -533,6 +554,47 @@ export function MessagingProvider({
     [api, retryDelaysMs, patchAttempt, fetchConversations, fetchMessages, refreshSession],
   );
 
+  const identitiesRef = useRef(identities);
+  identitiesRef.current = identities;
+
+  /**
+   * Starts a local attempt, or refuses without consuming anything. `beforeStart` runs only once the
+   * preflight passed (it consumes the draft), so a blocked send keeps the user's text.
+   */
+  const startLocal = useCallback(
+    (
+      draftId: string,
+      base: Omit<SendRequest, 'client_attempt_id' | 'client_draft_id'>,
+      route: { path: LocalPath; to: LocalTarget },
+      beforeStart?: () => void,
+    ): { result: SendResult; attemptId: string | null } => {
+      const identity = identitiesRef.current.items.find((i) => i.id === base.identity_id) ?? null;
+      const handle = devicesRef.current.handles[route.path] ?? null;
+      const pre = preflightLocal(handle, identity, base.target, route.to);
+      if (!pre.ok) return { result: pre, attemptId: null };
+      beforeStart?.();
+      const clientAttemptId = newAttemptId();
+      const a: LocalAttempt = {
+        clientAttemptId,
+        draftId,
+        request: { ...base, client_draft_id: draftId, client_attempt_id: clientAttemptId },
+        phase: 'posting',
+        attempt: null,
+        error: null,
+        supersededBy: null,
+        createdAt: Date.now(),
+        path: route.path,
+        localTarget: route.to,
+        local: null,
+      };
+      attemptsRef.current = [...attemptsRef.current, a];
+      setAttempts(attemptsRef.current);
+      void runLocalSend(handle!, a, identity!, (patch) => patchAttempt(clientAttemptId, patch));
+      return { result: { ok: true }, attemptId: clientAttemptId };
+    },
+    [patchAttempt],
+  );
+
   const startAttempt = useCallback(
     (draftId: string, base: Omit<SendRequest, 'client_attempt_id' | 'client_draft_id'>) => {
       const clientAttemptId = newAttemptId();
@@ -546,6 +608,7 @@ export function MessagingProvider({
         error: null,
         supersededBy: null,
         createdAt: Date.now(),
+        path: 'backend',
       };
       attemptsRef.current = [...attemptsRef.current, a];
       setAttempts(attemptsRef.current);
@@ -556,34 +619,52 @@ export function MessagingProvider({
   );
 
   const send = useCallback(
-    (target: Target, identityId: string) => {
+    (target: Target, identityId: string, route: SendRoute): SendResult => {
       const key = targetKey(target);
       const d = drafts.current.get(key);
       const text = d?.text ?? '';
-      if (!d || text.trim() === '' || sendState !== 'available') return;
+      if (!d || text.trim() === '') return { ok: false, reason: 'There is nothing to send.' };
+      const base = { identity_id: identityId, target, content: { kind: 'text' as const, text } };
       // The draft is consumed synchronously so a double tap cannot send twice.
-      drafts.current.delete(key);
-      bumpDrafts((n) => n + 1);
-      startAttempt(d.draftId, { identity_id: identityId, target, content: { kind: 'text', text } });
+      const consume = () => {
+        drafts.current.delete(key);
+        bumpDrafts((n) => n + 1);
+      };
+      if (route.path === 'backend') {
+        if (sendState !== 'available') return { ok: false, reason: 'Sending through the Backend is not available.' };
+        consume();
+        startAttempt(d.draftId, base);
+        return { ok: true };
+      }
+      return startLocal(d.draftId, base, route, consume).result;
     },
-    [sendState, startAttempt],
+    [sendState, startAttempt, startLocal],
   );
 
   const sendAgain = useCallback(
-    (clientAttemptId: string) => {
+    (clientAttemptId: string, route: SendRoute): SendResult => {
       const old = attemptsRef.current.find((a) => a.clientAttemptId === clientAttemptId);
-      if (!old || old.supersededBy || sendState !== 'available') return;
+      if (!old || old.supersededBy) return { ok: false, reason: 'This attempt was already sent again.' };
       const { identity_id, target, content } = old.request;
-      const next = startAttempt(old.draftId, { identity_id, target, content });
-      patchAttempt(clientAttemptId, { supersededBy: next });
+      let next: string | null;
+      if (route.path === 'backend') {
+        if (sendState !== 'available') return { ok: false, reason: 'Sending through the Backend is not available.' };
+        next = startAttempt(old.draftId, { identity_id, target, content });
+      } else {
+        const r = startLocal(old.draftId, { identity_id, target, content }, route);
+        if (!r.result.ok) return r.result;
+        next = r.attemptId;
+      }
+      if (next) patchAttempt(clientAttemptId, { supersededBy: next });
+      return { ok: true };
     },
-    [sendState, startAttempt, patchAttempt],
+    [sendState, startAttempt, startLocal, patchAttempt],
   );
 
   const recheck = useCallback(
     (clientAttemptId: string) => {
       const a = attemptsRef.current.find((x) => x.clientAttemptId === clientAttemptId);
-      if (!a || a.phase !== 'ambiguous') return;
+      if (!a || a.phase !== 'ambiguous' || pathOf(a) !== 'backend') return;
       void runPost(a, false);
     },
     [runPost],

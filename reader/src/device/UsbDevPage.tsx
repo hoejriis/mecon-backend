@@ -71,7 +71,7 @@ export default function UsbDevPage() {
       </ul>
       <h2>Send</h2>
       <p>
-        <button type="button" disabled={!session.can('message.send.direct') || !first} onClick={() => void run(() => session.sendDirect({ clientDraftId: draft, clientAttemptId: newId('attempt'), contactKey: first!.publicKey, text: 'hello dm' }))}>
+        <button type="button" disabled={!session.can('message.send.direct') || !first} onClick={() => void run(() => session.sendDirect({ clientDraftId: draft, clientAttemptId: newId('attempt'), contactKey: first!.publicKey, text: 'hello dm', auth: { op: 'send.direct', identityId: 'dev', deviceId: 'dev', identityKeyPrefix: s.companion?.selfInfo?.publicKey.slice(0, 8) ?? '' } }))}>
           Send DM to first contact
         </button>{' '}
         <button type="button" onClick={() => setDraft(newId('draft'))}>New draft</button>

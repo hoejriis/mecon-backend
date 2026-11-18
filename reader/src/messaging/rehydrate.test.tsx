@@ -143,7 +143,10 @@ describe('rehydration after a reload', () => {
     expect(text('rejected')).toBe('Not sent');
     expect(text('queued')).toBe('Queued');
     expect(text('unknown')).toBe('Outcome unknown — not resent');
-    expect(live.attemptsFor(TARGET).map((a) => a.clientAttemptId).sort()).toEqual(records.map((r) => r.clientAttemptId).sort());
+    // The probe's captured context can lag the DOM by a render on a slow runner: wait for it too.
+    await waitFor(() =>
+      expect(live.attemptsFor(TARGET).map((a) => a.clientAttemptId).sort()).toEqual(records.map((r) => r.clientAttemptId).sort()),
+    );
     expect(live.attemptsFor(TARGET).find((a) => a.clientAttemptId === `${A}posting`)!.request).toEqual(records[0]!.request);
     await act(async () => new Promise((r) => setTimeout(r, 150)));
     expect(posts()).toHaveLength(0);
@@ -179,7 +182,7 @@ describe('rehydration after a reload', () => {
     await waitFor(() => expect(screen.getByTestId(A + 'ambiguous')).toBeInTheDocument());
     expect(posts()).toHaveLength(0);
     b.on('POST /send-attempts', () => new Response(JSON.stringify(attempt('queued', { client_attempt_id: 'x' })), { status: 201 }));
-    act(() => live.sendAgain(A + 'ambiguous'));
+    act(() => live.sendAgain(A + 'ambiguous', { path: 'backend' }));
     await waitFor(() => expect(posts()).toHaveLength(1));
     const body = JSON.parse(posts()[0]!.body!) as { client_attempt_id: string; client_draft_id: string };
     expect(body.client_attempt_id).not.toBe(A + 'ambiguous');
@@ -198,7 +201,7 @@ describe('drafts keep their id through a reload', () => {
     act(() => live.loadConversations()); // the write-through covers targets of listed conversations
     await waitFor(async () => expect((await cache.listDrafts()).map((x) => x.draftId)).toEqual(['draft-real-1']));
     b.on('POST /send-attempts', () => new Response(JSON.stringify(attempt('queued', { client_attempt_id: 'x' })), { status: 201 }));
-    act(() => live.send(TARGET, 'ident_demo_0001'));
+    act(() => live.send(TARGET, 'ident_demo_0001', { path: 'backend' }));
     await waitFor(() => expect(posts()).toHaveLength(1));
     expect((JSON.parse(posts()[0]!.body!) as { client_draft_id: string }).client_draft_id).toBe('draft-real-1');
     // The consumed draft's record goes away; it is not left behind to be restored again.

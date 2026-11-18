@@ -1,6 +1,6 @@
 import { vi } from 'vitest';
 import { MockCompanion, type MockCompanionOptions } from '../ble/mockCompanion';
-import { DeviceSession, type SessionOptions } from './session';
+import { DeviceSession, type LocalSendAuth, type SessionOptions } from './session';
 import { installFakeSerial, type FakeSerialHandle } from './sim/fakeSerial';
 import { CompanionSerialPeer, MockRepeater, MockSilentDevice, type CompanionPeerOptions, type SerialPeer } from './sim/serialPeers';
 import { WebSerialTransport } from './webSerialTransport';
@@ -39,3 +39,13 @@ export function silentRig(noise = '') {
   const r = serialRig(peer);
   return { ...r, peer };
 }
+
+/** A send authorization for the synthetic Companion (self key 0x11...), valid while the gate is online. */
+export const authFor = (op: 'send.direct' | 'send.channel' = 'send.direct', over: Partial<LocalSendAuth> = {}): LocalSendAuth => ({
+  op,
+  identityId: 'ident_test',
+  deviceId: 'dev_test',
+  ...(op === 'send.channel' ? { channelId: 'chan_test' } : {}),
+  identityKeyPrefix: '111111',
+  ...over,
+});

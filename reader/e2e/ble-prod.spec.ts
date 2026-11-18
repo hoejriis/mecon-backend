@@ -34,9 +34,11 @@ test('main entry chunk is BLE- and serial-free; only lazy probe chunks have devi
       expect(text.includes('getports'), `${f} (main entry) has getPorts`).toBe(false);
     }
   }
-  // Only lazy chunks (the BLE and USB probes, and what they share) carry BLE or serial code; index.html neither loads nor preloads them.
+  // Only lazy chunks (the BLE and USB probes, the composer's device session, and what they share) carry BLE or serial
+  // code; index.html neither loads nor preloads them. The transport is shared by the USB probe and the device-session
+  // chunk, so it sits in its own lazy chunk beside the probe page's.
   expect(withBle.length).toBeGreaterThanOrEqual(1);
-  expect(withSerial).toHaveLength(1);
+  expect(withSerial.length).toBeGreaterThanOrEqual(1);
   for (const f of [...withBle, ...withSerial]) {
     expect(f).not.toBe(entry);
     expect(html).not.toContain(f);
@@ -45,7 +47,7 @@ test('main entry chunk is BLE- and serial-free; only lazy probe chunks have devi
 
   const backend = await mockBackend(page);
   backend.signedIn = true;
-  // The main app never fetches the probe chunk.
+  // The main app never fetches a device chunk: not on load, and not by opening Chats.
   const fetched: string[] = [];
   page.on('request', (r) => fetched.push(r.url()));
   await page.goto('/chats');

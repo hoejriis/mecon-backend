@@ -4,6 +4,8 @@ import { CompanionSerialTransport } from './companionSerial';
 import { detectBleDevice, detectDevice, type Capability, type DetectedDevice, type DetectOptions } from './detect';
 import { MeconReassembler, buildRequest, encodeMeconFrames, type Envelope } from './meconIface';
 import type { ByteTransport } from './serialBytes';
+import { OfflineSendBlocked, offlineSendGuard } from '../offline/gate';
+import type { PermitQuery } from '../offline/lease';
 import { assertOperationAllowed, linkTrustOf, type LinkTrust } from './trust';
 
 /**
@@ -18,9 +20,15 @@ import { assertOperationAllowed, linkTrustOf, type LinkTrust } from './trust';
  * and `sendDirect`/`sendChannel` refuse with `unsupported_capability`, writing
  * nothing, on a device without that capability.
  *
+ * Every local send passes `authorize()` first: the offline guard (online: the
+ * server decides and the lease is not consulted; offline: the lease must permit
+ * this operation, identity, device and channel), then a check that the connected
+ * device is the sending identity's own. The guard sits here, at the call that
+ * writes to the device, so a caller that skips the UI is refused the same way.
+ *
  * Out of scope here: choosing between USB, BLE and Backend in a composer
- * (Issue #6), and the interface's own message operations (the Companion binary
- * driver stays the messaging path until those are wired).
+ * (messaging/localPath.ts), and the interface's own message operations (the
+ * Companion binary driver stays the messaging path until those are wired).
  */
 export type SessionPhase = 'idle' | 'choosing' | 'opening' | 'detecting' | 'ready' | 'closed' | 'failed';
 
@@ -39,6 +47,15 @@ export interface SessionOptions {
   detect?: DetectOptions;
   companion?: Partial<Omit<BleAdapterOptions, 'transport'>>;
   stallMs?: number;
+}
+
+/**
+ * What a local send must carry. `PermitQuery` is what the offline lease is asked
+ * (operation, identity, device, channel); `identityKeyPrefix` is the sending
+ * identity's public key prefix, which must match the connected device's own key.
+ */
+export interface LocalSendAuth extends PermitQuery {
+  identityKeyPrefix: string;
 }
 
 export interface SessionResult {
@@ -175,6 +192,11 @@ export class DeviceSession {
     this.offs.push(this.link.onDisconnect((r) => this.onLinkEnd(r)));
   }
 
+  /** The link this session drives. */
+  get path(): 'usb' | 'ble' {
+    return this.link.kind;
+  }
+
   subscribe = (cb: () => void): (() => void) => {
     this.listeners.add(cb);
     return () => this.listeners.delete(cb);
@@ -290,12 +312,33 @@ export class DeviceSession {
     return this.adapter;
   }
 
-  async sendDirect(input: { clientDraftId: string; clientAttemptId: string; contactKey: string; text: string }): Promise<AttemptFacts> {
-    return this.require('message.send.direct').sendDirect(input);
+  /**
+   * Refuses, before anything reaches the adapter or the device, a send the offline rules or the
+   * device identity do not allow. Throws OfflineSendBlocked (the guard said no) or BleError
+   * 'bad_argument' / 'wrong_device'. Nothing is written in any of those cases.
+   */
+  private authorize(kind: 'direct' | 'channel', auth: LocalSendAuth): void {
+    if (auth.op !== (kind === 'direct' ? 'send.direct' : 'send.channel')) throw new BleError('bad_argument', 'the lease operation does not match this send');
+    if (kind === 'channel' && auth.channelId === undefined) throw new BleError('bad_argument', 'a channel send must name its channel for the lease check');
+    const decision = offlineSendGuard(auth);
+    if (!decision.allowed) throw new OfflineSendBlocked(decision);
+    const own = this.snap.companion?.selfInfo?.publicKey?.toLowerCase();
+    const want = auth.identityKeyPrefix.toLowerCase();
+    if (!own || want === '' || !own.startsWith(want)) throw new BleError('wrong_device', 'the connected device is not the one this identity belongs to');
   }
 
-  async sendChannel(input: { clientDraftId: string; clientAttemptId: string; channelIndex: number; text: string }): Promise<AttemptFacts> {
-    return this.require('message.send.channel').sendChannel(input);
+  async sendDirect(input: { clientDraftId: string; clientAttemptId: string; contactKey: string; text: string; auth: LocalSendAuth }): Promise<AttemptFacts> {
+    const { auth, ...rest } = input;
+    const adapter = this.require('message.send.direct');
+    this.authorize('direct', auth);
+    return adapter.sendDirect(rest);
+  }
+
+  async sendChannel(input: { clientDraftId: string; clientAttemptId: string; channelIndex: number; text: string; auth: LocalSendAuth }): Promise<AttemptFacts> {
+    const { auth, ...rest } = input;
+    const adapter = this.require('message.send.channel');
+    this.authorize('channel', auth);
+    return adapter.sendChannel(rest);
   }
 
   /**

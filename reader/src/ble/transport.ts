@@ -27,7 +27,9 @@ export type BleErrorCode =
   /** The detected device does not support this operation (capabilities gate features, not roles). */
   | 'unsupported_capability'
   /** The link's trust does not allow this class of operation (a BLE link of unknown PIN: reads only). */
-  | 'link_not_trusted';
+  | 'link_not_trusted'
+  /** The connected device is not the one the sending identity belongs to (its own public key does not match). */
+  | 'wrong_device';
 
 export class BleError extends Error {
   constructor(

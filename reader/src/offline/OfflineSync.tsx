@@ -47,7 +47,7 @@ export function OfflineSync() {
   // Drafts and send attempts: write through; restore saved drafts and attempts once per unlock.
   const targets: Target[] = convs.items.map((c) => c.target);
   const dsig = targets
-    .map((t) => `${targetKey(t)}=${m.draftText(t).length}/${m.draftIdFor(t) ?? ''}/${m.attemptsFor(t).map((a) => `${a.clientAttemptId}${a.phase}${a.attempt?.status ?? ''}${a.supersededBy ?? ''}`).join(',')}`)
+    .map((t) => `${targetKey(t)}=${m.draftText(t).length}/${m.draftIdFor(t) ?? ''}/${m.attemptsFor(t).map((a) => `${a.clientAttemptId}${a.phase}${a.attempt?.status ?? ''}${a.supersededBy ?? ''}${a.path ?? ''}${a.local ? `${+a.local.deviceAccepted}${+a.local.dmAck}${+a.local.ackTimedOut}${+a.local.unknown}${+a.local.notSent}` : ''}`).join(',')}`)
     .join('|');
   // The draft id last written per target, so a consumed or replaced draft's record is removed.
   const savedDraftIds = useRef(new Map<string, string>());

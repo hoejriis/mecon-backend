@@ -326,3 +326,12 @@ not. Add dependencies only if their licenses are compatible.
 Do not simulate features the Backend or firmware cannot yet support. Show
 truthful empty, loading and unavailable states. Never commit secrets or real
 user data, including in test fixtures.
+
+## Local sends (Bluetooth and USB) and the send path
+
+- `reader/src/messaging/localPath.ts` decides which paths can carry a send: Backend when `send` is available and the Reader is online; Bluetooth or USB, for direct messages only, when a `DeviceSession` is connected, its detected capabilities include `message.send.direct` and the device is the sending identity's own (its public key starts with the identity's `public_key_prefix`). Only available paths are shown. The default is Backend while online, else the first local path. A path that disappears is never replaced for the user.
+- `reader/src/messaging/localSend.ts` runs one local attempt: the preflight (device, capability, identity, destination, guard) and then the write, once, through `DeviceSession.sendDirect/sendChannel`, whose `authorize()` calls `offlineSendGuard` and the identity-key check before anything reaches the adapter. The guard is therefore in the send call itself, not only in the UI. Online, the lease is not consulted; offline, the lease must permit the operation, identity, device and channel (the session still accepts a channel send for future use and refuses one that does not name its channel; no UI feeds it, and the preflight refuses a channel target).
+- An uncertain write is `unknown` (phase `ambiguous`), never resent and never given to the Backend; a Backend `ambiguous` is never given to a device. "Send again" is an explicit action that mints a new attempt id for the same draft id and takes the path the user picks.
+- A local attempt records `path` (`ble` or `usb`), the device's `local` facts and the `localTarget` it was addressed to, and is persisted with the other attempts in the encrypted cache. The cache also holds the caller's identities (their assigned device and key prefix are what an offline send is checked against).
+- The device layer is a lazy chunk (`device/factory.ts`), fetched when the user connects a device; the main bundle stays Bluetooth- and serial-free.
+- A channel target has no local path, online or offline: a channel send needs the device's channel slot, which the Reader cannot learn yet, and a typed slot could transmit to the wrong channel. The UI says so and has no slot entry. A local direct message names its recipient from the connected device's own contact list.

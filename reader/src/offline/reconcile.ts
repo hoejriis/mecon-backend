@@ -32,6 +32,7 @@ export interface ReconcileResult {
 
 export async function reconcile(cache: OfflineCache, snap: Snapshot): Promise<ReconcileResult> {
   const provable = new Set(snap.identities.map((i) => i.id));
+  await cache.putIdentities(snap.identities);
   const fresh = new Map(snap.conversations.map((c) => [c.id, c]));
   const held: string[] = [];
 

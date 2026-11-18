@@ -3,8 +3,10 @@ import { Link, Navigate, Route, Routes, useParams } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import type { CapabilityState, Conversation, Message, Target } from '../api/types';
 import { Empty, ErrorState, Forbidden, Loading, Offline, Unavailable, useOnline } from '../components/States';
-import { describeAttempt, type LocalAttempt } from '../messaging/attemptStatus';
+import { describeAttempt, pathOf, type LocalAttempt } from '../messaging/attemptStatus';
 import { useMessaging } from '../messaging/MessagingContext';
+import { useDevices } from '../device/DeviceContext';
+import { SendPathControls, useSendPath, viaLabel } from './SendPathControls';
 
 /*
  * Filter chips. Rooms is deliberately absent: it is rendered only when a
@@ -173,15 +175,31 @@ function sourceLabel(m: Message): string {
 
 function AttemptLine({ a, targetKind }: { a: LocalAttempt; targetKind: Target['kind'] }) {
   const m = useMessaging();
+  const online = useOnline();
   const [confirming, setConfirming] = useState(false);
+  const [blockedMsg, setBlockedMsg] = useState<string | null>(null);
   const v = describeAttempt(a, targetKind);
-  const canAgain = v.canSendAgain && !a.supersededBy && m.sendState === 'available';
+  const identity = m.identities.items.find((i) => i.id === a.request.identity_id) ?? null;
+  // Send again is explicit, and so is its path: it starts on the path this attempt used, and only the user changes it.
+  const path = useSendPath({
+    identity,
+    target: a.request.target,
+    online,
+    sendState: m.sendState,
+    initial: { path: pathOf(a), to: a.localTarget },
+  });
+  const canAgain = v.canSendAgain && !a.supersededBy && (m.sendState === 'available' || path.avail.length > 0);
   return (
-    <div className={`attempt tone-${v.tone}`}>
+    <div className={`attempt tone-${v.tone}`} data-path={pathOf(a)}>
       <p className="attempt-status">
         <span className="attempt-label">{v.label}</span>
         {v.detail && <span className="attempt-detail"> {v.detail}</span>}
       </p>
+      {v.facts && (
+        <p className="state-meta" data-testid="attempt-facts">
+          {v.facts}
+        </p>
+      )}
       {a.supersededBy && <p className="state-meta">Sent again as a new attempt.</p>}
       {v.canRecheck && !a.supersededBy && (
         <button type="button" className="btn btn-small" onClick={() => m.recheck(a.clientAttemptId)}>
@@ -189,26 +207,36 @@ function AttemptLine({ a, targetKind }: { a: LocalAttempt; targetKind: Target['k
         </button>
       )}
       {canAgain && !confirming && (
-        <button
-          type="button"
-          className="btn btn-small btn-secondary"
-          onClick={() => (v.mayHaveTransmitted ? setConfirming(true) : m.sendAgain(a.clientAttemptId))}
-        >
+        <button type="button" className="btn btn-small btn-secondary" onClick={() => setConfirming(true)}>
           Send again
         </button>
       )}
       {canAgain && confirming && (
         <div className="confirm" role="group" aria-label="Confirm sending again">
+          {v.mayHaveTransmitted && (
+            <p>
+              The earlier attempt may already have been transmitted. Sending again creates a new attempt and the
+              recipient could receive the message twice.
+            </p>
+          )}
           <p>
-            The earlier attempt may already have been transmitted. Sending again creates a new attempt and the
-            recipient could receive the message twice.
+            The earlier attempt went through {viaLabel(a)}. Choose where the new attempt goes; the Reader never changes
+            it for you.
           </p>
+          <SendPathControls s={path} target={a.request.target} idPrefix={`again-${a.clientAttemptId}`} />
+          {blockedMsg && (
+            <p className="state-meta" role="alert">
+              {blockedMsg}
+            </p>
+          )}
           <button
             type="button"
             className="btn btn-small"
+            disabled={!path.route || !!path.blocked}
             onClick={() => {
-              setConfirming(false);
-              m.sendAgain(a.clientAttemptId);
+              const r = m.sendAgain(a.clientAttemptId, path.route!);
+              if (r.ok) setConfirming(false);
+              else setBlockedMsg(r.reason);
             }}
           >
             Send as a new attempt
@@ -335,7 +363,7 @@ function MessageThread({ conversation, target }: { conversation: Conversation | 
           );
         })}
         {pending.map((a) => (
-          <Bubble key={a.clientAttemptId} out text={a.request.content.text} meta="You · not yet in history · via Backend">
+          <Bubble key={a.clientAttemptId} out text={a.request.content.text} meta={`You · not yet in history · via ${viaLabel(a)}`}>
             <AttemptLine a={a} targetKind={target.kind} />
           </Bubble>
         ))}
@@ -346,7 +374,10 @@ function MessageThread({ conversation, target }: { conversation: Conversation | 
 
 function Composer({ target, defaultIdentityId }: { target: Target; defaultIdentityId: string | null }) {
   const m = useMessaging();
+  const online = useOnline();
+  const devices = useDevices();
   const [picked, setPicked] = useState<string | null>(null);
+  const [refusal, setRefusal] = useState<string | null>(null);
   const sendable = m.identities.items.filter((i) => i.can_send);
   const chosen =
     sendable.find((i) => i.id === picked) ??
@@ -354,9 +385,11 @@ function Composer({ target, defaultIdentityId }: { target: Target; defaultIdenti
     sendable[0] ??
     null;
   const text = m.draftText(target);
+  const path = useSendPath({ identity: chosen, target, online, sendState: m.sendState, initial: undefined });
+  const anyDevice = Object.keys(devices.handles).length > 0;
 
   if (m.sendState === 'forbidden') return <Forbidden title="Sending is not permitted" />;
-  if (m.sendState !== 'available') return <Unavailable title="Sending is not available" body="This Backend does not provide sending yet." />;
+  if (m.sendState !== 'available' && !anyDevice) return <Unavailable title="Sending is not available" body="This Backend does not provide sending yet." />;
   if (m.identities.status === 'error') return <ErrorState title="Could not load your identities" body="Sending needs them." />;
   if (m.identities.status !== 'ready') return <Loading label="Loading identities" />;
   if (!chosen) {
@@ -367,7 +400,9 @@ function Composer({ target, defaultIdentityId }: { target: Target; defaultIdenti
       className="composer"
       onSubmit={(e) => {
         e.preventDefault();
-        m.send(target, chosen.id);
+        if (!path.route) return;
+        const r = m.send(target, chosen.id, path.route);
+        setRefusal(r.ok ? null : r.reason);
       }}
     >
       {sendable.length > 1 ? (
@@ -388,8 +423,13 @@ function Composer({ target, defaultIdentityId }: { target: Target; defaultIdenti
         Message
         <textarea rows={3} value={text} onChange={(e) => m.setDraftText(target, e.target.value)} />
       </label>
-      <p className="state-meta">Sent through the Backend. Each tap of Send is one attempt.</p>
-      <button type="submit" className="btn" disabled={text.trim() === ''}>
+      <SendPathControls s={path} target={target} idPrefix="compose" />
+      {refusal && (
+        <p className="state-meta" role="alert" data-testid="send-refused">
+          Not sent: {refusal} Your message is kept.
+        </p>
+      )}
+      <button type="submit" className="btn" disabled={text.trim() === '' || !path.route || !!path.blocked}>
         Send
       </button>
     </form>

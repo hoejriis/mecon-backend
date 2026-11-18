@@ -1,5 +1,33 @@
 import type { SendAttempt, SendRequest } from '../api/types';
 
+/** Where a send went. `backend` is the Reader API; `ble` and `usb` are a locally attached device. */
+export type SendPath = 'backend' | 'ble' | 'usb';
+export type LocalPath = 'ble' | 'usb';
+export const PATH_LABEL: Record<SendPath, string> = { backend: 'Backend', ble: 'Bluetooth', usb: 'USB' };
+export const isLocalPath = (p: SendPath | undefined): p is LocalPath => p === 'ble' || p === 'usb';
+
+/** What a local send is addressed to on the device: a contact's public key (hex), or a channel slot. */
+export interface LocalTarget {
+  contactKey?: string;
+  channelIndex?: number;
+}
+
+/**
+ * The device's own observations for a local attempt, copied from the adapter's facts. Each is
+ * separate evidence and none implies another; `false` means "not observed".
+ */
+export interface LocalFacts {
+  writeIssued: boolean;
+  notSent: boolean;
+  deviceAccepted: boolean;
+  rfTransmitted: boolean;
+  dmAck: boolean;
+  ackTimedOut: boolean;
+  unknown: boolean;
+  deviceError: { code: number | null; name: string } | null;
+  reason: string | null;
+}
+
 /**
  * Where a send stands from the Reader's point of view.
  * - posting: POST in flight
@@ -7,8 +35,9 @@ import type { SendAttempt, SendRequest } from '../api/types';
  *   exist or have been transmitted (local `unknown`)
  * - rejected: the Backend refused the request (4xx); nothing was accepted
  * - accepted: the Backend returned an attempt; `attempt.status` rules
+ * - local: a local device accepted the write (local attempts only; `local` holds its facts)
  */
-export type AttemptPhase = 'posting' | 'ambiguous' | 'rejected' | 'accepted';
+export type AttemptPhase = 'posting' | 'ambiguous' | 'rejected' | 'accepted' | 'local';
 
 export interface RejectInfo {
   status: number;
@@ -29,7 +58,15 @@ export interface LocalAttempt {
   /** Set once the user sent this draft again as a new attempt. */
   supersededBy: string | null;
   createdAt: number;
+  /** Which path this attempt used. Absent on records cached before local sends existed: the Backend. Never changes. */
+  path?: SendPath;
+  /** Local attempts only: what the device was asked to reach. */
+  localTarget?: LocalTarget;
+  /** Local attempts only: the device's facts. Phases: posting = write in flight, ambiguous = unknown, rejected = not sent, local = accepted by the device. */
+  local?: LocalFacts | null;
 }
+
+export const pathOf = (a: Pick<LocalAttempt, 'path'>): SendPath => a.path ?? 'backend';
 
 export type Tone = 'pending' | 'ok' | 'warn' | 'bad' | 'unknown';
 
@@ -45,11 +82,97 @@ export interface StatusView {
   canRecheck: boolean;
   /** Needs no further polling. */
   terminal: boolean;
+  /** Local attempts: one line of the device's separate facts. */
+  facts?: string;
 }
 
 export const AMBIGUOUS_LABEL = 'Outcome unknown — not resent';
 
+const yn = (v: boolean) => (v ? 'yes' : 'not observed');
+
+/** The device's facts as one line. RF transmission is "not observed" unless the device gave evidence. */
+function factsLine(f: LocalFacts, kind: 'contact' | 'channel'): string {
+  const parts = [`Device accepted: ${yn(f.deviceAccepted)}`, `Radio transmitted: ${yn(f.rfTransmitted)}`];
+  if (kind === 'contact') parts.push(`Recipient ACK: ${yn(f.dmAck)}`);
+  return parts.join(' · ');
+}
+
+const NOT_WRITTEN = 'Nothing was written to the device.';
+
+/** Reasons a local attempt was not sent, in words. */
+function localReason(code: string | null): string {
+  switch (code) {
+    case 'not_connected':
+      return 'The device was not connected.';
+    default:
+      return code ?? 'The device was not reached.';
+  }
+}
+
+/** A local (Bluetooth or USB) attempt. Never rerouted; never resent without a new user action. */
+function describeLocal(a: LocalAttempt, kind: 'contact' | 'channel'): StatusView {
+  const base = { canSendAgain: false, mayHaveTransmitted: false, canRecheck: false, terminal: false };
+  const via = PATH_LABEL[pathOf(a)];
+  const f = a.local ?? null;
+  const facts = f ? factsLine(f, kind) : undefined;
+  if (a.phase === 'posting') return { ...base, label: `Sending to the device over ${via}…`, detail: null, tone: 'pending', facts };
+  if (a.phase === 'ambiguous') {
+    return {
+      ...base,
+      label: AMBIGUOUS_LABEL,
+      detail: `The write to the device may or may not have reached it. It was not resent, and not sent through the Backend.`,
+      tone: 'unknown',
+      canSendAgain: true,
+      mayHaveTransmitted: true,
+      terminal: true,
+      facts,
+    };
+  }
+  if (a.phase === 'rejected') {
+    const e = a.error;
+    const refused = f?.deviceError;
+    return {
+      ...base,
+      label: refused ? 'Refused by the device' : 'Not sent',
+      detail: refused ? `The device refused it (${refused.name}). Nothing was sent.` : `${e?.message ?? localReason(f?.reason ?? null)} ${NOT_WRITTEN}`,
+      tone: 'bad',
+      canSendAgain: true,
+      terminal: true,
+      facts,
+    };
+  }
+  // local: the device accepted the write.
+  if (!f) return { ...base, label: 'Accepted by the device', detail: null, tone: 'ok' };
+  if (kind === 'channel') {
+    return { ...base, label: 'Accepted by the device', detail: 'Channels give no delivery confirmation. Radio transmission is not observed.', tone: 'ok', terminal: true, facts };
+  }
+  if (f.dmAck) {
+    return {
+      ...base,
+      label: 'Acknowledged by the recipient device',
+      detail: 'The recipient device acknowledged it. This does not mean it was read.',
+      tone: 'ok',
+      terminal: true,
+      facts,
+    };
+  }
+  if (f.ackTimedOut) {
+    return {
+      ...base,
+      label: 'Accepted by the device — no acknowledgement yet',
+      detail: 'The wait for the recipient’s acknowledgement passed. That is not proof it was not delivered.',
+      tone: 'warn',
+      canSendAgain: true,
+      mayHaveTransmitted: true,
+      terminal: true,
+      facts,
+    };
+  }
+  return { ...base, label: 'Accepted by the device', detail: 'Waiting for the recipient device to acknowledge. Radio transmission is not observed.', tone: 'ok', facts };
+}
+
 export function describeAttempt(a: LocalAttempt, targetKind: 'contact' | 'channel'): StatusView {
+  if (pathOf(a) !== 'backend') return describeLocal(a, targetKind);
   const base = { canSendAgain: false, mayHaveTransmitted: false, canRecheck: false, terminal: false };
   if (a.phase === 'posting') {
     return { ...base, label: 'Sending…', detail: null, tone: 'pending' };
@@ -171,6 +294,7 @@ export function describeAttempt(a: LocalAttempt, targetKind: 'contact' | 'channe
 export function isUncertainAttempt(a: LocalAttempt): boolean {
   if (a.supersededBy) return false;
   if (a.phase === 'posting' || a.phase === 'ambiguous') return true;
+  if (pathOf(a) !== 'backend') return a.phase === 'local' && !describeAttempt(a, a.request.target.kind).terminal;
   if (a.phase === 'rejected') return false;
   const s = a.attempt;
   if (!s) return true;

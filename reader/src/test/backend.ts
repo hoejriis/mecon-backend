@@ -29,6 +29,8 @@ export const empty = (status = 204) => () => new Response(null, { status });
 export interface Call {
   method: string;
   path: string;
+  /** True for a Reader API call; false for static files such as /version.json. */
+  api: boolean;
   headers: Headers;
   body: string | null;
 }
@@ -47,6 +49,7 @@ export function createBackend() {
     calls.push({
       method,
       path,
+      api: url.startsWith('/api/reader/v1'),
       headers: new Headers(init?.headers),
       body: typeof init?.body === 'string' ? init.body : null,
     });

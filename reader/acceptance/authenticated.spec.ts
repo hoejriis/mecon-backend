@@ -58,6 +58,112 @@ test.describe('signed-in test users', () => {
     expect(shared, 'device ids visible to both users (count only)').toBe(0);
   });
 
+  // --- Features shipped since the first matrix. No test here sends a message: sends transmit
+  // over radio and stay manual rows. The only write is mark-read, which changes the test
+  // user's own read mark and transmits nothing. Everything prints counts, never content.
+
+  interface ConversationBody {
+    id: string;
+    unread_count: number;
+  }
+
+  test('Chats lists: conversations answer with the contract shape, and the screen shows the four filters and no Rooms', async ({ browser }) => {
+    const session = (await (await a.get(`${API}/session`)).json()) as SessionBody;
+    const res = await a.get(`${API}/conversations`);
+    if (session.capabilities.messaging !== 'available') {
+      expect([403, 404]).toContain(res.status()); // not offered: nothing to list
+      return;
+    }
+    expect(res.status()).toBe(200);
+    const body = (await res.json()) as { items: Array<Record<string, unknown>>; meta?: unknown };
+    expect(Array.isArray(body.items)).toBe(true);
+    for (const c of body.items) {
+      for (const k of ['id', 'identity_id', 'target', 'title', 'unread_count', 'last_activity_at']) expect(c, `conversation field ${k}`).toHaveProperty(k);
+    }
+    const context = await browser.newContext();
+    await context.addCookies([{ name: COOKIE_NAME, value: A!, url: BASE_URL, secure: true, httpOnly: true }]);
+    const page = await context.newPage();
+    await page.goto('/chats');
+    const chips = page.getByRole('group', { name: 'Filter conversations' });
+    for (const name of ['All', 'Unread', 'DMs', 'Channels']) await expect(chips.getByRole('button', { name })).toBeVisible();
+    await expect(chips.getByRole('button', { name: 'Rooms' })).toHaveCount(0);
+    await context.close();
+  });
+
+  test('mark-read: a conversation with unread messages goes to zero, and a repeat is a no-op', async () => {
+    const session = (await (await a.get(`${API}/session`)).json()) as SessionBody;
+    test.skip(session.capabilities.messaging !== 'available', 'messaging is not available to test user A');
+    const csrf = session.csrf_token;
+    const list = (await (await a.get(`${API}/conversations?limit=50`)).json()) as { items: ConversationBody[] };
+    const unread = list.items.find((c) => c.unread_count > 0);
+    test.skip(!unread, 'test user A has no conversation with unread messages (count: 0)');
+    const msgs = (await (await a.get(`${API}/conversations/${encodeURIComponent(unread!.id)}/messages?limit=1`)).json()) as {
+      items: Array<{ message_id: string }>;
+    };
+    const newest = msgs.items[0]?.message_id;
+    expect(newest, 'a newest message id').toBeTruthy();
+    const post = () =>
+      a.post(`${API}/conversations/${encodeURIComponent(unread!.id)}/read`, { headers: { 'X-CSRF-Token': csrf }, data: { up_to: newest } });
+    expect((await post()).status()).toBe(204);
+    expect((await post()).status()).toBe(204); // idempotent
+    const after = (await (await a.get(`${API}/conversations/${encodeURIComponent(unread!.id)}`)).json()) as ConversationBody;
+    expect(after.unread_count).toBe(0);
+    // Without the CSRF token the write is refused.
+    const bare = await a.post(`${API}/conversations/${encodeURIComponent(unread!.id)}/read`, { data: { up_to: newest } });
+    expect([401, 403]).toContain(bare.status());
+  });
+
+  test('the send path offers the Backend only when no device is connected, and never a fallback', async ({ browser }) => {
+    const session = (await (await a.get(`${API}/session`)).json()) as SessionBody;
+    test.skip(session.capabilities.messaging !== 'available', 'messaging is not available to test user A');
+    const list = (await (await a.get(`${API}/conversations?limit=1`)).json()) as { items: ConversationBody[] };
+    test.skip(list.items.length === 0, 'test user A has no conversation to open (count: 0)');
+    const context = await browser.newContext(); // a fresh browser has no Bluetooth or USB device connected
+    await context.addCookies([{ name: COOKIE_NAME, value: A!, url: BASE_URL, secure: true, httpOnly: true }]);
+    const page = await context.newPage();
+    await page.goto(`/chats/c/${encodeURIComponent(list.items[0]!.id)}`);
+    const sp = page.getByTestId('send-path');
+    await expect(sp.first()).toBeVisible();
+    // No radio choice is shown (a choice needs two paths), and neither device path is offered.
+    await expect(sp.getByRole('radio')).toHaveCount(0);
+    await expect(sp.getByRole('radio', { name: /Bluetooth|USB/ })).toHaveCount(0);
+    const text = (await sp.first().innerText()).replace(/\s+/g, ' ');
+    if (session.capabilities.send === 'available') expect(text).toContain('Sent through the Backend');
+    else expect(text).toContain('No send path is available'); // honest: nothing replaces it
+    // Nothing is typed or sent: the Send button stays disabled with an empty message.
+    await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeDisabled();
+    await context.close();
+  });
+
+  test('Map capability gating: observations unavailable or forbidden shows an honest state and makes no observation call', async ({ browser }) => {
+    const session = (await (await a.get(`${API}/session`)).json()) as SessionBody;
+    const cap = session.capabilities.observations;
+    const context = await browser.newContext();
+    await context.addCookies([{ name: COOKIE_NAME, value: A!, url: BASE_URL, secure: true, httpOnly: true }]);
+    const page = await context.newPage();
+    const calls: string[] = [];
+    page.on('request', (r) => {
+      const u = new URL(r.url());
+      if (u.pathname.startsWith('/api/observations/')) calls.push(u.pathname + (u.search.includes('scope=self') ? '?scope=self' : ''));
+    });
+    await page.goto('/map');
+    await expect(page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Map' })).toBeVisible();
+    if (cap !== 'available') {
+      await expect(page.locator('.state-unavailable, .state-forbidden').first()).toBeVisible();
+      await expect(page.locator('svg.obs-map')).toHaveCount(0);
+      expect(calls, 'observation requests while the capability is not available').toEqual([]);
+    } else {
+      await expect(page.getByText('Observer positions only')).toBeVisible();
+      expect(calls.every((c) => c.endsWith('?scope=self')), 'every observation request is scope=self').toBe(true);
+      // Located-only pins, and no route geometry of any kind.
+      const pins = await page.locator('svg.obs-map .obs-pin').count();
+      const rows = await page.locator('.obs-row').count();
+      expect(pins, 'pins never exceed listed observers').toBeLessThanOrEqual(rows);
+      await expect(page.locator('svg.obs-map line, svg.obs-map path, svg.obs-map polyline, svg.obs-map polygon')).toHaveCount(0);
+    }
+    await context.close();
+  });
+
   test('a session for A is not accepted on mecon.cloud', async () => {
     test.skip(true, 'MANUAL: the mecon.cloud authenticated path is not defined here; see MVP1_ACCEPTANCE.md row M1-04');
   });

@@ -311,6 +311,13 @@ export interface paths {
          *     returns the existing attempt and never sends twice. A client never
          *     answers an ambiguous result by creating a new attempt.
          *
+         *     **Sending switched off.** A Backend operator can switch Reader sending
+         *     off. Then this operation answers **403** with code `sending_disabled`
+         *     and `retryable: false`, before anything is read or recorded: nothing
+         *     was sent, and nothing will be. `GET /session` reports
+         *     `capabilities.send` as `unavailable` at the same time, so a client
+         *     that gates on capabilities never reaches this answer.
+         *
          *     **First channel send.** The first send to a channel creates the
          *     conversation server-side. Creation is idempotent per channel, so
          *     concurrent first sends land in one conversation, and a `conversation`

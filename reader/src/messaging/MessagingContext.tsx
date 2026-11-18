@@ -466,9 +466,12 @@ export function MessagingProvider({
         patchAttempt(a.clientAttemptId, { phase: 'ambiguous' });
       } else {
         patchAttempt(a.clientAttemptId, { phase: 'rejected', error: out.error });
+        // Sending was switched off after the session was read: refresh it so the
+        // send capability shows unavailable and the composer says so.
+        if (out.error.code === 'sending_disabled') void refreshSession();
       }
     },
-    [api, retryDelaysMs, patchAttempt, fetchConversations, fetchMessages],
+    [api, retryDelaysMs, patchAttempt, fetchConversations, fetchMessages, refreshSession],
   );
 
   const startAttempt = useCallback(

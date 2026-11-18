@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: MECON Reader API
-  version: 1.0.0-draft.5
+  version: 1.0.0-draft.6
   summary: Interface between the MECON Reader and an authorized MECON Backend.
   description: |
     Machine-readable form of docs/READER_API_CONTRACT.md. Target specification,
@@ -372,6 +372,13 @@ paths:
         so re-POSTing the same attempt (same `Idempotency-Key`, same body)
         returns the existing attempt and never sends twice. A client never
         answers an ambiguous result by creating a new attempt.
+
+        **Sending switched off.** A Backend operator can switch Reader sending
+        off. Then this operation answers **403** with code `sending_disabled`
+        and `retryable: false`, before anything is read or recorded: nothing
+        was sent, and nothing will be. `GET /session` reports
+        `capabilities.send` as `unavailable` at the same time, so a client
+        that gates on capabilities never reaches this answer.
 
         **First channel send.** The first send to a channel creates the
         conversation server-side. Creation is idempotent per channel, so

@@ -34,7 +34,9 @@ function toReject(e: unknown): RejectInfo {
             ? e.message || 'The Backend rejected this message.'
             : e.status === 429
               ? 'Too many sends. Wait a moment, then send again.'
-              : e.status === 403
+              : e.status === 403 && e.code === 'sending_disabled'
+                ? 'Sending is switched off on this Backend. Nothing was sent.'
+                : e.status === 403
                 ? 'You are not permitted to send this message.'
                 : e.message,
       requestId: e.requestId,

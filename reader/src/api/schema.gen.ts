@@ -200,7 +200,10 @@ export interface paths {
          *     Backend then emits a `conversation` event carrying the new
          *     `unread_count`. The Reader calls this when it opens a conversation
          *     whose `unread_count` is above 0; a failure is not fatal and is not
-         *     retried in a loop.
+         *     retried in a loop. An `up_to` older than the current read mark is a
+         *     successful no-op. An `up_to` that is not a message in this
+         *     conversation is 422 `validation_failed`; 404 is reserved for a
+         *     conversation the caller cannot see.
          */
         post: operations["markConversationRead"];
         delete?: never;
@@ -343,9 +346,10 @@ export interface paths {
          * @description `text/event-stream`. Each `data:` line is one `EventEnvelope`. Resume
          *     with the standard `Last-Event-ID` header or the `cursor` query
          *     parameter; both are accepted, and the header wins when both are
-         *     present. An expired cursor yields 410, and a cursor older than
-         *     retention may instead be answered with a reset event; the Reader then
-         *     reloads snapshots. Private content is never
+         *     present. An expired or out-of-retention cursor yields HTTP 410 with
+         *     code `cursor_expired` before the stream starts; there is no separate
+         *     reset event kind. The Reader then reloads snapshots and reconnects
+         *     without a cursor. Private content is never
          *     replayed after revocation.
          *
          *     **Cursor expiry is per endpoint.** Only `/events` cursors expire (410
@@ -981,6 +985,15 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             /** @description Not found or not visible to the caller, without disclosing existence */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `up_to` is not a message in this conversation (code `validation_failed`) */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

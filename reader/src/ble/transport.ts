@@ -19,7 +19,13 @@ export type BleErrorCode =
   | 'frame_too_large'
   | 'bad_argument'
   | 'link_desynced'
-  | 'busy';
+  | 'busy'
+  /** USB: the chosen port is already open elsewhere (another tab, a serial monitor, a flasher). */
+  | 'port_busy'
+  /** USB: the port went away (cable pulled, board reset into its bootloader, permission revoked). */
+  | 'port_lost'
+  /** The detected device does not support this operation (capabilities gate features, not roles). */
+  | 'unsupported_capability';
 
 export class BleError extends Error {
   constructor(
@@ -45,11 +51,22 @@ export type Unsubscribe = () => void;
 export type BlePhase = 'gatt_connected' | 'service_found' | 'characteristics_found' | 'notifications_started';
 
 
+export type TransportKind = 'ble' | 'usb';
+
+/** Why a link ended, when the transport can tell. `port_lost` is the USB `disconnect` event. */
+export type DisconnectReason = 'port_lost' | 'closed' | 'error';
+
 /**
- * One GATT link to one Companion. Transport only: it moves frames and reports
- * link loss; it knows nothing about commands, sends or outcomes.
+ * One link to one Companion, over BLE (GATT) or USB (Web Serial). Transport
+ * only: it moves whole protocol frames and reports link loss; it knows nothing
+ * about commands, sends or outcomes. The USB transport adds and strips the
+ * serial wrapper itself, so the adapter sees the same frames on both.
+ *
+ * `requestDevice` and `connect` keep their BLE-era names: for USB, requestDevice
+ * is the port chooser and connect opens the chosen port.
  */
-export interface BleTransport {
+export interface CompanionTransport {
+  readonly kind: TransportKind;
   readonly support: TransportSupport;
   /**
    * Shows the browser's device chooser. MUST be called synchronously from a user
@@ -64,7 +81,8 @@ export interface BleTransport {
    */
   connect(): Promise<void>;
   /**
-   * Writes exactly one protocol frame as exactly one GATT write. The protocol
+   * Writes exactly one protocol frame (BLE: as exactly one GATT write; USB: wrapped
+   * in one serial frame, handed to the port in one write). The protocol
    * defines one frame per write, so a frame is never split across writes.
    * Rejects not_connected or write_failed. A rejection does not prove the device
    * did not receive the frame.
@@ -74,7 +92,12 @@ export interface BleTransport {
   /** One call per notification, in order; the array is a private copy. */
   onFrame(cb: (frame: Uint8Array) => void): Unsubscribe;
   /** Link loss, whether initiated by the device, the OS, the browser or disconnect(). */
-  onDisconnect(cb: () => void): Unsubscribe;
+  onDisconnect(cb: (reason?: DisconnectReason) => void): Unsubscribe;
   /** Optional: reports connect sub-steps as they complete (used by the probe page). */
   onPhase?(cb: (phase: BlePhase) => void): Unsubscribe;
 }
+
+/** The BLE-era name, kept so existing imports and tests do not change. */
+export type BleTransport = CompanionTransport;
+/** The role-agnostic name for the same seam. */
+export type DeviceTransport = CompanionTransport;

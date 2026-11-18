@@ -92,3 +92,5 @@ and are not hardware evidence.
   a Companion needs the opposite order; the report shows which step failed.
 - The e2e tests inject a fake `navigator.bluetooth` with `addInitScript`
   against the production preview build; the app has no test-only code path.
+
+The USB counterpart for laptops (any device role, over Web Serial) is [USB_PROBE.md](USB_PROBE.md).

@@ -78,6 +78,9 @@ export async function collectEnvironment(nav: unknown = typeof navigator === 'un
  */
 export function guardTransport(inner: BleTransport, log: number[] = []): BleTransport {
   return {
+    get kind() {
+      return inner.kind;
+    },
     get support() {
       return inner.support;
     },

@@ -250,6 +250,39 @@ collect real-hardware evidence (see `docs/BLE_PROBE.md`). It is a lazy chunk and
 is not in the main bundle. The dev-only harness at `/dev/ble` is separate and
 is still stripped from production.
 
+## USB device access (Web Serial)
+
+Layers, from the cable up (`reader/src/device/`, `reader/src/ble/serialFraming.ts`):
+
+1. **Byte transport** (`webSerialTransport.ts`, interface `ByteTransport`): moves
+   bytes, knows nothing about roles. The chooser is called synchronously from a
+   user gesture; only the chosen port is ever opened; nothing reopens it after
+   a loss (`connect()` is explicit); writes are bounded and time out.
+2. **Identification** (`detect.ts`): after open, finds out what is on the port by
+   what it answers, in read-only requests only (see `docs/USB_PROBE.md`). The
+   primary path is the MECON firmware's role-agnostic device interface (`hello`
+   as a `mecon> ` console line or as `0x7F` frames, `meconIface.ts`); the stock
+   CLI (`cliText.ts`) and the Companion binary device query are fallbacks. The
+   result is "MECON firmware vX, role R, capabilities ..." or "not MECON /
+   unknown", and the role is never taken from a board name.
+3. **Drivers and capabilities** (`session.ts`): features are gated on the
+   detected capabilities, not on the role. The Companion messaging driver is the
+   existing adapter (`ble/adapter.ts`) over `companionSerial.ts` (serial
+   wrapper plus the resyncing deframer); it is attached only when the device
+   answered Companion frames. A device without `message.send.*` refuses a send
+   with `unsupported_capability` and writes nothing.
+4. **Send safety is the BLE adapter's**: an attempt is written at most once,
+   `unknown` is never resent or rerouted, every attempt records its `path`
+   (`usb` or `ble`). `unplugged` and `busy` are USB link states.
+
+`/dev/usb` is a dev-only harness (stripped from production). `/probe/usb` is the
+read-only page. The simulation (`device/sim/`) is a fake `navigator.serial` over
+`MockCompanion` (reused, with a serial wrapper) and `MockRepeater` (a console
+with the `mecon> ` interface), with line faults (split, coalesced, garbage,
+oversize length) and port faults (cancel, denied, busy, unplug, hang). `npm run e2e`
+writes `e2e-artifacts/usb-simulation-matrix.md`. Every result is SIMULATED; nothing
+claims hardware compatibility.
+
 ## Content Security Policy rule
 
 The Reader ships under a strict CSP (`script-src 'self'; style-src 'self'`,

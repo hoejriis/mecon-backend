@@ -26,3 +26,15 @@ devices.
 - `fixtures/`: synthetic byte fixtures, documented in `fixtures/README.md`.
 
 `npm run e2e` writes `e2e-artifacts/ble-simulation-matrix.md`.
+
+## USB (Web Serial)
+
+The same adapter runs over USB. `transport.ts` defines `CompanionTransport`
+(`kind: 'ble' | 'usb'`; `BleTransport` and `DeviceTransport` are aliases).
+`serialFraming.ts` is the Companion serial wrapper (marker, 16-bit length,
+payload) with a streaming deframer that resyncs on garbage and refuses lengths
+above `MAX_FRAME_SIZE`; its header lists the sources and the UNVERIFIED items.
+The USB transport, device identification, the read-only probe and the
+simulation live in `../device/` (see `docs/DEVELOPMENT.md`, "USB device
+access", and `docs/USB_PROBE.md`). All results are SIMULATED, not hardware
+verified.

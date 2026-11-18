@@ -51,6 +51,7 @@ interface Activation {
  * writes where needed).
  */
 export class WebBluetoothTransport implements BleTransport {
+  readonly kind = 'ble' as const;
   readonly support: TransportSupport;
   private readonly bt: WbBluetooth | null;
   private readonly nav: unknown;

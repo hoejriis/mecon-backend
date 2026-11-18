@@ -210,6 +210,7 @@ export class MockCompanion {
 
 /** BleTransport over a MockCompanion, with the connection-phase faults. */
 export class MockTransport implements BleTransport {
+  readonly kind = 'ble' as const;
   readonly support: TransportSupport;
   private frameCbs = new Set<(f: Uint8Array) => void>();
   private discCbs = new Set<() => void>();

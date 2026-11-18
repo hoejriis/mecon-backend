@@ -336,6 +336,21 @@ describe('send safety in the UI', () => {
     expect(posted()).toHaveLength(1);
   });
 
+  it('403 sending_disabled is a definite "Not sent", is not retried, and refreshes the session', async () => {
+    routes();
+    b.on('POST /send-attempts', json({ code: 'sending_disabled', message: 'off', request_id: 'r', retryable: false }, 403));
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    await openDm(user);
+    const sessionsBefore = b.calls.filter((c) => c.path === '/session').length;
+    await typeAndSend(user);
+    await screen.findByText('Not sent');
+    await screen.findByText(/Sending is switched off on this Backend/);
+    expect(screen.queryByText('Outcome unknown — not resent')).not.toBeInTheDocument();
+    await tick(60_000);
+    expect(posted()).toHaveLength(1);
+    expect(b.calls.filter((c) => c.path === '/session').length).toBeGreaterThan(sessionsBefore);
+  });
+
   it('a 503 is ambiguous: the SAME attempt is re-POSTed and the outcome is never shown as not sent', async () => {
     routes();
     b.on('POST /send-attempts', () => new Response('unavailable', { status: 503 }));

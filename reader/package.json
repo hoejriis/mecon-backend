@@ -11,6 +11,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "e2e": "playwright test",
+    "acceptance": "playwright test -c playwright.acceptance.config.ts",
     "gen:api": "node scripts/gen-api.mjs",
     "gen:api:check": "node scripts/gen-api.mjs --check"
   },

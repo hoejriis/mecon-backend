@@ -110,6 +110,21 @@ export interface MessagingValue {
   loadOlderMessages(conversationId: string): void;
   draftText(target: Target): string;
   setDraftText(target: Target, text: string): void;
+  /** The `client_draft_id` of the composer's current draft for a target, or null when there is none. */
+  draftIdFor(target: Target): string | null;
+  /**
+   * Put a persisted draft back into the composer under its ORIGINAL draft id.
+   * Does nothing when the composer already holds text for that target.
+   */
+  restoreDraft(target: Target, draftId: string, text: string): void;
+  /**
+   * Load cached attempts (original attempt id, draft id, request, evidence) into
+   * the view after a reload. NEVER sends: a `posting` attempt becomes
+   * `ambiguous` (shown as unknown), and where the server attempt id is known
+   * its state is read back with GET /send-attempts/{id} once the send
+   * capability is available. Only the explicit "Send again" makes a new attempt.
+   */
+  rehydrate(records: LocalAttempt[]): void;
   /** Explicit Send tap: a new attempt id, same draft id until it is sent. */
   send(target: Target, identityId: string): void;
   /** Explicit "Send again": a NEW attempt id for the same draft. */
@@ -165,6 +180,9 @@ export function MessagingProvider({
   const msgSeq = useRef(new Map<string, number>());
   const attemptsRef = useRef<LocalAttempt[]>([]);
   attemptsRef.current = attempts;
+  // Rehydrated attempts whose server state is read back once sends are available.
+  const pendingRefresh = useRef(new Set<string>());
+  const [rehydrateGen, bumpRehydrate] = useState(0);
 
   // An update or reload would lose the in-memory drafts and the local view of
   // uncertain attempts; tell the update flow so it asks first.
@@ -343,9 +361,10 @@ export function MessagingProvider({
     [api, messaging],
   );
 
-  const refreshAttempt = useCallback(
+  /** GET /send-attempts/{id}: idempotent and read-only. The caller checks the send capability. */
+  const readAttempt = useCallback(
     async (a: LocalAttempt) => {
-      if (a.phase !== 'accepted' || !a.attempt || sendState !== 'available') return;
+      if (a.phase !== 'accepted' || !a.attempt) return;
       try {
         const fresh: SendAttempt = await api.getSendAttempt(a.attempt.id);
         patchAttempt(a.clientAttemptId, { attempt: fresh });
@@ -353,8 +372,47 @@ export function MessagingProvider({
         /* keep what we have; the next event or poll tries again */
       }
     },
-    [api, sendState, patchAttempt],
+    [api, patchAttempt],
   );
+
+  const refreshAttempt = useCallback(
+    async (a: LocalAttempt) => {
+      if (sendState !== 'available') return;
+      await readAttempt(a);
+    },
+    [sendState, readAttempt],
+  );
+
+  /** Rehydration is read-only: this only ever calls GET (through refreshAttempt), never POST. */
+  const rehydrate = useCallback(
+    (records: LocalAttempt[]) => {
+      if (!messaging) return;
+      const have = new Set(attemptsRef.current.map((a) => a.clientAttemptId));
+      const fresh = records
+        .filter((r) => !have.has(r.clientAttemptId))
+        // An attempt in flight when the page died has an unknown outcome.
+        .map((r): LocalAttempt => (r.phase === 'posting' ? { ...r, phase: 'ambiguous' } : r));
+      if (fresh.length === 0) return;
+      attemptsRef.current = [...attemptsRef.current, ...fresh].sort((a, b) => a.createdAt - b.createdAt);
+      setAttempts(attemptsRef.current);
+      for (const a of fresh) {
+        if (a.phase === 'accepted' && a.attempt?.id && !a.supersededBy) pendingRefresh.current.add(a.clientAttemptId);
+      }
+      bumpRehydrate((n) => n + 1);
+    },
+    [messaging],
+  );
+
+  // Read back the server's state for rehydrated attempts, once sends are available.
+  useEffect(() => {
+    if (!messaging || sendState !== 'available' || pendingRefresh.current.size === 0) return;
+    const ids = [...pendingRefresh.current];
+    pendingRefresh.current.clear();
+    for (const id of ids) {
+      const a = attemptsRef.current.find((x) => x.clientAttemptId === id);
+      if (a) void readAttempt(a);
+    }
+  }, [messaging, sendState, rehydrateGen, readAttempt]);
 
   const resetSnapshots = useCallback(() => {
     msgSeq.current.clear();
@@ -445,6 +503,7 @@ export function MessagingProvider({
     setDeepLinks({});
     readTried.current.clear();
     setAttempts([]);
+    pendingRefresh.current.clear();
     drafts.current.clear();
   }, [messaging]);
 
@@ -553,11 +612,19 @@ export function MessagingProvider({
         drafts.current.set(k, { draftId: cur?.draftId ?? newDraftId(), text });
         bumpDrafts((n) => n + 1);
       },
+      draftIdFor: (t: Target) => drafts.current.get(targetKey(t))?.draftId ?? null,
+      restoreDraft: (t: Target, draftId: string, text: string) => {
+        const k = targetKey(t);
+        if ((drafts.current.get(k)?.text ?? '') !== '' || text.trim() === '') return;
+        drafts.current.set(k, { draftId, text });
+        bumpDrafts((n) => n + 1);
+      },
+      rehydrate,
       send,
       sendAgain,
       recheck,
     }),
-    [fetchConversations, fetchChannels, fetchIdentities, fetchMessages, fetchConversation, markRead, send, sendAgain, recheck],
+    [rehydrate, fetchConversations, fetchChannels, fetchIdentities, fetchMessages, fetchConversation, markRead, send, sendAgain, recheck],
   );
 
   const value = useMemo<MessagingValue>(

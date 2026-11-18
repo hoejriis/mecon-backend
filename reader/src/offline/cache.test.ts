@@ -245,3 +245,37 @@ describe('bounds and eviction', () => {
     expect(await cache.listDrafts()).toEqual([]);
   });
 });
+
+describe('draft keys', () => {
+  const T = { kind: 'contact', id: 'ct_1' } as const;
+  it('a draft is stored and listed under its own client_draft_id, the target kept with it', async () => {
+    const { cache } = await setup();
+    await cache.saveDraft({ draftId: 'real-id-1', target: T, identityId: null, text: 'hello', updatedAt: 1 });
+    expect(await cache.listDrafts()).toEqual([{ draftId: 'real-id-1', target: T, identityId: null, text: 'hello', updatedAt: 1 }]);
+    await cache.deleteDraft('real-id-1');
+    expect(await cache.listDrafts()).toEqual([]);
+  });
+
+  it('migrates a legacy draft:<target> record on read, once, keeping text and target', async () => {
+    const { cache, store } = await setup();
+    await cache.saveDraft({ draftId: 'draft:contact:ct_1', target: T, identityId: null, text: 'old text', updatedAt: 7 });
+    const before = (await store.keys('')).filter((k) => k.includes('/draft/')).sort();
+    const first = await cache.listDrafts();
+    expect(first).toHaveLength(1);
+    expect(first[0]).toMatchObject({ target: T, text: 'old text', updatedAt: 7 });
+    expect(first[0]!.draftId).not.toMatch(/^draft:/);
+    const after = (await store.keys('')).filter((k) => k.includes('/draft/'));
+    expect(after).toHaveLength(1);
+    expect(after).not.toEqual(before); // the legacy slot is gone
+    // A second read finds the same migrated id: nothing is migrated twice.
+    expect(await cache.listDrafts()).toEqual(first);
+  });
+
+  it('drops a legacy record when a real-id draft for the same target is at least as new', async () => {
+    const { cache } = await setup();
+    await cache.saveDraft({ draftId: 'draft:contact:ct_1', target: T, identityId: null, text: 'legacy', updatedAt: 5 });
+    await cache.saveDraft({ draftId: 'real-2', target: T, identityId: null, text: 'newer', updatedAt: 9 });
+    expect((await cache.listDrafts()).map((d) => d.draftId)).toEqual(['real-2']);
+    expect((await cache.listDrafts()).map((d) => d.draftId)).toEqual(['real-2']);
+  });
+});

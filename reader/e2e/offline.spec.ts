@@ -17,8 +17,8 @@ async function addAuthenticator(page: Page, context: BrowserContext, hasPrf = tr
 
 async function signedInAndCached(page: Page, context: BrowserContext, lease: Parameters<typeof mockLeaseBackend>[1] = {}) {
   await addAuthenticator(page, context);
-  await mockMessagingBackend(page);
-  const be = await mockLeaseBackend(page, lease);
+  const msg = await mockMessagingBackend(page);
+  const be = Object.assign(await mockLeaseBackend(page, lease), { msg });
   await page.goto(`${ORIGIN}/settings`);
   await page.getByRole('button', { name: 'Set up with a passkey' }).click();
   await expect(page.getByText('Unlocked with a passkey')).toBeVisible({ timeout: 15_000 });
@@ -163,5 +163,34 @@ test.describe('offline cache and lease (Backend simulated)', () => {
     await page.getByRole('button', { name: 'Lock offline data' }).click();
     await page.getByRole('button', { name: 'Unlock with passkey' }).click();
     await expect(page.getByText('Unlocked with a passkey')).toBeVisible({ timeout: 15_000 });
+  });
+
+  test('an ambiguous send survives a reload: after unlock it shows as unknown in its conversation, and nothing is posted again', async ({ page, context }) => {
+    const be = await signedInAndCached(page, context);
+    be.msg.postMode = 'abort'; // the POST gets no usable answer: ambiguous
+    await page.getByRole('textbox', { name: 'Message', exact: true }).fill('maybe sent');
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(page.getByText('Outcome unknown — not resent')).toBeVisible();
+    await page.waitForTimeout(400); // the attempt is written through to the encrypted cache; the first same-attempt retry is 1.5 s away
+    expect(be.msg.posts).toHaveLength(1);
+    const attemptId = be.msg.posts[0]!.body.client_attempt_id;
+
+    await page.reload(); // the in-memory attempt is gone; keys are gone too
+    await page.goto(`${ORIGIN}/settings`);
+    await expect(page.getByText('Offline data is locked on this device.')).toBeVisible();
+    await page.getByRole('button', { name: 'Unlock with passkey' }).click();
+    await expect(page.getByText('Unlocked with a passkey')).toBeVisible({ timeout: 15_000 });
+    await page.getByRole('link', { name: 'Chats' }).click();
+    await page.getByRole('link', { name: /Demo Peer \(merged pair\)/ }).click();
+    await expect(page.getByText('Hello from the peer')).toBeVisible();
+    await expect(page.getByText('Outcome unknown — not resent')).toBeVisible();
+    await expect(page.getByText('maybe sent')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Send again' })).toBeVisible();
+    await page.screenshot({ path: 'e2e-artifacts/offline-rehydrated-unknown-attempt.png' });
+
+    // Longer than the retry delays a live send would use: still the one POST, same attempt id.
+    await page.waitForTimeout(7000);
+    expect(be.msg.posts).toHaveLength(1);
+    expect(be.msg.posts[0]!.body.client_attempt_id).toBe(attemptId);
   });
 });

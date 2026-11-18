@@ -15,6 +15,7 @@
  */
 import type { Conversation, Message, Target } from '../api/types';
 import type { LocalAttempt } from '../messaging/attemptStatus';
+import { newDraftId } from '../messaging/sendFlow';
 import { runMigrations, type KvStore, type MigrationResult } from '../storage/migrations';
 import { openJson, sealJson, slotToken, type Purpose, type Sealed } from './crypto';
 import { userToken } from './crypto';
@@ -45,6 +46,10 @@ export interface DraftRecord {
 }
 /** A send attempt as the Reader tracks it (see messaging/attemptStatus). */
 export type AttemptRecord = LocalAttempt;
+
+const targetKey = (t: Target) => `${t.kind}:${t.id}`;
+/** The pre-migration key shape: the target stood in for the draft id. */
+const isLegacyDraftId = (d: DraftRecord) => d.draftId === `draft:${targetKey(d.target)}`;
 
 export class StorageFullError extends Error {
   constructor() {
@@ -286,8 +291,32 @@ export class OfflineCache {
     if (d.text.trim() === '') return this.deleteRecord('draft', d.draftId);
     await this.putRecord('draft', d.draftId, d);
   }
+  /**
+   * Drafts are keyed by their real `client_draft_id`. Older Readers keyed them
+   * `draft:<kind>:<id>` (the id was not the draft's own). Those are migrated
+   * lazily, here on read: re-saved under a freshly minted draft id, then the
+   * legacy slot is removed. A legacy record has no draft id of its own, so it
+   * could never match an attempt. This is a cache-level rewrite rather than a
+   * schema migration because it needs the unlock keys, which the migration
+   * runner (it runs before unlock) does not have.
+   */
   async listDrafts(): Promise<DraftRecord[]> {
-    return this.listRecords<DraftRecord>('draft');
+    const all = await this.listRecords<DraftRecord>('draft');
+    const out: DraftRecord[] = [];
+    for (const d of all) {
+      if (!isLegacyDraftId(d)) {
+        out.push(d);
+        continue;
+      }
+      const newer = all.some((o) => o !== d && !isLegacyDraftId(o) && targetKey(o.target) === targetKey(d.target) && o.updatedAt >= d.updatedAt);
+      if (!newer) {
+        const migrated: DraftRecord = { ...d, draftId: newDraftId() };
+        await this.saveDraft(migrated);
+        out.push(migrated);
+      }
+      await this.deleteRecord('draft', d.draftId);
+    }
+    return out;
   }
   async deleteDraft(draftId: string): Promise<void> {
     await this.deleteRecord('draft', draftId);

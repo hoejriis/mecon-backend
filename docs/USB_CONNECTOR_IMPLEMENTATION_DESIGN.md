@@ -49,4 +49,24 @@ Publish a versioned **USB↔MQTT interoperability contract** and synthetic seria
 
 Private Backend topic/ACL/envelope mapping and device-control-link arbitration; public firmware native USB framing and capability matrix; Pi Zero 2 W actual resource measurements; broker TLS credentials and test environment. These are **contract/verification dependencies**, not new product decisions. No public Backend rewrite, Reader UI or full broker deployment required to implement C0/C1.
 
+## Status
+
+Updated 18 November 2026. Nothing below has run against hardware or the private Backend.
+
+| Stage | State |
+| --- | --- |
+| C0 contract and fixtures | **Draft published** in `contracts/connector/v1` (mapping, schemas, synthetic fixtures, validator in the contracts CI). Topic names are provisional. Q1, Q2, Q3 and Q5 in `mapping.json` are answered; Q4 and Q6 are open. The fake serial device and fake and real-mosquitto broker harness are in `connector/tests`. |
+| C1 transport | **Core implemented** in `connector/` (Python; see "Runtime choice" below): serial selection by stable id, bounded framing, transparent forwarding both ways, one broker session with fallback and backoff, bounded queues with counted drops, health and metrics, and the enrolment gate on downlink (below). Verified with unit tests, fakes and a real mosquitto in CI, plus a mutation check of the transport-safety rules. Not verified on a USB device, a Pi or against the Backend. |
+| C2 local deployment | Not started. A container image exists; systemd packaging, USB permissions on a real Pi, TLS secret handling and Pi Zero 2 W measurements are open. |
+| C3 interoperability | Not started. Needs the Backend's topic and ACL mapping, a real public-firmware device (including the real `deployment.get`, `epoch` and `usig` behaviour the gate relies on), and a firmware answer on whether an enrolled device accepts any unsigned read of data only the Backend should see. |
+| C4 acceptance | Not started. |
+
 Related: [Reader MVP2 design](READER_MVP2_DESIGN.md), [components](COMPONENTS.md), [deployments](DEPLOYMENTS.md), [ADR](ARCHITECTURE_DECISIONS.md).
+
+## Downlink enrolment gate
+
+The firmware gives an unsigned USB cable caller local trust, and an unenrolled device accepts unsigned first provisioning and resets from it. The Connector would carry that trust onto the broker. Owner decision (18 November 2026): it relays broker messages to the device only while the device reports an enrolled Deployment record, learned from the device (`deployment.get`, `result.state` `provisioned`), never from configuration, and fails closed on anything else. It asks at attach, at each broker connection, on a new boot epoch and periodically; it closes at once on the first uplink interface message without `usig`; refused messages are counted, never held. Unsigned reads are relayed for an enrolled device, with no signature check on relayed content. Its own request and the answer are not published upstream. Detail: `enrolment_gate` in the contract and the Connector README.
+
+## Runtime choice
+
+An engineering choice, not an accepted product decision: the Connector is Python 3.11+ with hash-pinned dependencies (`paho-mqtt`, `pyserial`), a single-process bridge loop plus paho's network thread, and a non-root multi-arch container. Both dependencies are pure Python, so a Pi Zero 2 W needs no per-platform native serial module; the framing rules stay small, testable functions. Interpreter memory on a Pi Zero 2 W is not yet measured. It forwards device envelopes unchanged and never replays a device command: a publish with an unknown outcome is counted, not resent. Contract: `contracts/connector/v1` (draft, topic names provisional).

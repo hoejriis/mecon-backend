@@ -1,0 +1,158 @@
+{
+ "contract": "mecon-usb-connector/1.0.0-draft.1",
+ "synthetic": true,
+ "note": "Synthetic test data. No real device id, key, signature or credential.",
+ "direction": "enrolment_gate",
+ "cases": [
+  {
+   "id": "provisioned-opens",
+   "description": "Only result.state \"provisioned\" opens downlink; the request is a read and never goes upstream.",
+   "mode": "companion",
+   "enrolment": "provisioned",
+   "expect": {
+    "probe_request_hex": "3c2d007f0100017b2276223a312c226964223a2263672d31222c226f70223a226465706c6f796d656e742e676574227d",
+    "gate_open": true,
+    "probe_result": "provisioned",
+    "upstream_publishes": 0
+   },
+   "then": []
+  },
+  {
+   "id": "provisioned-opens-console",
+   "description": "The same on a console, as one `mecon> ` line.",
+   "mode": "console",
+   "enrolment": "provisioned",
+   "expect": {
+    "probe_request_hex": "6d65636f6e3e207b2276223a312c226964223a2263672d31222c226f70223a226465706c6f796d656e742e676574227d0d",
+    "gate_open": true,
+    "probe_result": "provisioned",
+    "upstream_publishes": 0
+   },
+   "then": []
+  },
+  {
+   "id": "closed-none",
+   "description": "Device answer 'none' keeps downlink closed (fails closed).",
+   "mode": "companion",
+   "enrolment": "none",
+   "expect": {
+    "probe_request_hex": "3c2d007f0100017b2276223a312c226964223a2263672d31222c226f70223a226465706c6f796d656e742e676574227d",
+    "gate_open": false,
+    "probe_result": "none",
+    "upstream_publishes": 0
+   },
+   "then": []
+  },
+  {
+   "id": "closed-corrupt",
+   "description": "Device answer 'corrupt' keeps downlink closed (fails closed).",
+   "mode": "companion",
+   "enrolment": "corrupt",
+   "expect": {
+    "probe_request_hex": "3c2d007f0100017b2276223a312c226964223a2263672d31222c226f70223a226465706c6f796d656e742e676574227d",
+    "gate_open": false,
+    "probe_result": "corrupt",
+    "upstream_publishes": 0
+   },
+   "then": []
+  },
+  {
+   "id": "closed-refused",
+   "description": "Device answer 'refused' keeps downlink closed (fails closed).",
+   "mode": "companion",
+   "enrolment": "refused",
+   "expect": {
+    "probe_request_hex": "3c2d007f0100017b2276223a312c226964223a2263672d31222c226f70223a226465706c6f796d656e742e676574227d",
+    "gate_open": false,
+    "probe_result": "refused",
+    "upstream_publishes": 0
+   },
+   "then": []
+  },
+  {
+   "id": "closed-bad-state",
+   "description": "Device answer 'bad_state' keeps downlink closed (fails closed).",
+   "mode": "companion",
+   "enrolment": "bad_state",
+   "expect": {
+    "probe_request_hex": "3c2d007f0100017b2276223a312c226964223a2263672d31222c226f70223a226465706c6f796d656e742e676574227d",
+    "gate_open": false,
+    "probe_result": "malformed",
+    "upstream_publishes": 0
+   },
+   "then": []
+  },
+  {
+   "id": "closed-silent",
+   "description": "Device answer 'silent' keeps downlink closed (fails closed).",
+   "mode": "companion",
+   "enrolment": "silent",
+   "expect": {
+    "probe_request_hex": "3c2d007f0100017b2276223a312c226964223a2263672d31222c226f70223a226465706c6f796d656e742e676574227d",
+    "gate_open": false,
+    "probe_result": "timeout",
+    "upstream_publishes": 0
+   },
+   "then": []
+  },
+  {
+   "id": "closed-garbage",
+   "description": "Device answer 'garbage' keeps downlink closed (fails closed). Bytes that do not parse cannot be told from device traffic, so they are forwarded.",
+   "mode": "companion",
+   "enrolment": "garbage",
+   "expect": {
+    "probe_request_hex": "3c2d007f0100017b2276223a312c226964223a2263672d31222c226f70223a226465706c6f796d656e742e676574227d",
+    "gate_open": false,
+    "probe_result": "timeout",
+    "upstream_publishes": 1
+   },
+   "then": []
+  },
+  {
+   "id": "unsigned-uplink-closes",
+   "description": "The first uplink message without usig closes downlink at once; it is still forwarded unchanged.",
+   "mode": "companion",
+   "enrolment": "provisioned",
+   "expect": {
+    "probe_request_hex": "3c2d007f0100017b2276223a312c226964223a2263672d31222c226f70223a226465706c6f796d656e742e676574227d",
+    "gate_open": true,
+    "probe_result": "provisioned",
+    "upstream_publishes": 0
+   },
+   "then": [
+    {
+     "uplink": "signed_event",
+     "enrolment_after": null,
+     "gate_open_after": true,
+     "forwarded": true
+    },
+    {
+     "uplink": "unsigned_event",
+     "enrolment_after": "none",
+     "gate_open_after": false,
+     "forwarded": true
+    }
+   ]
+  },
+  {
+   "id": "new-epoch-closes-and-rechecks",
+   "description": "A new epoch (a reboot) closes downlink and asks again; the device still answers provisioned, so it reopens.",
+   "mode": "companion",
+   "enrolment": "provisioned",
+   "expect": {
+    "probe_request_hex": "3c2d007f0100017b2276223a312c226964223a2263672d31222c226f70223a226465706c6f796d656e742e676574227d",
+    "gate_open": true,
+    "probe_result": "provisioned",
+    "upstream_publishes": 0
+   },
+   "then": [
+    {
+     "uplink": "new_epoch_event",
+     "enrolment_after": null,
+     "gate_open_after": true,
+     "forwarded": true
+    }
+   ]
+  }
+ ]
+}

@@ -248,7 +248,9 @@ function MessageThread({ conversation, target }: { conversation: Conversation | 
   const id = conversation?.id ?? null;
   const page = id ? m.messagesFor(id) : null;
   const attempts = m.attemptsFor(target);
-  const { openConversation, loadMessages } = m;
+  const { openConversation, loadMessages, markRead } = m;
+  const unread = conversation?.unread_count ?? 0;
+  const newestId = page?.status === 'ready' ? (page.items[0]?.message_id ?? null) : null;
 
   useEffect(() => {
     if (!id) return;
@@ -256,6 +258,12 @@ function MessageThread({ conversation, target }: { conversation: Conversation | 
     loadMessages(id);
     return () => openConversation(null);
   }, [id, openConversation, loadMessages]);
+
+  // Opening a conversation with unread messages marks it read up to the newest
+  // loaded message. Once per (conversation, message); failures are not retried.
+  useEffect(() => {
+    if (id && unread > 0 && newestId) markRead(id, newestId);
+  }, [id, unread, newestId, markRead]);
 
   const idents = m.identities.items;
   const nameOf = (identityId: string | null) =>
@@ -394,7 +402,7 @@ function ConversationView({
   title,
 }: {
   conversation: Conversation | null;
-  target: Target | null;
+  target: Target;
   title: string;
 }) {
   return (
@@ -403,32 +411,51 @@ function ConversationView({
         <Link to="/chats">Back to conversations</Link>
       </p>
       <h2 className="conv-heading">{title}</h2>
-      {target ? (
-        <>
-          <MessageThread conversation={conversation} target={target} />
-          <Composer target={target} defaultIdentityId={conversation?.identity_id ?? null} />
-        </>
-      ) : (
-        <Unavailable
-          title="Cannot reply here"
-          body="This conversation is not in the loaded list, so its target is unknown. Open it from the list."
-        />
-      )}
+      <MessageThread conversation={conversation} target={target} />
+      <Composer target={target} defaultIdentityId={conversation?.identity_id ?? null} />
     </div>
   );
 }
 
 function ConversationRoute() {
   const { conversationId = '' } = useParams();
-  const { conversations } = useMessaging();
-  const conv = conversations.items.find((c) => c.id === conversationId) ?? null;
+  const { conversations, deepLinkFor, loadConversation } = useMessaging();
+  const online = useOnline();
+  const listed = conversations.items.find((c) => c.id === conversationId) ?? null;
+  const listSettled = conversations.status === 'ready' || conversations.status === 'error';
+  // A deep link outside the loaded pages is fetched by id once the list has settled.
+  useEffect(() => {
+    if (!listed && listSettled) loadConversation(conversationId);
+  }, [listed, listSettled, conversationId, loadConversation]);
+  const link = deepLinkFor(conversationId);
+  const conv = listed ?? (link?.status === 'ready' ? link.conversation : null);
+  if (conv) {
+    return <ConversationView key={conversationId} conversation={conv} target={conv.target} title={conv.title} />;
+  }
+  let body;
+  if (link?.status === 'notfound') {
+    body = (
+      <Unavailable
+        title="Conversation not found"
+        body="This conversation does not exist or is not available to your account."
+      />
+    );
+  } else if (link?.status === 'error') {
+    body = online ? (
+      <ErrorState title="Could not load this conversation" body={link.error} requestId={link.requestId} />
+    ) : (
+      <Offline />
+    );
+  } else {
+    body = online ? <Loading label="Loading conversation" /> : <Offline />;
+  }
   return (
-    <ConversationView
-      key={conversationId}
-      conversation={conv ?? ({ id: conversationId } as Conversation)}
-      target={conv?.target ?? null}
-      title={conv?.title ?? 'Conversation'}
-    />
+    <div className="conv-view">
+      <p className="secondary-link back-link">
+        <Link to="/chats">Back to conversations</Link>
+      </p>
+      {body}
+    </div>
   );
 }
 

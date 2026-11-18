@@ -59,6 +59,36 @@ for (const vp of VIEWPORTS) {
       expect(violations).toEqual([]);
     });
 
+    test('a deep link outside the loaded list is fetched by id; an unknown id says not found', async ({ page }) => {
+      const be = await mockMessagingBackend(page);
+      await page.goto('/chats/c/conv_demo_0009');
+      await expect(page.getByRole('heading', { name: 'Deep Link Peer' })).toBeVisible();
+      await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toBeVisible();
+      await expect(page.getByText('Cannot reply here')).toHaveCount(0);
+      await page.goto('/chats/c/conv_nobody');
+      await expect(page.getByText('Conversation not found')).toBeVisible();
+      await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toHaveCount(0);
+      expect(be.conversationGets).toEqual(['conv_demo_0009', 'conv_nobody']);
+    });
+
+    test('opening an unread conversation marks it read once with CSRF; a read one sends nothing', async ({ page }) => {
+      const be = await mockMessagingBackend(page);
+      await openDm(page);
+      await expect.poll(() => be.reads.length).toBe(1);
+      expect(be.reads[0]).toEqual({
+        conversationId: 'conv_demo_0001',
+        csrf: 'csrf_synthetic_0123456789abcdef',
+        body: { up_to: 'msg_dm_0001' },
+      });
+      await page.waitForTimeout(1500);
+      expect(be.reads).toHaveLength(1);
+      await page.goto('/chats');
+      await page.getByRole('link', { name: /Demo Channel/ }).click();
+      await expect(page.getByText('Synthetic channel message')).toBeVisible();
+      await page.waitForTimeout(500);
+      expect(be.reads).toHaveLength(1);
+    });
+
     test('an ambiguous POST failure shows unknown and posts exactly one attempt id until the user sends again', async ({ page }) => {
       const be = await mockMessagingBackend(page);
       be.postMode = 'abort';

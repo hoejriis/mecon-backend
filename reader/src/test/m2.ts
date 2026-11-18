@@ -10,10 +10,14 @@ import type {
   SendStatus,
   EventEnvelope,
 } from '../api/types';
+import conversationOne from '../../../contracts/reader-api/v1/fixtures/conversation-one.json';
+import error404 from '../../../contracts/reader-api/v1/fixtures/error-404-conversation.json';
 import mergedPair from '../../../contracts/reader-api/v1/fixtures/conversations-merged-pair.json';
 import channelMessages from '../../../contracts/reader-api/v1/fixtures/messages-channel-null-identity.json';
 import deviceUnknown from '../../../contracts/reader-api/v1/fixtures/send-attempt-device-unknown.json';
 import unsupportedTransmitted from '../../../contracts/reader-api/v1/fixtures/send-attempt-unsupported-transmitted.json';
+
+export const notFound404 = error404;
 
 export const AS_OF = '2030-01-15T10:00:00Z';
 
@@ -26,6 +30,14 @@ export const identities: Identity[] = [
 ];
 
 export const dmConversation = mergedPair.items[0] as Conversation;
+
+/** A conversation outside the first list page, as GET /conversations/{id} returns it. */
+export const deepConversation: Conversation = {
+  ...(conversationOne as Conversation),
+  id: 'conv_demo_0009',
+  title: 'Deep Link Peer',
+  unread_count: 0,
+};
 
 export const channelConversation: Conversation = {
   id: 'conv_demo_0002',

@@ -10,9 +10,11 @@ import {
   channelConversation,
   channelMsgs,
   channels,
+  deepConversation,
   dmConversation,
   dmMessages,
   identities,
+  notFound404,
   olderConversation,
   page,
 } from './m2';
@@ -163,6 +165,81 @@ describe('conversation view', () => {
   });
 });
 
+describe('deep link to a conversation outside the loaded pages', () => {
+  it('fetches it by id and shows its target and composer', async () => {
+    routes();
+    b.on(`GET /conversations/${deepConversation.id}`, json(deepConversation));
+    b.on(`GET /conversations/${deepConversation.id}/messages?limit=50`, json(page([])));
+    mount(`/chats/c/${deepConversation.id}`);
+    expect(await screen.findByRole('heading', { name: 'Deep Link Peer' })).toBeInTheDocument();
+    expect(await screen.findByLabelText('Message')).toBeInTheDocument();
+    expect(screen.queryByText('Cannot reply here')).not.toBeInTheDocument();
+    expect(b.count(`GET /conversations/${deepConversation.id}`)).toBe(1);
+  });
+
+  it('a 404 is an honest not-found state with no composer and no messages request', async () => {
+    routes();
+    b.on('GET /conversations/conv_missing', json(notFound404, 404));
+    mount('/chats/c/conv_missing');
+    expect(await screen.findByText('Conversation not found')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Message')).not.toBeInTheDocument();
+    expect(b.calls.filter((c) => c.path.includes('conv_missing/messages'))).toEqual([]);
+  });
+
+  it('a listed conversation is not fetched by id', async () => {
+    routes();
+    b.on(`POST /conversations/${dmConversation.id}/read`, () => new Response(null, { status: 204 }));
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    await openDm(user);
+    expect(b.calls.filter((c) => c.path === `/conversations/${dmConversation.id}`)).toEqual([]);
+  });
+});
+
+describe('mark read', () => {
+  const readKey = `POST /conversations/${dmConversation.id}/read`;
+
+  it('opening a conversation with unread messages POSTs up_to the newest message once, with CSRF', async () => {
+    routes();
+    b.on(readKey, () => new Response(null, { status: 204 }));
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    await openDm(user);
+    await waitFor(() => expect(b.count(readKey)).toBe(1));
+    const call = b.callsTo(readKey)[0]!;
+    expect(JSON.parse(call.body!)).toEqual({ up_to: 'msg_dm_0002' });
+    expect(call.headers.get('X-CSRF-Token')).toBe('csrf_synthetic_0123456789abcdef');
+    await tick(10_000);
+    expect(b.count(readKey)).toBe(1);
+  });
+
+  it('is not sent when unread_count is 0', async () => {
+    routes();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    mount();
+    await user.click(await screen.findByRole('link', { name: /Demo Channel/ }));
+    await screen.findByText('Synthetic channel message');
+    await tick(5_000);
+    expect(b.calls.filter((c) => c.path.endsWith('/read'))).toEqual([]);
+  });
+
+  it('a failure is non-fatal and never retried in a loop', async () => {
+    routes();
+    b.on(readKey, json({ code: 'unavailable', message: 'x', request_id: 'r', retryable: true }, 503));
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    await openDm(user);
+    await waitFor(() => expect(b.count(readKey)).toBe(1));
+    await tick(60_000);
+    expect(b.count(readKey)).toBe(1);
+    expect(screen.getByText('Hello from the peer')).toBeInTheDocument();
+  });
+
+  it('is not sent when messaging is unavailable', async () => {
+    routes({ messaging: 'unavailable' });
+    mount(`/chats/c/${dmConversation.id}`);
+    await tick(2_000);
+    expect(b.calls.filter((c) => c.path !== '/session')).toEqual([]);
+  });
+});
+
 describe('send safety in the UI', () => {
   async function typeAndSend(user: ReturnType<typeof userEvent.setup>, text = 'hello there') {
     await user.type(screen.getByLabelText('Message'), text);
@@ -244,6 +321,31 @@ describe('send safety in the UI', () => {
     await tick(60_000);
     expect(posted()).toHaveLength(1);
     expect(screen.queryByRole('button', { name: 'Send again' })).not.toBeInTheDocument();
+  });
+
+  it.each([400, 404])('a %i is a definite "Not sent", not an unknown outcome, and is not retried', async (status) => {
+    routes();
+    b.on('POST /send-attempts', json({ code: 'invalid', message: 'Refused', request_id: 'r', retryable: false }, status));
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    await openDm(user);
+    await typeAndSend(user);
+    await screen.findByText('Not sent');
+    expect(screen.queryByText('Outcome unknown — not resent')).not.toBeInTheDocument();
+    await tick(60_000);
+    expect(posted()).toHaveLength(1);
+  });
+
+  it('a 503 is ambiguous: the SAME attempt is re-POSTed and the outcome is never shown as not sent', async () => {
+    routes();
+    b.on('POST /send-attempts', () => new Response('unavailable', { status: 503 }));
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    await openDm(user);
+    await typeAndSend(user);
+    await screen.findByText('Outcome unknown — not resent');
+    await tick(10_000);
+    expect(posted()).toHaveLength(3);
+    expect(new Set(sentIds()).size).toBe(1);
+    expect(screen.queryByText('Not sent')).not.toBeInTheDocument();
   });
 
   it('a 422 surfaces the server text and the message was not sent', async () => {

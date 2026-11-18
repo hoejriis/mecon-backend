@@ -3,6 +3,7 @@ import type {
   Capabilities,
   CapabilityState,
   ChannelList,
+  Conversation,
   ConversationList,
   DeviceList,
   Health,
@@ -97,6 +98,13 @@ export interface ApiClient {
   // the needed capability is `available`.
   listIdentities(): Promise<IdentityList>;
   listConversations(page?: PageOpts): Promise<ConversationList>;
+  /** One conversation; a 404 (not found or not visible) is an ApiError. */
+  getConversation(conversationId: string): Promise<Conversation>;
+  /**
+   * Mark a conversation read up to a message id. State-changing: carries the
+   * CSRF token. One request, no retry beyond the single csrf_failed refetch.
+   */
+  markConversationRead(conversationId: string, upTo: string): Promise<void>;
   listMessages(conversationId: string, page?: PageOpts): Promise<MessageList>;
   listChannels(): Promise<ChannelList>;
   /**
@@ -217,6 +225,20 @@ export function createApiClient(opts: ApiClientOptions = {}): ApiClient {
     async listConversations(page) {
       need('messaging');
       return json<ConversationList>(`/conversations${pageQuery(page)}`, { cache: 'no-store' });
+    },
+    async getConversation(conversationId) {
+      need('messaging');
+      return json<Conversation>(`/conversations/${encodeURIComponent(conversationId)}`, {
+        cache: 'no-store',
+      });
+    },
+    async markConversationRead(conversationId, upTo) {
+      need('messaging');
+      const res = await write(`/conversations/${encodeURIComponent(conversationId)}/read`, {
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ up_to: upTo }),
+      });
+      if (!res.ok) throw await readError(res);
     },
     async listMessages(conversationId, page) {
       need('messaging');

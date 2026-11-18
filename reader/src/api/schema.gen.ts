@@ -162,6 +162,53 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/conversations/{conversation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * (M2 draft) One authorized conversation
+         * @description Returns the same shape as one item of `GET /conversations`. It is
+         *     scope-checked: a conversation the caller cannot see answers 404, never
+         *     403, so the endpoint is not an existence oracle. The Reader uses it for
+         *     a deep link to a conversation that is not in the pages it has loaded.
+         */
+        get: operations["getConversation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/conversations/{conversation_id}/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * (M2 draft) Mark a conversation read up to a message
+         * @description Idempotent. Marks the conversation read up to the message `up_to`. The
+         *     Backend then emits a `conversation` event carrying the new
+         *     `unread_count`. The Reader calls this when it opens a conversation
+         *     whose `unread_count` is above 0; a failure is not fatal and is not
+         *     retried in a loop.
+         */
+        post: operations["markConversationRead"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/conversations/{conversation_id}/messages": {
         parameters: {
             query?: never;
@@ -243,6 +290,19 @@ export interface paths {
          *     multi-origin coordination it sends only through the caller's own
          *     assigned Companion (single origin), so `status_evidence.per_origin`
          *     is absent.
+         *
+         *     **Which failures are definite.** Only a 4xx answer (400, 403, 404,
+         *     409, 422, and 429 with `Retry-After`) is a definite "not accepted". Any
+         *     5xx answer, 503 included, is always ambiguous: the attempt may or may
+         *     not have been created. The Backend deduplicates on `client_attempt_id`,
+         *     so re-POSTing the same attempt (same `Idempotency-Key`, same body)
+         *     returns the existing attempt and never sends twice. A client never
+         *     answers an ambiguous result by creating a new attempt.
+         *
+         *     **First channel send.** The first send to a channel creates the
+         *     conversation server-side. Creation is idempotent per channel, so
+         *     concurrent first sends land in one conversation, and a `conversation`
+         *     event follows.
          */
         post: operations["createSendAttempt"];
         delete?: never;
@@ -281,8 +341,11 @@ export interface paths {
         /**
          * (M2 draft) Authorized incremental updates (SSE)
          * @description `text/event-stream`. Each `data:` line is one `EventEnvelope`. Resume
-         *     with the standard `Last-Event-ID` header or `cursor`. An expired cursor
-         *     yields 410; the Reader then reloads snapshots. Private content is never
+         *     with the standard `Last-Event-ID` header or the `cursor` query
+         *     parameter; both are accepted, and the header wins when both are
+         *     present. An expired cursor yields 410, and a cursor older than
+         *     retention may instead be answered with a reset event; the Reader then
+         *     reloads snapshots. Private content is never
          *     replayed after revocation.
          *
          *     **Cursor expiry is per endpoint.** Only `/events` cursors expire (410
@@ -292,7 +355,8 @@ export interface paths {
          *     **Heartbeat.** While idle the Backend sends an SSE comment line
          *     (`: heartbeat`) at least every 25 seconds, so a client can tell an idle
          *     stream from a dead one. The Reader treats 2 missed intervals (no bytes
-         *     for 50 s) as dead and reconnects with `Last-Event-ID`.
+         *     for 50 s) as dead and reconnects with `Last-Event-ID`. A comment line
+         *     counts as a heartbeat.
          */
         get: operations["streamEvents"];
         put?: never;
@@ -427,6 +491,11 @@ export interface components {
             identity_id: components["schemas"]["OpaqueId"];
             target: components["schemas"]["Target"];
             title: string;
+            /**
+             * @description Changes when the Backend marks messages read, which a client
+             *     requests with `POST /conversations/{conversation_id}/read`. A
+             *     `conversation` event carries the new count.
+             */
             unread_count: number;
             last_activity_at: components["schemas"]["Timestamp"];
         };
@@ -494,7 +563,14 @@ export interface components {
         };
         /**
          * @description `acked` exists only for direct messages (native ACK; not a read
-         *     receipt). `unknown` and `timed_out` do not prove non-transmission; the
+         *     receipt). It never appears for a channel target: channel sends have no
+         *     per-recipient ack, and the Backend never emits it there. A client that
+         *     nevertheless receives `acked` on a channel attempt treats it as
+         *     `transmitted`.
+         *
+         *     A failed `POST /send-attempts` is definitely not accepted only on a
+         *     4xx answer. A 5xx answer, 503 included, is ambiguous; the Reader
+         *     re-POSTs the same attempt and never creates a new one. `unknown` and `timed_out` do not prove non-transmission; the
          *     Reader never resends automatically.
          *
          *     `unknown` and `timed_out` are reported only when the device itself
@@ -505,6 +581,10 @@ export interface components {
          * @enum {string}
          */
         SendStatus: "queued" | "duty_held" | "transmitted" | "acked" | "timed_out" | "failed" | "unknown";
+        /**
+         * @description For a channel target `status` is never `acked` (see `SendStatus`); a
+         *     client that receives it anyway shows the attempt as transmitted.
+         */
         SendAttempt: {
             id: components["schemas"]["OpaqueId"];
             client_attempt_id: components["schemas"]["OpaqueId"];
@@ -546,6 +626,16 @@ export interface components {
             created_at: components["schemas"]["Timestamp"];
             updated_at: components["schemas"]["Timestamp"];
         };
+        ReadRequest: {
+            /** @description The `message_id` of the newest message the user has seen. */
+            up_to: components["schemas"]["OpaqueId"];
+        };
+        /**
+         * @description `resource_id` by `kind`: the conversation id for `message` and
+         *     `conversation`; the server attempt `id` for `attempt_status`; the
+         *     device id for `device_status`, which a client may ignore. A client may
+         *     refetch its open attempts when it meets an unknown id.
+         */
         EventEnvelope: {
             event_id: string;
             /** @enum {string} */
@@ -828,6 +918,76 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+        };
+    };
+    getConversation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: components["schemas"]["OpaqueId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The conversation */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Conversation"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            /** @description Not found or not visible to the caller, without disclosing existence */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    markConversationRead: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Value of `csrf_token` from `GET /session`. */
+                "X-CSRF-Token": components["parameters"]["Csrf"];
+            };
+            path: {
+                conversation_id: components["schemas"]["OpaqueId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReadRequest"];
+            };
+        };
+        responses: {
+            /** @description Marked read */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            /** @description Not found or not visible to the caller, without disclosing existence */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     listMessages: {

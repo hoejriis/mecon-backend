@@ -75,6 +75,13 @@ function failure(e: unknown): { error: string; requestId: string | null } {
   return { error: 'Could not reach the Backend.', requestId: null };
 }
 
+/** A conversation fetched by id because it was not in the loaded list pages. */
+export type DeepLink =
+  | { status: 'loading' }
+  | { status: 'ready'; conversation: Conversation }
+  | { status: 'notfound' }
+  | { status: 'error'; error: string; requestId: string | null };
+
 export interface MessagingValue {
   messaging: boolean;
   sendState: 'available' | 'unavailable' | 'forbidden';
@@ -83,6 +90,15 @@ export interface MessagingValue {
   identities: Paged<Identity>;
   channels: Paged<Channel>;
   messagesFor(conversationId: string): Paged<Message>;
+  /** State of a by-id fetch (deep link); idle until loadConversation(id). */
+  deepLinkFor(conversationId: string): DeepLink | null;
+  /** GET /conversations/{id}, once per id until the state is reset. */
+  loadConversation(conversationId: string): void;
+  /**
+   * POST /conversations/{id}/read up to `upTo`. At most one request per
+   * (conversation, message) pair; a failure is silent and never retried.
+   */
+  markRead(conversationId: string, upTo: string): void;
   attemptsFor(target: Target): LocalAttempt[];
   loadConversations(): void;
   loadMoreConversations(): void;
@@ -132,6 +148,11 @@ export function MessagingProvider({
   const [identities, setIdentities] = useState<Paged<Identity>>(idle);
   const [channels, setChannels] = useState<Paged<Channel>>(idle);
   const [messages, setMessages] = useState<Record<string, Paged<Message>>>({});
+  const [deepLinks, setDeepLinks] = useState<Record<string, DeepLink>>({});
+  const deepLinksRef = useRef(deepLinks);
+  deepLinksRef.current = deepLinks;
+  // Every (conversation, newest message) pair a mark-read was already tried for.
+  const readTried = useRef(new Set<string>());
   const [attempts, setAttempts] = useState<LocalAttempt[]>([]);
   const [draftVersion, bumpDrafts] = useState(0);
   const [streamStatus, setStreamStatus] = useState<StreamStatus | 'off'>('off');
@@ -219,6 +240,47 @@ export function MessagingProvider({
     }
   }, [api, messaging]);
 
+  const fetchConversation = useCallback(
+    async (id: string) => {
+      if (!messaging || deepLinksRef.current[id]) return;
+      deepLinksRef.current = { ...deepLinksRef.current, [id]: { status: 'loading' } };
+      setDeepLinks(deepLinksRef.current);
+      let next: DeepLink;
+      try {
+        next = { status: 'ready', conversation: await api.getConversation(id) };
+      } catch (e) {
+        next =
+          e instanceof ApiError && e.status === 404
+            ? { status: 'notfound' }
+            : { status: 'error', ...failure(e) };
+      }
+      deepLinksRef.current = { ...deepLinksRef.current, [id]: next };
+      setDeepLinks(deepLinksRef.current);
+    },
+    [api, messaging],
+  );
+
+  const markRead = useCallback(
+    async (id: string, upTo: string) => {
+      const key = `${id}\u0000${upTo}`;
+      if (!messaging || readTried.current.has(key)) return;
+      readTried.current.add(key);
+      try {
+        await api.markConversationRead(id, upTo);
+      } catch {
+        return; // non-fatal; the list keeps the server's count
+      }
+      const zero = (c: Conversation) => (c.id === id ? { ...c, unread_count: 0 } : c);
+      setConversations((c) => ({ ...c, items: c.items.map(zero) }));
+      const dl = deepLinksRef.current[id];
+      if (dl?.status === 'ready') {
+        deepLinksRef.current = { ...deepLinksRef.current, [id]: { status: 'ready', conversation: zero(dl.conversation) } };
+        setDeepLinks(deepLinksRef.current);
+      }
+    },
+    [api, messaging],
+  );
+
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
 
@@ -285,6 +347,8 @@ export function MessagingProvider({
   const resetSnapshots = useCallback(() => {
     msgSeq.current.clear();
     setMessages({});
+    deepLinksRef.current = {};
+    setDeepLinks({});
     void fetchConversations('reset');
     void fetchIdentities();
     void fetchChannels();
@@ -365,6 +429,9 @@ export function MessagingProvider({
     setIdentities(idle());
     setChannels(idle());
     setMessages({});
+    deepLinksRef.current = {};
+    setDeepLinks({});
+    readTried.current.clear();
     setAttempts([]);
     drafts.current.clear();
   }, [messaging]);
@@ -460,6 +527,8 @@ export function MessagingProvider({
       openConversation: (id: string | null) => {
         active.current = id;
       },
+      loadConversation: (id: string) => void fetchConversation(id),
+      markRead: (id: string, upTo: string) => void markRead(id, upTo),
       loadMessages: (id: string) => void fetchMessages(id, 'first'),
       loadOlderMessages: (id: string) => void fetchMessages(id, 'more'),
       draftText: (t: Target) => drafts.current.get(targetKey(t))?.text ?? '',
@@ -473,7 +542,7 @@ export function MessagingProvider({
       sendAgain,
       recheck,
     }),
-    [fetchConversations, fetchChannels, fetchIdentities, fetchMessages, send, sendAgain, recheck],
+    [fetchConversations, fetchChannels, fetchIdentities, fetchMessages, fetchConversation, markRead, send, sendAgain, recheck],
   );
 
   const value = useMemo<MessagingValue>(
@@ -485,12 +554,13 @@ export function MessagingProvider({
       identities,
       channels,
       messagesFor: (id) => messages[id] ?? idle<Message>(),
+      deepLinkFor: (id) => deepLinks[id] ?? null,
       attemptsFor: (t) => attempts.filter((a) => targetKey(a.request.target) === targetKey(t)),
       ...actions,
     }),
     // draftVersion re-renders consumers when a draft (kept in a ref) changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [messaging, sendState, streamStatus, conversations, identities, channels, messages, attempts, actions, draftVersion],
+    [messaging, sendState, streamStatus, conversations, identities, channels, messages, deepLinks, attempts, actions, draftVersion],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

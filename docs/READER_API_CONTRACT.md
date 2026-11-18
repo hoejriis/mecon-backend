@@ -18,12 +18,14 @@ This public contract defines the interface between the MECON Reader and an autho
 | `GET /devices` | Assigned Companion IDs, role, capability evidence, battery, reachability and freshness |
 | `GET /identities` | Authorized messaging identities and assigned device relationships |
 | `GET /conversations?cursor=&limit=` | Authorized conversation summaries |
+| `GET /conversations/{id}` | One authorized conversation (same shape as a list item); 404 when not visible, never 403 |
+| `POST /conversations/{id}/read` | Mark read up to `{up_to: message_id}`; idempotent; emits a `conversation` event with the new unread count |
 | `GET /conversations/{id}/messages?cursor=&limit=` | Authorized messages, source provenance and paging |
 | `GET /contacts` | Authorized contacts |
 | `GET /channels` | Authorized public and private channels, favourites where supported |
 | `POST /send-attempts` | Explicit Backend-path send with idempotency key, selected identity, target and content |
 | `GET /send-attempts/{id}` | Send attempt and evidenced state |
-| `GET /events?cursor=` | SSE authorized incremental updates |
+| `GET /events?cursor=` (or `Last-Event-ID`) | SSE authorized incremental updates |
 
 All list responses carry `items`, `next_cursor` (nullable) and `as_of`. IDs are opaque strings; timestamps UTC ISO-8601. `/session` advertises capability flags and contract minor version. Contract major version changes require a new prefix.
 
@@ -32,6 +34,7 @@ All list responses carry `items`, `next_cursor` (nullable) and `as_of`. IDs are 
 - A client creates a stable `client_draft_id`, chooses exactly one path (`ble` or `backend`), and creates a distinct `client_attempt_id` for an actual send. Backend POST requires an `Idempotency-Key` matching the attempt; identical repeats return the same attempt, differing payloads with the same key return 409.
 - Backend send request: `{client_draft_id,client_attempt_id,identity_id,target:{kind,id},content:{kind,text}}`. Server validates authorized identity, target and send capability. A BLE attempt is **never** posted to this endpoint merely to reconcile a local message.
 - Attempt response: `{id,client_attempt_id,path,identity_id,status,status_evidence,created_at,updated_at}`. Possible statuses: `queued`, `duty_held`, `transmitted`, `acked`, `timed_out`, `failed`, `unknown`; distinguish Backend acceptance from radio evidence. Channel messages do not imply recipient ACK. Direct-message ACK does not imply human read receipt.
+- Only a 4xx answer to `POST /send-attempts` (400, 403, 404, 409, 422, and 429 with `Retry-After`) is a definite "not accepted". Any 5xx, 503 included, is ambiguous: the Backend deduplicates on `client_attempt_id`, so re-POSTing the same attempt returns the existing one and never sends twice, and a client never answers it with a new attempt. `acked` never occurs for a channel target. The first send to a channel creates its conversation server-side, idempotently per channel, and a `conversation` event follows.
 - Device outcome/inbox buffers may be bounded and lost on reboot. `unknown` or `timed_out` does not prove non-transmission; **never automatically resend** through the same or another path. The user must explicitly authorize a new attempt, with a new attempt ID.
 - Messages include `message_id`, `conversation_id`, `identity_id`, `source_path`, `observed_at`, `content`, and optional `attempt_id`; do not invent a cross-source merge when identity cannot be proven.
 
@@ -41,7 +44,7 @@ For a user-initiated **Backend-path** P2P/DM, public-channel or private-channel 
 
 ## Events and synchronization
 
-SSE event envelope: `{event_id,kind,occurred_at,resource_id,version}`. Kinds include message, conversation, device status, attempt status, authorization changed and resync required. Cursor is opaque, scoped to the authenticated user and expires according to server policy. Reconnect with cursor; on expiration or permission changes, discard cached unauthorized data and reload authorized snapshots. Do not replay private content after revocation. Heartbeats are transport-only.
+SSE event envelope: `{event_id,kind,occurred_at,resource_id,version}`. Kinds include message, conversation, device status, attempt status, authorization changed and resync required. Cursor is opaque, scoped to the authenticated user and expires according to server policy. Reconnect with the `Last-Event-ID` header or the `cursor` query parameter (both accepted; the header wins when both are present). `resource_id` is the conversation id for `message` and `conversation`, the server attempt id for `attempt_status` and the device id for `device_status`. On expiration or permission changes, discard cached unauthorized data and reload authorized snapshots. Do not replay private content after revocation. The Backend sends an SSE comment heartbeat every 25 s while idle; a client treats 50 s without bytes (two intervals) as a dead stream. Heartbeats are transport-only.
 
 ## Acceptance
 

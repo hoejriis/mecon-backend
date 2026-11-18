@@ -24,7 +24,7 @@ Run from `reader/`:
 | `npm test` | Vitest unit tests (jsdom, Testing Library). |
 | `npm run build` | Typecheck and production build into `dist/`. |
 | `npm run gen:api` | Regenerate `reader/src/api/schema.gen.ts` from `contracts/reader-api/v1/openapi.yaml` (openapi-typescript, pinned exactly). The output is committed; a unit test fails when it is stale (`npm run gen:api:check` does the same check alone). |
-| `npm run e2e` | Builds, serves with `vite preview` under the production CSP, and runs headless Chromium at 390x844, 820x1180 and 1440x900. Screenshots go to `e2e-artifacts/` (gitignored). |
+| `npm run e2e` | Builds, serves with `vite preview` under the production CSP, and runs headless Chromium at 390x844, 820x1180 and 1440x900. Screenshots go to `e2e-artifacts/` (gitignored). `e2e/updates.spec.ts` builds two production builds with different commits and serves them from a small server (`e2e/swapServer.ts`) that swaps the served build, to exercise the service worker update lifecycle. |
 
 Docker image, built from the repository root:
 

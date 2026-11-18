@@ -155,6 +155,17 @@ describe('failure rolls back', () => {
     expect((await kv.get('meta/schema')) as unknown).toMatchObject({ version: 1, generation: 0 });
   });
 
+  it('a store that silently loses a written entry is caught by the read-back verification before the switch', async () => {
+    const kv = new FakeKv();
+    seed(kv, 1, 0, { a: { id: 1 }, b: { id: 2 } });
+    const real = kv.put.bind(kv);
+    kv.put = async (k, v) => { if (k !== 'g1/b') await real(k, v); }; // drops one write without an error
+    expect(await runMigrations(kv, CHAIN)).toMatchObject({ status: 'quarantined', reason: 'migration-failed' });
+    expect(await kv.get('meta/schema')).toEqual({ version: 1, generation: 0, previousGeneration: null });
+    expect(await kv.keys('g1/')).toEqual([]);
+    expect(await kv.keys('g0/')).toEqual(['g0/a', 'g0/b']);
+  });
+
   it('a failing switch write leaves the old marker in force', async () => {
     const kv = new FakeKv();
     seed(kv, 1, 0, { a: { id: 1 } });

@@ -63,6 +63,10 @@ test('registers, precaches the build, and runs the app shell offline; /api is ne
   await controlled(page);
   expect(await cacheNames(page)).toEqual(['mecon-reader-meta', SHELL(A)]);
 
+  // A real, un-mocked API response travels through the page (and the worker, if it wrongly handled it).
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+  expect(await page.evaluate(() => fetch('/api/e2e-probe').then((r) => r.json()))).toEqual({ live: true });
+
   // Never an /api entry in any cache, whatever the page fetched.
   const keys = await page.evaluate(async () => {
     const out: string[] = [];
@@ -79,7 +83,6 @@ test('registers, precaches the build, and runs the app shell offline; /api is ne
   // the shell and its assets came from the worker's cache, not from the server
   expect(srv.requests.slice(before).filter((p) => p !== '/sw.js')).toEqual([]);
   // and the API has no offline fallback: it fails, it is not answered from a cache
-  await page.unrouteAll({ behavior: 'ignoreErrors' }); // drop the mock so only the network or a cache could answer
   const api = await page.evaluate(() =>
     fetch('/api/reader/v1/session').then(
       (r) => `served:${r.status}`,

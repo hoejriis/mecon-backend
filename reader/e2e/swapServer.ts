@@ -54,6 +54,10 @@ export async function startSwapServer(initialDir: string): Promise<SwapServer> {
   const server: Server = createServer((req, res) => {
     const path = decodeURIComponent((req.url ?? '/').split('?')[0]!);
     requests.push(path);
+    if (path === '/api/e2e-probe') {
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }).end('{"live":true}');
+      return;
+    }
     if (path.startsWith('/api/')) {
       res.writeHead(502).end('the test backend is mocked in the browser');
       return;

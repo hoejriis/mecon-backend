@@ -1,0 +1,28 @@
+{
+  "next_cursor": null,
+  "as_of": "2030-01-15T10:00:00Z",
+  "items": [
+    {
+      "message_id": "msg_demo_0002",
+      "conversation_id": "conv_demo_0002",
+      "identity_id": null,
+      "direction": "inbound",
+      "sender_label": "Demo Sender",
+      "source_path": "backend",
+      "observed_at": "2030-01-15T09:55:00Z",
+      "content": { "kind": "text", "text": "Synthetic channel message" },
+      "attempt_id": null
+    },
+    {
+      "message_id": "msg_demo_0001",
+      "conversation_id": "conv_demo_0001",
+      "identity_id": "ident_demo_0001",
+      "direction": "outbound",
+      "sender_label": null,
+      "source_path": "backend",
+      "observed_at": "2030-01-15T09:50:00Z",
+      "content": { "kind": "text", "text": "Synthetic direct message" },
+      "attempt_id": "att_demo_0001"
+    }
+  ]
+}

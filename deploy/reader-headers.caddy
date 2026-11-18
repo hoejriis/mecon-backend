@@ -1,0 +1,16 @@
+# Security and cache headers for the Reader. Import with `import reader_headers`
+# inside a site block. Keep the CSP in sync with `preview.headers` in
+# reader/vite.config.ts; the built app must work with no inline script or style.
+(reader_headers) {
+	header {
+		Content-Security-Policy "default-src 'self'; img-src 'self' data:; connect-src 'self'; style-src 'self'; script-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "same-origin"
+	}
+	# /index.html and /sw.js must always revalidate. SPA routes (/chats ...) are
+	# served from index.html, so everything outside /assets/* revalidates.
+	@revalidate not path /assets/*
+	header @revalidate Cache-Control "no-cache"
+	@hashed path /assets/*
+	header @hashed Cache-Control "public, max-age=31536000, immutable"
+}

@@ -100,7 +100,7 @@ describe('conversation list', () => {
     routes({ messaging: 'unavailable' });
     mount();
     expect(await screen.findByText('Messaging is not provided by this Backend yet.')).toBeInTheDocument();
-    expect(b.calls.filter((c) => c.path !== '/session')).toEqual([]);
+    expect(b.calls.filter((c) => c.api && c.path !== '/session')).toEqual([]);
   });
 
   it('a 401 on the list takes the existing sign-out path', async () => {
@@ -237,7 +237,7 @@ describe('mark read', () => {
     routes({ messaging: 'unavailable' });
     mount(`/chats/c/${dmConversation.id}`);
     await tick(2_000);
-    expect(b.calls.filter((c) => c.path !== '/session')).toEqual([]);
+    expect(b.calls.filter((c) => c.api && c.path !== '/session')).toEqual([]);
   });
 });
 

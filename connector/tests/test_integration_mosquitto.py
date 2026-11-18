@@ -95,14 +95,10 @@ def procs():
 
 
 def kill_connection(live):
-    """Drops the TCP connection with no MQTT DISCONNECT. shutdown() first so the library's
-    network thread sees the end at once; a bare close() can leave it blocked until keepalive."""
-    sock = live.transport._client._sock
-    try:
-        sock.shutdown(socket.SHUT_RDWR)
-    except OSError:
-        pass
-    sock.close()
+    """Drops the TCP connection with no MQTT DISCONNECT. Only shutdown(): the library's network
+    thread then reads the end of stream and handles it. Closing the descriptor under its select()
+    call can leave that thread unaware until keepalive."""
+    live.transport._client._sock.shutdown(socket.SHUT_RDWR)
 
 
 def mk_tls(tmp, name="ca"):

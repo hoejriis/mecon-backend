@@ -1,4 +1,4 @@
-import { BleError, type BleDeviceInfo, type BleTransport, type TransportSupport, type Unsubscribe } from './transport';
+import { BleError, type BleDeviceInfo, type BlePhase, type BleTransport, type TransportSupport, type Unsubscribe } from './transport';
 import { MAX_FRAME_SIZE, RX_CHAR_UUID, SERVICE_UUID, TX_CHAR_UUID } from './protocol';
 
 // Minimal structural types: TypeScript's DOM lib has no Web Bluetooth types.
@@ -59,6 +59,7 @@ export class WebBluetoothTransport implements BleTransport {
   private tx: WbCharacteristic | null = null;
   private frameCbs = new Set<(f: Uint8Array) => void>();
   private discCbs = new Set<() => void>();
+  private phaseCbs = new Set<(p: BlePhase) => void>();
 
   constructor(nav: unknown = typeof navigator === 'undefined' ? undefined : navigator) {
     this.nav = nav;
@@ -88,13 +89,17 @@ export class WebBluetoothTransport implements BleTransport {
     if (!dev || !dev.gatt) throw new BleError('connect_failed', 'no device selected');
     try {
       const server = await dev.gatt.connect();
+      this.phase('gatt_connected');
       const svc = await server.getPrimaryService(SERVICE_UUID);
+      this.phase('service_found');
       this.rx = await svc.getCharacteristic(RX_CHAR_UUID);
       const tx = await svc.getCharacteristic(TX_CHAR_UUID);
+      this.phase('characteristics_found');
       this.tx?.removeEventListener('characteristicvaluechanged', this.onValue);
       this.tx = tx;
       tx.addEventListener('characteristicvaluechanged', this.onValue);
       await tx.startNotifications();
+      this.phase('notifications_started');
     } catch (e) {
       try {
         dev.gatt.disconnect();
@@ -135,6 +140,15 @@ export class WebBluetoothTransport implements BleTransport {
   onDisconnect(cb: () => void): Unsubscribe {
     this.discCbs.add(cb);
     return () => this.discCbs.delete(cb);
+  }
+
+  onPhase(cb: (p: BlePhase) => void): Unsubscribe {
+    this.phaseCbs.add(cb);
+    return () => this.phaseCbs.delete(cb);
+  }
+
+  private phase(p: BlePhase): void {
+    for (const cb of [...this.phaseCbs]) cb(p);
   }
 
   private detach(): void {

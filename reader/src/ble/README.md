@@ -20,8 +20,9 @@ devices.
   Nothing is stored (no storage API is used).
 - `mockCompanion.ts`, `fakeBluetooth.ts`: simulated GATT peer with injectable
   faults, and a fake `navigator.bluetooth` over it.
-- `BleDevPage.tsx`: harness at `/dev/ble`, dev builds only. Production bundles
-  contain no BLE code (checked by `e2e/ble-prod.spec.ts`).
+- `BleDevPage.tsx`: harness at `/dev/ble`, dev builds only. Production builds
+  omit the harness; BLE code is only in the lazy probe chunk (checked by `e2e/ble-prod.spec.ts`).
+- `probe/`: the production, read-only probe page at `/probe/ble` (allowlisted commands, sanitized report); see `docs/BLE_PROBE.md`.
 - `fixtures/`: synthetic byte fixtures, documented in `fixtures/README.md`.
 
 `npm run e2e` writes `e2e-artifacts/ble-simulation-matrix.md`.

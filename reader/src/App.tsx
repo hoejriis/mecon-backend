@@ -14,6 +14,9 @@ import { TABS } from './tabs';
 
 // Dev-only BLE harness. `import.meta.env.DEV` is a build-time constant, so a
 // production build drops this import and the whole BLE module graph with it.
+// Read-only BLE probe (/probe/ble): its own lazy chunk, so the main bundle stays BLE-free.
+const BleProbePage = lazy(() => import('./ble/probe/BleProbePage'));
+
 const BleDevPage = import.meta.env.DEV ? lazy(() => import('./ble/BleDevPage')) : null;
 
 export function Shell() {
@@ -47,12 +50,28 @@ export function Shell() {
 }
 
 export function App() {
-  const { status } = useAuth();
-
   useEffect(() => {
     void runStaleShellCheck(BUILD_COMMIT);
   }, []);
 
+  // The probe uses no Backend, so it is reachable before sign-in.
+  return (
+    <Routes>
+      <Route
+        path="/probe/ble"
+        element={
+          <Suspense fallback={<Loading />}>
+            <BleProbePage />
+          </Suspense>
+        }
+      />
+      <Route path="*" element={<AuthGate />} />
+    </Routes>
+  );
+}
+
+function AuthGate() {
+  const { status } = useAuth();
   if (status === 'loading') {
     return (
       <div className="shell">

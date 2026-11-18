@@ -118,3 +118,14 @@ h1 { font-size: var(--text-lg); margin: 0 0 var(--space-4); }
 .ble-dev button { min-height: 44px; padding: 0 12px; }
 .ble-dev input { min-height: 40px; }
 .ble-dev .ble-attempt { margin-bottom: 8px; }
+
+/* BLE probe page (/probe/ble) */
+.probe { max-width: 40rem; margin: 0 auto; }
+.probe-steps { list-style: none; margin: 0; padding: 0; }
+.probe-step { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.probe-step-label { flex: 1 1 14rem; }
+.probe-note { flex-basis: 100%; }
+.probe-btn { min-height: 44px; margin: var(--space-3) 0; }
+.probe-label { display: block; font-weight: 600; margin-bottom: 4px; }
+.probe-report { width: 100%; box-sizing: border-box; font-family: ui-monospace, monospace; font-size: 0.8rem; }
+.probe-help { padding-left: var(--space-4); }

@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import type { CapabilityState, Device } from '../api/types';
 import { BUILD_COMMIT } from '../buildInfo';
@@ -67,6 +68,9 @@ function SettingsBody() {
       <button type="button" className="btn" onClick={() => void signOut()}>
         Sign out
       </button>
+      <p>
+        <Link to="/probe/ble">Bluetooth diagnostics</Link>
+      </p>
       <p className="state-body build-stamp">
         Build: {BUILD_COMMIT ? BUILD_COMMIT.slice(0, 12) : 'local'}
       </p>

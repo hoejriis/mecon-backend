@@ -39,6 +39,7 @@ test.describe('signed-in test users', () => {
     const page = await context.newPage();
     await page.goto('/settings');
     await expect(page.getByText('Signed in as')).toBeVisible();
+    await expect(page.getByRole('navigation', { name: 'Main' }).getByRole('link')).toHaveText(['Chats', 'Nodes', 'Map', 'Tools', 'Settings']);
     await expect(page.locator('.settings strong')).toHaveText(session.user.display_name);
     for (const [name, state] of Object.entries(session.capabilities)) {
       await expect(page.locator('.cap-list li').filter({ hasText: name }).first()).toContainText(state);

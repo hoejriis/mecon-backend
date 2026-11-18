@@ -17,7 +17,7 @@ This matrix records what has and has not been checked. A row is **Passed** only 
 
 - Unit tests (`cd reader && npm test`): 171 passed of 171. Mock-based, so it supports Simulated rows only.
 - Mock-Backend and simulated-BLE e2e (`npm run e2e`): 38 passed of 38. Simulated rows only.
-- Live acceptance, unauthenticated part against https://reader.mecon.cloud (`npm run acceptance`): 13 passed, 0 failed, 8 skipped. The 3 unauthenticated skips are because the Reader API path answers 404 on that host (annotation: "API not routed yet"): the health check, the signed-out session check and the five-tabs-on-login-screen check. The other 5 skips are the signed-in suite, which needs test-user sessions that were not supplied.
+- Live acceptance, unauthenticated part against https://reader.mecon.cloud (`npm run acceptance`), re-run after the Reader API route went live on 2026-11-18: 16 passed, 0 failed, 5 skipped (the signed-in suite: no test sessions yet).
 - Live acceptance, signed-in part: not run.
 
 ## Matrix
@@ -33,8 +33,8 @@ Methods: **Auto** = automated suite, **Manual** = manual (hardware or live accou
 | M1-03 | SPA routes fall back to the shell and revalidate; hashed assets are immutable | Auto | live: "SPA fallback serves the shell at ..." (6 routes), "hashed assets are immutable" | Passed on 2026-11-18 | |
 | M1-04 | Served build identifies its commit | Auto | live: "/version.json carries a 40-hex commit" | Passed on 2026-11-18 | Stale-shell repair logic itself: `src/staleShell.test.ts`, Simulated. |
 | M1-05 | Non-allowlisted `/api` paths answer 404 | Auto | live: "non-allowlisted /api paths answer 404" | Passed on 2026-11-18 | Checked `/api/admin`, `/api/reader/v2/session`, an unknown v1 path and `/api/`. |
-| M1-06 | `GET /api/reader/v1/health` answers 200 `{status, commit}` | Auto | live: "GET /health answers 200" | Not run | Skipped: API not routed yet (404 on the host on 2026-11-18). |
-| M1-07 | `GET /session` signed out answers 401 | Auto | live: "GET /session signed out answers 401" | Not run | Skipped: API not routed yet. |
+| M1-06 | `GET /api/reader/v1/health` answers 200 `{status, commit}` | Auto | live: "GET /health answers 200" | Passed on 2026-11-18 | Run after the API route went live. |
+| M1-07 | `GET /session` signed out answers 401 | Auto | live: "GET /session signed out answers 401" | Passed on 2026-11-18 | Run after the API route went live. |
 | M1-08 | Only existing users authenticate; no Reader-side user store, signup or role expansion | Review | Review `src/auth/` and the API contract: no signup operation, identity comes only from the Backend session | Not run | |
 | M1-09 | Login through the Backend sign-in flow, request-id polling, session set | Manual | Sign in as a test user on the live host | Not run | Needs the API routed and a test user. Mock flow: `e2e/auth.spec.ts` "login -> signed in -> sign out", `src/test/auth.test.tsx` "walks email -> pending -> approved", both Simulated. |
 | M1-10 | Cookie is `__Host-mecon_session`: host-only, no `Domain` | Manual | After a real login, inspect the cookie in browser devtools; the live suite also checks `Domain` on the logout `Set-Cookie` when one is sent | Not run | |
@@ -53,8 +53,8 @@ Methods: **Auto** = automated suite, **Manual** = manual (hardware or live accou
 | ID | Criterion | Method | Where automated, or manual steps | Evidence status | Notes |
 | --- | --- | --- | --- | --- | --- |
 | UX-01 | Bottom tabs Chats, Nodes, Map, Tools, Settings at phone, tablet and desktop | Auto | `e2e/tabs.spec.ts` "five tabs at WxH" (3 viewports); `src/components/TabBar.test.tsx` "is a labelled nav landmark with exactly five tabs in order" | Simulated | Mock Backend, signed in. |
-| UX-02 | Five tabs visible on the live login screen | Auto | live: "five tabs exist on the login screen" | Not run | Skipped: API not routed yet. With the Backend unreachable the shell shows an unreachable state instead. |
-| UX-03 | Login screen has no serious or critical axe violations (live) | Auto | live: "signed-out screen renders, passes axe, and raises no CSP violation" | Passed on 2026-11-18 | Checked the screen the live host currently shows (Backend unreachable state). Re-run once the API is routed so the real login form is covered. |
+| UX-02 | Signed out, only the login form shows (no tab navigation); signed in, the five tabs show | Auto | live: "signed out shows only the login form" (signed out); "Settings shows the signed-in name and every capability" (signed in, also checks the five tabs) | Not run | Signed-out half passed on 2026-11-18; signed-in half skipped: no test sessions. Corrected 2026-11-18: an earlier version expected tabs on the login screen, but access is restricted to signed-in users by design. |
+| UX-03 | Login screen has no serious or critical axe violations (live) | Auto | live: "signed-out screen renders, passes axe, and raises no CSP violation" | Passed on 2026-11-18 | Re-run on the real login form after the API route went live: 0 serious or critical. |
 | UX-04 | Signed-in screens, light and dark, three viewports, 0 serious or critical axe violations | Auto | `e2e/a11y.spec.ts` "axe + screenshots: SCHEME VIEWPORT"; `e2e/a11y.spec.ts` "axe on the signed-out login screen, both schemes" | Simulated | |
 | UX-05 | Keyboard operation: skip link, tab bar arrow keys | Auto | `e2e/a11y.spec.ts` "skip link moves focus to main; tab bar arrow keys move focus"; `src/components/TabBar.test.tsx` "is keyboard operable" | Simulated | |
 | UX-06 | MC1-like Chats filters (All, Unread, DMs, Channels); Rooms absent where unsupported | Auto | `src/components/States.test.tsx` "has the four filter chips and no Rooms" | Simulated | |
@@ -124,7 +124,7 @@ Sends transmit over radio, so the automated suites never send. Before running an
 
 | ID | Criterion | Method | Where automated, or manual steps | Evidence status | Notes |
 | --- | --- | --- | --- | --- | --- |
-| SEC-01 | `/devices` for A never includes B's devices, and the reverse | Auto | live: "/devices of A never includes a device of B, and the reverse" | Not run | Skipped: no test sessions, API not routed. |
+| SEC-01 | `/devices` for A never includes B's devices, and the reverse | Auto | live: "/devices of A never includes a device of B, and the reverse" | Not run | Skipped: no test sessions. |
 | SEC-02 | Cross-user message isolation | Manual | Two test users; compare conversation ids and message ids visible to each, count only | Not run | |
 | SEC-03 | Fleet owner and instance admin roles do not read another user's private messages | Manual | Sign in as a fleet owner test user; confirm another user's messages are not shown | Not run | |
 | SEC-04 | Revocation and expiry fail closed | Manual | See M1-13 and M1-14 | Not run | |

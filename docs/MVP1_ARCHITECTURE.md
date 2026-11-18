@@ -62,7 +62,7 @@ Offline encrypted history and local unlock, automatic BLE/Backend event reconcil
 
 | Status | What |
 |---|---|
-| **Deployed (restricted, existing `mecon.cloud` users only)** | The Reader shell with the five-tab navigation (Chats / Nodes / Map / Tools / Settings), the login client, the design system and a read-only Bluetooth diagnostics page. The Backend login API is still being connected, so working sign-in is not claimed. |
+| **Deployed (restricted, existing `mecon.cloud` users only)** | The Reader shell with the five-tab navigation (Chats / Nodes / Map / Tools / Settings), the login client, the design system and a read-only Bluetooth diagnostics page. The Reader API is routed to the existing Backend (signed-out checks pass); signed-in acceptance with test accounts has not yet run, so verified sign-in is not claimed. |
 | **Implemented, not verified live** | The Backend-path messaging client, written against a draft contract. |
 | **Simulated only** | The BLE Companion adapter, exercised through an Android Chrome profile simulation; not verified on hardware. Bluefy on iPhone/iPad still awaits real-hardware testing. |
 | **Planned** | Live observation Map, contacts, offline cache, safe updates, USB access and the public Backend replacement. |

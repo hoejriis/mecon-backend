@@ -45,7 +45,7 @@ interface Activation {
  * target). Not hardware verified: see the simulation matrix.
  *
  * Writes: the protocol defines one frame per GATT write, so frames are never
- * chunked. A frame larger than MAX_FRAME_SIZE is refused. UNVERIFIED on real
+ * chunked. A frame larger than MAX_FRAME_SIZE is refused. Confirmed by the public firmware owner (Issue #5): up to 176 bytes per write, one frame per write, larger is dropped. Not yet observed on real
  * hardware: that Chrome/Android accept a ~170-byte write-with-response at the
  * negotiated MTU (Web Bluetooth permits up to 512 bytes and the stack uses long
  * writes where needed).

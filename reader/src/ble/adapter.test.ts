@@ -169,6 +169,31 @@ describe(`${S}: truthful send facts`, () => {
   });
 });
 
+describe(`${S}: limits and retries from the public firmware's wire answers`, () => {
+  it('channel text is sized against the device\'s own "<name>: " prefix and refused before any write when it would be cut', async () => {
+    const { adapter, mock } = await connected();
+    // self name "Synthetic Node" + ": " = 16 bytes, so 144 bytes of text fit
+    await expect(adapter.sendChannel({ clientDraftId: 'd', clientAttemptId: 'c0', channelIndex: 0, text: 'x'.repeat(145) })).rejects.toMatchObject({ code: 'text_too_long' });
+    expect(mock.sendWrites()).toHaveLength(0);
+    await adapter.sendChannel({ clientDraftId: 'd', clientAttemptId: 'c1', channelIndex: 0, text: 'x'.repeat(144) });
+    expect(mock.sendWrites()).toHaveLength(1);
+  });
+
+  it('a channel send without known self info is refused and writes nothing', async () => {
+    const { adapter, mock } = rig();
+    await expect(adapter.sendChannel({ clientDraftId: 'd', clientAttemptId: 'c', channelIndex: 0, text: 'x' })).rejects.toBeInstanceOf(BleError);
+    expect(mock.writes).toHaveLength(0);
+  });
+
+  it('a manual retry of the same draft is a new attempt id with the next firmware attempt byte; another draft starts at 0', async () => {
+    const { adapter, mock } = await connected();
+    await adapter.sendDirect({ clientDraftId: 'd1', clientAttemptId: 'a1', contactKey: alice, text: 'x' });
+    await adapter.sendDirect({ clientDraftId: 'd1', clientAttemptId: 'a2', contactKey: alice, text: 'x' });
+    await adapter.sendDirect({ clientDraftId: 'd2', clientAttemptId: 'b1', contactKey: alice, text: 'y' });
+    expect(mock.sendWrites().map((w) => w[2])).toEqual([0, 1, 0]);
+  });
+});
+
 describe(`${S}: uncertain outcomes are never resent and never rerouted`, () => {
   for (const when of ['before_device', 'after_device'] as const) {
     it(`link lost mid-send (${when}) becomes unknown; one write; no resend after reconnect; no Backend call`, async () => {

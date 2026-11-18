@@ -43,12 +43,19 @@ export const KEY_PREFIX_SIZE = 6;
 /** Protocol version the app announces in DEVICE_QUERY. */
 export const APP_TARGET_VERSION = 3;
 /**
- * UNVERIFIED: companion_protocol.md says "Messages are limited to 133 characters".
- * It does not say bytes or characters, nor whether that applies to direct
- * messages. We enforce 133 UTF-8 bytes (the conservative reading) and refuse
- * longer text before anything is written.
+ * Text limits, in UTF-8 bytes (answered by the public firmware's owner on
+ * mecon-backend Issue #5, 2026-11-18). A direct message over 160 bytes is
+ * refused by the firmware. A channel message is cut SILENTLY at 160 bytes
+ * including the "<sender name>: " prefix the firmware prepends, so the Reader
+ * refuses any channel text that would not fit whole.
  */
-export const MAX_TEXT_BYTES = 133;
+export const MAX_DM_TEXT_BYTES = 160;
+export const MAX_CHANNEL_PAYLOAD_BYTES = 160;
+
+/** Bytes left for channel text once the firmware prepends "<name>: ". */
+export function channelTextBudget(senderName: string): number {
+  return MAX_CHANNEL_PAYLOAD_BYTES - utf8.encode(`${senderName}: `).length;
+}
 
 // ---------------------------------------------------------------------------
 // Codes (MyMesh.cpp)
@@ -129,7 +136,7 @@ export interface SelfInfo {
   txPower: number;
   maxTxPower: number;
   publicKey: string; // hex, public
-  /** Degrees. UNVERIFIED: signedness of the raw 32-bit field (read as signed). */
+  /** Degrees: signed int32 ×1e6 (public firmware owner, Issue #5). */
   advLat: number;
   advLon: number;
   multiAcks: number;
@@ -152,7 +159,7 @@ export interface Contact {
   outPath: string; // hex of the first min(outPathLen, 64) bytes
   name: string;
   lastAdvertTimestamp: number;
-  /** Degrees. UNVERIFIED: signedness (read as signed). */
+  /** Degrees: signed int32 ×1e6 (public firmware owner, Issue #5). */
   lat: number;
   lon: number;
   lastMod: number;
@@ -258,10 +265,10 @@ function concat(...parts: Uint8Array[]): Uint8Array {
   return out;
 }
 
-function textBytes(text: string): Uint8Array {
+function textBytes(text: string, maxBytes: number): Uint8Array {
   const t = utf8.encode(text);
   if (t.length === 0) throw new FrameEncodeError('bad_argument', 'empty text');
-  if (t.length > MAX_TEXT_BYTES) throw new FrameEncodeError('text_too_long', `text ${t.length} bytes > ${MAX_TEXT_BYTES}`);
+  if (t.length > maxBytes) throw new FrameEncodeError('text_too_long', `text ${t.length} bytes > ${maxBytes}`);
   return t;
 }
 
@@ -289,20 +296,26 @@ export function encodeSyncNextMessage(): Uint8Array {
 
 /**
  * MyMesh.cpp CMD_SEND_TXT_MSG: [2][txt_type][attempt][ts u32][6-byte key prefix][text].
- * `attempt` is the firmware's own retry counter field, not our client_attempt_id.
- * UNVERIFIED: its exact effect on firmware-level retries; we always send 0.
+ * `attempt` is not our client_attempt_id: it changes the packet hash and the
+ * expected ACK, so a manual retry of the same draft must increment it (public
+ * firmware owner, Issue #5). 0 for a draft's first attempt.
  */
-export function encodeSendDirect(keyPrefixHex: string, text: string, timestampSec: number): Uint8Array {
+export function encodeSendDirect(keyPrefixHex: string, text: string, timestampSec: number, firmwareAttempt = 0): Uint8Array {
   const key = bytesOfHex(keyPrefixHex);
   if (key.length < KEY_PREFIX_SIZE) throw new FrameEncodeError('bad_argument', 'key prefix < 6 bytes');
+  if (!Number.isInteger(firmwareAttempt) || firmwareAttempt < 0 || firmwareAttempt > 255) throw new FrameEncodeError('bad_argument', 'attempt');
   const prefix = key.subarray(0, KEY_PREFIX_SIZE);
-  return checkFrame(concat(Uint8Array.of(CMD.SEND_TXT_MSG, TXT_TYPE.PLAIN, 0), u32(timestampSec), prefix, textBytes(text)));
+  return checkFrame(
+    concat(Uint8Array.of(CMD.SEND_TXT_MSG, TXT_TYPE.PLAIN, firmwareAttempt), u32(timestampSec), prefix, textBytes(text, MAX_DM_TEXT_BYTES)),
+  );
 }
 
 /** companion_protocol.md "Send Channel Message": [3][0][channel][ts u32][text]. */
-export function encodeSendChannel(channelIndex: number, text: string, timestampSec: number): Uint8Array {
+export function encodeSendChannel(channelIndex: number, text: string, timestampSec: number, senderName: string): Uint8Array {
   if (!Number.isInteger(channelIndex) || channelIndex < 0 || channelIndex > 255) throw new FrameEncodeError('bad_argument', 'channel');
-  return checkFrame(concat(Uint8Array.of(CMD.SEND_CHANNEL_TXT_MSG, TXT_TYPE.PLAIN, channelIndex), u32(timestampSec), textBytes(text)));
+  return checkFrame(
+    concat(Uint8Array.of(CMD.SEND_CHANNEL_TXT_MSG, TXT_TYPE.PLAIN, channelIndex), u32(timestampSec), textBytes(text, channelTextBudget(senderName))),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -475,7 +488,7 @@ export function decodeFrame(b: Uint8Array): Frame {
   }
 }
 
-/** What the firmware answers to a channel send. UNVERIFIED which of the two real firmware sends. */
+/** What the firmware answers to a channel send: public firmware answers OK (Issue #5); SENT is still accepted defensively. */
 export function isChannelSendAccepted(f: Frame): boolean {
   // Source (MyMesh.cpp CMD_SEND_CHANNEL_TXT_MSG) writes RESP_CODE_OK; the prose
   // doc says RESP_CODE_SENT. Both are accepted as "device accepted", and neither

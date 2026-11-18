@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { FIXTURES, fixtureBytes, SYNTHETIC_KEYS, type FixtureName } from './fixtures/frames';
 import {
   MAX_FRAME_SIZE,
-  MAX_TEXT_BYTES,
+  MAX_DM_TEXT_BYTES,
+  channelTextBudget,
   FrameEncodeError,
   decodeFrame,
   encodeAppStart,
@@ -28,7 +29,7 @@ describe(`${S} / encoders match independent byte fixtures`, () => {
   });
   it('send direct and send channel', () => {
     expect(hex(encodeSendDirect(SYNTHETIC_KEYS.alice, 'hello dm', 1700000100))).toBe(FIXTURES.cmdSendTxtMsg);
-    expect(hex(encodeSendChannel(1, 'hello channel', 1700000200))).toBe(FIXTURES.cmdSendChannelTxtMsg);
+    expect(hex(encodeSendChannel(1, 'hello channel', 1700000200, 'Synth'))).toBe(FIXTURES.cmdSendChannelTxtMsg);
   });
   it('uses only the first 6 key bytes for a direct message', () => {
     const full = encodeSendDirect(SYNTHETIC_KEYS.alice, 'x', 1);
@@ -36,15 +37,33 @@ describe(`${S} / encoders match independent byte fixtures`, () => {
     expect(hex(full)).toBe(hex(short));
   });
   it('refuses text over the limit, empty text, a short key and an oversized frame', () => {
-    const over = 'x'.repeat(MAX_TEXT_BYTES + 1);
-    expect(() => encodeSendDirect(SYNTHETIC_KEYS.alice, over, 1)).toThrow(FrameEncodeError);
-    expect(() => encodeSendChannel(0, over, 1)).toThrow(/text/);
-    expect(() => encodeSendChannel(0, '', 1)).toThrow(FrameEncodeError);
+    expect(() => encodeSendDirect(SYNTHETIC_KEYS.alice, 'x'.repeat(MAX_DM_TEXT_BYTES + 1), 1)).toThrow(FrameEncodeError);
+    expect(() => encodeSendChannel(0, '', 1, 'Synth')).toThrow(FrameEncodeError);
     expect(() => encodeSendDirect('a1a1', 'x', 1)).toThrow(FrameEncodeError);
     expect(() => encodeAppStart('n'.repeat(MAX_FRAME_SIZE))).toThrow(FrameEncodeError);
-    // 133 bytes counts bytes, not characters
-    expect(() => encodeSendChannel(0, 'é'.repeat(67), 1)).toThrow(FrameEncodeError);
-    expect(encodeSendChannel(0, 'x'.repeat(MAX_TEXT_BYTES), 1).length).toBeLessThanOrEqual(MAX_FRAME_SIZE);
+  });
+  it('direct messages: up to 160 UTF-8 bytes, counted in bytes not characters', () => {
+    expect(encodeSendDirect(SYNTHETIC_KEYS.alice, 'x'.repeat(160), 1).length).toBeLessThanOrEqual(MAX_FRAME_SIZE);
+    expect(() => encodeSendDirect(SYNTHETIC_KEYS.alice, 'x'.repeat(161), 1)).toThrow(/text/);
+    // 80 two-byte characters = 160 bytes fits; 81 = 162 bytes does not
+    expect(() => encodeSendDirect(SYNTHETIC_KEYS.alice, 'é'.repeat(80), 1)).not.toThrow();
+    expect(() => encodeSendDirect(SYNTHETIC_KEYS.alice, 'é'.repeat(81), 1)).toThrow(/text/);
+  });
+  it('channel messages: the firmware prepends "<name>: " and cuts at 160 silently, so the budget subtracts it', () => {
+    // "Synth: " is 7 bytes, leaving 153
+    expect(channelTextBudget('Synth')).toBe(153);
+    expect(() => encodeSendChannel(0, 'x'.repeat(153), 1, 'Synth')).not.toThrow();
+    expect(() => encodeSendChannel(0, 'x'.repeat(154), 1, 'Synth')).toThrow(/text/);
+    // a multi-byte name costs its bytes, not its characters ("Ærø: " is 7 bytes)
+    expect(channelTextBudget('Ærø')).toBe(153);
+    expect(encodeSendChannel(0, 'x'.repeat(153), 1, 'Synth').length).toBeLessThanOrEqual(MAX_FRAME_SIZE);
+  });
+  it('the firmware attempt byte is 0 by default and carried when given', () => {
+    const base = encodeSendDirect(SYNTHETIC_KEYS.alice, 'x', 1);
+    const retry = encodeSendDirect(SYNTHETIC_KEYS.alice, 'x', 1, 1);
+    expect(base[2]).toBe(0);
+    expect(retry[2]).toBe(1);
+    expect(() => encodeSendDirect(SYNTHETIC_KEYS.alice, 'x', 1, 256)).toThrow(FrameEncodeError);
   });
 });
 

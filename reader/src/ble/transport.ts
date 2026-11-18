@@ -41,6 +41,10 @@ export interface BleDeviceInfo {
 
 export type Unsubscribe = () => void;
 
+/** Connect sub-steps a transport may report, for diagnostics only. */
+export type BlePhase = 'gatt_connected' | 'service_found' | 'characteristics_found' | 'notifications_started';
+
+
 /**
  * One GATT link to one Companion. Transport only: it moves frames and reports
  * link loss; it knows nothing about commands, sends or outcomes.
@@ -71,4 +75,6 @@ export interface BleTransport {
   onFrame(cb: (frame: Uint8Array) => void): Unsubscribe;
   /** Link loss, whether initiated by the device, the OS, the browser or disconnect(). */
   onDisconnect(cb: () => void): Unsubscribe;
+  /** Optional: reports connect sub-steps as they complete (used by the probe page). */
+  onPhase?(cb: (phase: BlePhase) => void): Unsubscribe;
 }

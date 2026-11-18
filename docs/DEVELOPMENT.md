@@ -105,6 +105,13 @@ original line drawings in `TabIcons.tsx`. Accessibility is checked by
 light and dark, zero serious or critical violations); the same run saves
 screenshots to `reader/e2e-artifacts/`.
 
+## BLE probe
+
+`/probe/ble` is a production, read-only Bluetooth diagnostics page used to
+collect real-hardware evidence (see `docs/BLE_PROBE.md`). It is a lazy chunk and
+is not in the main bundle. The dev-only harness at `/dev/ble` is separate and
+is still stripped from production.
+
 ## Content Security Policy rule
 
 The Reader ships under a strict CSP (`script-src 'self'; style-src 'self'`,

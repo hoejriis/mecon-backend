@@ -6,10 +6,13 @@ export type LocalPath = 'ble' | 'usb';
 export const PATH_LABEL: Record<SendPath, string> = { backend: 'Backend', ble: 'Bluetooth', usb: 'USB' };
 export const isLocalPath = (p: SendPath | undefined): p is LocalPath => p === 'ble' || p === 'usb';
 
-/** What a local send is addressed to on the device: a contact's public key (hex), or a channel slot. */
+/**
+ * The user's choice among device contacts that already match the Backend contact's key prefix. It
+ * never names a destination by itself: the device mapping accepts it only if it is one of the
+ * matching candidates. (Records saved before the mapping existed may carry other fields; they are ignored.)
+ */
 export interface LocalTarget {
   contactKey?: string;
-  channelIndex?: number;
 }
 
 /**

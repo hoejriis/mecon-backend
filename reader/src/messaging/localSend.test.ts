@@ -1,19 +1,22 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import type { Identity, Target } from '../api/types';
-import { SYNTHETIC_KEYS } from '../ble/fixtures/frames';
 import { companionRig, wait } from '../device/rig.test-util';
+import type { BackendDest } from '../device/destinations';
 import type { DeviceSession } from '../device/session';
 import { OfflineGate, registerGate } from '../offline/gate';
 import { expiredPayload, leaseSource } from '../offline/leaseSource.test-util';
 import { leasePayload } from '../offline/testkit';
 import { describeAttempt, isUncertainAttempt, type LocalAttempt } from './attemptStatus';
-import { CHANNEL_LOCAL_UNAVAILABLE } from './localPath';
 import { preflightLocal, runLocalSend } from './localSend';
 
 const S = 'SIMULATED — not hardware verified: local send flow';
 const IDENT: Identity = { id: 'ident_t', display_name: 'Mine', public_key_prefix: '111111', device_id: 'dev_t', can_send: true };
 const DM: Target = { kind: 'contact', id: 'c_alice' };
 const CH: Target = { kind: 'channel', id: 'chan_t' };
+/** The Backend side of each send: Alice's key prefix, and the own, uniquely named channel `Crew` (the device's slot 1). */
+const DM_DEST: BackendDest = { kind: 'contact', targetId: DM.id, prefix: 'a1a1a1' };
+const CH_DEST: BackendDest = { kind: 'channel', targetId: CH.id, name: 'Crew', ownLinked: true, sameNameCount: 1 };
+const destOf = (t: Target): BackendDest => (t.kind === 'contact' ? DM_DEST : CH_DEST);
 const sessions: DeviceSession[] = [];
 afterEach(() => {
   sessions.splice(0).forEach((s) => s.dispose());
@@ -21,7 +24,7 @@ afterEach(() => {
 });
 
 async function ready() {
-  const r = companionRig();
+  const r = companionRig({ mock: { channels: true } });
   sessions.push(r.session);
   await r.session.connect();
   return r;
@@ -36,7 +39,7 @@ const attempt = (id: string, target: Target = DM, over: Partial<LocalAttempt> = 
   supersededBy: null,
   createdAt: 1,
   path: 'usb',
-  localTarget: target.kind === 'contact' ? { contactKey: SYNTHETIC_KEYS.alice } : { channelIndex: 0 },
+  localTarget: {},
   local: null,
   ...over,
 });
@@ -51,7 +54,7 @@ describe(`${S}: facts, and never a resend or a reroute`, () => {
   it('a DM: accepted, then the recipient ACK; the path is usb; radio transmission stays not observed', async () => {
     const r = await ready();
     const t = track(attempt('a1'));
-    await runLocalSend(r.session, t.get(), IDENT, t.patch);
+    await runLocalSend(r.session, t.get(), IDENT, destOf(t.get().request.target), t.patch);
     await wait(40);
     const a = t.get();
     expect(a.path).toBe('usb');
@@ -65,13 +68,27 @@ describe(`${S}: facts, and never a resend or a reroute`, () => {
     expect(r.backend.post).not.toHaveBeenCalled();
   });
 
-  it('a channel attempt is refused before the device: nothing is written, even with a slot in the record', async () => {
+  it('a channel attempt to a uniquely matched channel is written once, to the slot the device listed (never one from the record)', async () => {
     const r = await ready();
-    const t = track(attempt('c1', CH, { localTarget: { channelIndex: 0 } }));
-    await runLocalSend(r.session, t.get(), IDENT, t.patch);
-    expect(t.get().phase).toBe('rejected');
-    expect(t.get().error?.code).toBe('channel_unavailable');
-    expect(r.mock.writes.filter((w) => w[0] === 2 || w[0] === 3)).toHaveLength(0);
+    const t = track(attempt('c1', CH, { localTarget: { channelIndex: 7 } as never })); // a stale slot in an old record is ignored
+    await runLocalSend(r.session, t.get(), IDENT, CH_DEST, t.patch);
+    expect(t.get().phase).toBe('local');
+    expect(r.mock.sendWrites()).toHaveLength(1);
+    expect(r.mock.rf).toEqual([expect.objectContaining({ kind: 'channel', target: '1' })]); // Crew is slot 1 on the device
+  });
+
+  it('a channel that does not match exactly one device channel is refused before any write', async () => {
+    const r = await ready();
+    for (const dest of [
+      { ...CH_DEST, name: 'Nowhere' },
+      { ...CH_DEST, ownLinked: false },
+      { ...CH_DEST, sameNameCount: 2 },
+    ]) {
+      const t = track(attempt(`x${dest.name}${dest.ownLinked}${dest.sameNameCount}`, CH));
+      await runLocalSend(r.session, t.get(), IDENT, dest, t.patch);
+      expect(t.get().phase).toBe('rejected');
+      expect(t.get().error?.code).toBe('unmapped_destination');
+    }
     expect(r.mock.sendWrites()).toHaveLength(0);
   });
 
@@ -79,7 +96,7 @@ describe(`${S}: facts, and never a resend or a reroute`, () => {
     const r = await ready();
     r.mock.faults.dropNextSendReply = true;
     const t = track(attempt('u1'));
-    await runLocalSend(r.session, t.get(), IDENT, t.patch);
+    await runLocalSend(r.session, t.get(), IDENT, destOf(t.get().request.target), t.patch);
     const a = t.get();
     expect(a.phase).toBe('ambiguous');
     expect(a.local).toMatchObject({ unknown: true, deviceAccepted: false });
@@ -96,7 +113,7 @@ describe(`${S}: facts, and never a resend or a reroute`, () => {
     const r = await ready();
     r.mock.faults.disconnectOnSend = 'after_device';
     const t = track(attempt('u2'));
-    await runLocalSend(r.session, t.get(), IDENT, t.patch);
+    await runLocalSend(r.session, t.get(), IDENT, destOf(t.get().request.target), t.patch);
     expect(t.get().phase).toBe('ambiguous');
     expect(r.mock.rf).toHaveLength(1);
     await wait(200);
@@ -105,8 +122,9 @@ describe(`${S}: facts, and never a resend or a reroute`, () => {
 
   it('a device that refuses is a definite "not sent", with its reason; nothing is retried', async () => {
     const r = await ready();
-    const t = track(attempt('e1', DM, { localTarget: { contactKey: 'ee'.repeat(32) } })); // not a known contact: the device answers NOT_FOUND
-    await runLocalSend(r.session, t.get(), IDENT, t.patch);
+    r.mock.faults.forgetContacts = true; // mapped from the contacts the app read, then the device answers NOT_FOUND
+    const t = track(attempt('e1', DM));
+    await runLocalSend(r.session, t.get(), IDENT, destOf(t.get().request.target), t.patch);
     expect(t.get().phase).toBe('rejected');
     expect(describeAttempt(t.get(), 'contact').label).toBe('Refused by the device');
     expect(r.mock.rf).toHaveLength(0);
@@ -118,7 +136,7 @@ describe(`${S}: facts, and never a resend or a reroute`, () => {
     r.h.unplug();
     await wait(30);
     const t = track(attempt('d1'));
-    await runLocalSend(r.session, t.get(), IDENT, t.patch);
+    await runLocalSend(r.session, t.get(), IDENT, destOf(t.get().request.target), t.patch);
     expect(t.get().phase).toBe('rejected');
     expect(r.mock.sendWrites()).toHaveLength(0);
     expect(describeAttempt(t.get(), 'contact')).toMatchObject({ label: 'Not sent', canSendAgain: true, terminal: true });
@@ -127,26 +145,26 @@ describe(`${S}: facts, and never a resend or a reroute`, () => {
   it('the same attempt id cannot be written twice; a new attempt for the same draft is a new, separate write', async () => {
     const r = await ready();
     const first = track(attempt('same'));
-    await runLocalSend(r.session, first.get(), IDENT, first.patch);
+    await runLocalSend(r.session, first.get(), IDENT, destOf(first.get().request.target), first.patch);
     const dup = track(attempt('same'));
-    await runLocalSend(r.session, dup.get(), IDENT, dup.patch);
+    await runLocalSend(r.session, dup.get(), IDENT, destOf(dup.get().request.target), dup.patch);
     expect(dup.get().phase).toBe('rejected');
     expect(dup.get().error?.code).toBe('attempt_reused');
     expect(r.mock.sendWrites()).toHaveLength(1);
     const again = track(attempt('new_id'));
-    await runLocalSend(r.session, again.get(), IDENT, again.patch);
+    await runLocalSend(r.session, again.get(), IDENT, destOf(again.get().request.target), again.patch);
     expect(again.get().draftId).toBe('draft_1');
     expect(r.mock.sendWrites()).toHaveLength(2);
   });
 });
 
 describe(`${S}: the preflight tells the truth and writes nothing`, () => {
-  const to = { contactKey: SYNTHETIC_KEYS.alice };
+  const to = {};
 
   it('online: allowed with no lease at all', async () => {
     const r = await ready();
     registerGate(new OfflineGate(true));
-    expect(preflightLocal(r.session, IDENT, DM, to).ok).toBe(true);
+    expect(preflightLocal(r.session, IDENT, DM, to, DM_DEST).ok).toBe(true);
   });
 
   const reasons: Array<[string, Parameters<typeof leaseSource>, RegExp, Target?]> = [
@@ -163,13 +181,13 @@ describe(`${S}: the preflight tells the truth and writes nothing`, () => {
       g.setLeases(leaseSource(...args));
       registerGate(g);
       const t = target ?? DM;
-      const p = preflightLocal(r.session, IDENT, t, t.kind === 'contact' ? to : { channelIndex: 0 });
+      const p = preflightLocal(r.session, IDENT, t, to, destOf(t));
       expect(p.ok).toBe(false);
       expect(!p.ok && re.test(p.reason)).toBe(true);
       // And the send call itself, bypassing the preflight, is refused the same way with zero writes.
-      const a = track(attempt('blocked', t, { localTarget: t.kind === 'contact' ? to : { channelIndex: 0 } }));
+      const a = track(attempt('blocked', t, { localTarget: to }));
       const before = r.mock.writes.length;
-      await runLocalSend(r.session, a.get(), IDENT, a.patch);
+      await runLocalSend(r.session, a.get(), IDENT, destOf(a.get().request.target), a.patch);
       expect(a.get().phase).toBe('rejected');
       expect(a.get().error?.code).toBe('offline_blocked');
       expect(re.test(a.get().error?.message ?? '')).toBe(true);
@@ -182,19 +200,19 @@ describe(`${S}: the preflight tells the truth and writes nothing`, () => {
     const r = await ready();
     const g = new OfflineGate(false);
     registerGate(g);
-    const p = preflightLocal(r.session, IDENT, DM, to);
+    const p = preflightLocal(r.session, IDENT, DM, to, DM_DEST);
     expect(!p.ok && /locked/i.test(p.reason)).toBe(true);
   });
 
   it('no device, a disconnected device, the wrong identity, a device without the capability and a missing destination are each refused first', async () => {
     const r = await ready();
     registerGate(new OfflineGate(true));
-    expect(preflightLocal(null, IDENT, DM, to)).toMatchObject({ ok: false, reason: 'No device is connected.' });
-    expect(preflightLocal(r.session, { ...IDENT, public_key_prefix: 'fefefe' }, DM, to)).toMatchObject({ ok: false, reason: expect.stringContaining('not the one this identity belongs to') });
-    expect(preflightLocal(r.session, IDENT, DM, {})).toMatchObject({ ok: false, reason: 'Choose which device contact to send to.' });
-    expect(preflightLocal(r.session, IDENT, CH, { channelIndex: 0 })).toMatchObject({ ok: false, reason: CHANNEL_LOCAL_UNAVAILABLE });
+    expect(preflightLocal(null, IDENT, DM, to, DM_DEST)).toMatchObject({ ok: false, reason: 'No device is connected.' });
+    expect(preflightLocal(r.session, { ...IDENT, public_key_prefix: 'fefefe' }, DM, to, DM_DEST)).toMatchObject({ ok: false, reason: expect.stringContaining('not the one this identity belongs to') });
+    expect(preflightLocal(r.session, IDENT, DM, {}, { ...DM_DEST, prefix: null })).toMatchObject({ ok: false, reason: expect.stringContaining('not known to the Reader') });
+    expect(preflightLocal(r.session, IDENT, CH, {}, { ...CH_DEST, name: 'Nowhere' })).toMatchObject({ ok: false, reason: expect.stringContaining('No channel named') });
     r.h.unplug();
     await wait(30);
-    expect(preflightLocal(r.session, IDENT, DM, to)).toMatchObject({ ok: false, reason: 'The device is not connected.' });
+    expect(preflightLocal(r.session, IDENT, DM, to, DM_DEST)).toMatchObject({ ok: false, reason: 'The device is not connected.' });
   });
 });

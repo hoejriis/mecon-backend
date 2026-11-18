@@ -13,7 +13,7 @@
  * drafts and send attempts (uncertain or in flight, and all others), the lease and
  * the clock mark. If the store is full, the cache says so (a warning) and keeps them.
  */
-import type { Conversation, Identity, Message, Target } from '../api/types';
+import type { Channel, Contact, Conversation, Identity, Message, Target } from '../api/types';
 import type { LocalAttempt } from '../messaging/attemptStatus';
 import { newDraftId } from '../messaging/sendFlow';
 import { runMigrations, type KvStore, type MigrationResult } from '../storage/migrations';
@@ -60,7 +60,7 @@ export class StorageFullError extends Error {
 
 export type CacheWarning = 'storage-pressure' | 'storage-full';
 
-type Kind = 'conv' | 'msgs' | 'draft' | 'attempt' | 'lease' | 'leasekeys' | 'meta' | 'held' | 'ident';
+type Kind = 'conv' | 'msgs' | 'draft' | 'attempt' | 'lease' | 'leasekeys' | 'meta' | 'held' | 'ident' | 'dir';
 const PURPOSE: Record<Kind, Purpose> = {
   conv: 'cache',
   msgs: 'cache',
@@ -71,6 +71,7 @@ const PURPOSE: Record<Kind, Purpose> = {
   meta: 'cache',
   held: 'cache',
   ident: 'cache',
+  dir: 'cache',
 };
 /** The only kinds that storage pressure or the caps may remove. */
 const EVICTABLE: readonly Kind[] = ['conv', 'msgs'];
@@ -356,6 +357,22 @@ export class OfflineCache {
   }
   async getIdentities(): Promise<Identity[]> {
     return (await this.getRecord<{ identities: Identity[] }>('ident', 'current'))?.identities ?? [];
+  }
+
+  /* ------------------------------------------------ contacts and channels */
+
+  /**
+   * The Backend contacts and channels as last listed, so a local send offline can find the target on
+   * the connected device (a contact's key prefix, a channel's name). Each list is replaced as a whole
+   * and only by a list that loaded; a failed load never empties what is cached.
+   */
+  async putDirectory(d: { contacts?: Contact[]; channels?: Channel[] }): Promise<void> {
+    const prev = await this.getDirectory();
+    await this.putRecord('dir', 'current', { contacts: d.contacts ?? prev.contacts, channels: d.channels ?? prev.channels });
+  }
+  async getDirectory(): Promise<{ contacts: Contact[]; channels: Channel[] }> {
+    const r = await this.getRecord<{ contacts: Contact[]; channels: Channel[] }>('dir', 'current');
+    return { contacts: r?.contacts ?? [], channels: r?.channels ?? [] };
   }
 
   /* ----------------------------------------------------- lease and clock */

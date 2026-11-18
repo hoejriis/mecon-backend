@@ -1,5 +1,6 @@
 import { MockCompanion } from '../../ble/mockCompanion';
 import { helloEnvelope } from './hello';
+import { answerList, type SimChannel } from './lists';
 import { MECON_LINE_PREFIX, CMD_MECON, MeconReassembler, encodeMeconFrames, type Envelope } from '../meconIface';
 
 /**
@@ -179,7 +180,11 @@ export class CompanionSerialPeer extends BasePeer {
     if (text === null) return;
     const env = JSON.parse(text) as Envelope;
     this.ifaceRequests.push(env);
-    const reply: Envelope = env.op === 'hello' ? helloEnvelope(String(env.id), 'companion', this.opts) : { v: 1, id: env.id, status: 'unknown-op' };
+    const lists = this.mock.lists();
+    const reply: Envelope =
+      env.op === 'hello'
+        ? helloEnvelope(String(env.id), 'companion', { ...this.opts, capabilities: this.mock.helloCapabilities(this.opts.capabilities) })
+        : (lists ? answerList(env, lists) : null) ?? { v: 1, id: env.id, status: 'unknown-op' };
     for (const fr of encodeMeconFrames(p[1]!, JSON.stringify(reply))) this.emitFrame(fr);
   }
 }
@@ -195,6 +200,12 @@ export interface RepeaterOptions {
   capabilities?: string[];
   /** Answer the hello with this role string instead (to test unknown roles). */
   helloRole?: string;
+  /**
+   * Answer `channel.list` with the one slot a Repeater or Room server has (the management channel,
+   * OPERATIONS.md: "R S: one slot") and list it in hello. `contact.list` is Companion only: a Repeater
+   * answers it `unknown-op` whatever this says.
+   */
+  managementChannel?: SimChannel;
   /** Drop the first N complete lines unanswered, like a board still booting after the port open reset it. */
   ignoreFirstLines?: number;
 }
@@ -207,7 +218,7 @@ export class MockRepeater extends BasePeer {
   /** Lines that would have changed something on a real device (anything but the read-only set). The probe must never cause one. */
   readonly executed: string[] = [];
   readonly ifaceRequests: Envelope[] = [];
-  private readonly o: Required<Omit<RepeaterOptions, 'helloRole' | 'ignoreFirstLines'>> & { helloRole?: string };
+  private readonly o: Required<Omit<RepeaterOptions, 'helloRole' | 'ignoreFirstLines' | 'managementChannel'>> & { helloRole?: string; managementChannel?: SimChannel };
   private ignoreLeft: number;
 
   constructor(opts: RepeaterOptions = {}) {
@@ -220,6 +231,7 @@ export class MockRepeater extends BasePeer {
       ver: opts.ver ?? (opts.mecon === false ? 'v1.18.0 (Build: 1 Jan 2026)' : 'v1.18.0-mecon.0.0.0-synthetic (Build: 1 Jan 2026)'),
       capabilities: opts.capabilities ?? ['hello', 'status.get', 'clock.get', 'config.get'],
       helloRole: opts.helloRole,
+      managementChannel: opts.managementChannel,
     };
     this.ignoreLeft = opts.ignoreFirstLines ?? 0;
   }
@@ -280,7 +292,8 @@ export class MockRepeater extends BasePeer {
     }
     this.ifaceRequests.push(env);
     let reply: Envelope;
-    if (env.op === 'hello') reply = helloEnvelope(String(env.id), this.o.helloRole ?? (this.o.role === 'room' ? 'room' : this.o.role), { capabilities: this.o.capabilities, hardware: this.o.boardName });
+    if (env.op === 'hello') reply = helloEnvelope(String(env.id), this.o.helloRole ?? (this.o.role === 'room' ? 'room' : this.o.role), { capabilities: this.o.managementChannel ? [...this.o.capabilities, 'channel.list'] : this.o.capabilities, hardware: this.o.boardName });
+    else if (env.op === 'channel.list' && this.o.managementChannel) reply = answerList(env, { channels: [this.o.managementChannel], contacts: [] })!;
     else if (env.op === 'status.get') reply = { v: 1, id: env.id, status: 'ok', result: { uptime_s: 12 } };
     else if (env.op === 'clock.get') reply = { v: 1, id: env.id, status: 'ok', result: { epoch: null } };
     else {

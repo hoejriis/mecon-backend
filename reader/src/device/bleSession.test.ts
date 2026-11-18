@@ -1,13 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MockCompanion, MockTransport, type MockCompanionOptions } from '../ble/mockCompanion';
-import { SYNTHETIC_KEYS } from '../ble/fixtures/frames';
 import { CMD } from '../ble/protocol';
 import { detectBleDevice } from './detect';
-import { authFor, companionRig, wait } from './rig.test-util';
+import { authFor, companionRig, tryMapDirect, wait } from './rig.test-util';
 import { DeviceSession, type SessionOptions } from './session';
 
 const S = 'SIMULATED — not hardware verified: Bluetooth device session';
-const alice = SYNTHETIC_KEYS.alice;
 const sessions: DeviceSession[] = [];
 afterEach(() => sessions.splice(0).forEach((s) => s.dispose()));
 
@@ -22,7 +20,7 @@ function bleRig(mockOpts: MockCompanionOptions = {}) {
   return { mock, transport, session, backend };
 }
 const MECON: MockCompanionOptions = { mecon: true };
-const dm = (id: string) => ({ clientDraftId: 'd1', clientAttemptId: id, contactKey: alice, text: 'hello dm', auth: authFor() });
+const dm = (s: DeviceSession, id: string) => ({ clientDraftId: 'd1', clientAttemptId: id, mapping: tryMapDirect(s), text: 'hello dm', auth: authFor() });
 const ifaceOps = (m: MockCompanion) => m.ifaceRequests.map((r) => r.op);
 
 describe(`${S}: detection`, () => {
@@ -49,7 +47,7 @@ describe(`${S}: detection`, () => {
     expect(s.companion!.helloComplete).toBe(true);
     expect(r.session.can('status.read')).toBe(false); // gated on capabilities: no interface, no status
     expect(r.session.can('message.send.direct')).toBe(true);
-    const a = await r.session.sendDirect(dm('a1'));
+    const a = await r.session.sendDirect(dm(r.session, 'a1'));
     expect(a).toMatchObject({ path: 'ble', deviceAccepted: true, rfTransmitted: false });
     await wait(30);
     expect(r.session.getSnapshot().companion!.attempts[0]!.dmAck).toBe(true);
@@ -65,7 +63,7 @@ describe(`${S}: detection`, () => {
     expect(s.detected!.summary).toMatch(/^Unknown device/);
     expect(s.companion).toBeNull();
     expect(r.session.can('message.send.direct')).toBe(false);
-    await expect(r.session.sendDirect(dm('x'))).rejects.toMatchObject({ code: 'unsupported_capability' });
+    await expect(r.session.sendDirect(dm(r.session, 'x'))).rejects.toMatchObject({ code: 'unsupported_capability' });
     expect(r.mock.sendWrites()).toHaveLength(0);
   });
 

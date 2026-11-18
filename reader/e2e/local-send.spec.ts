@@ -24,8 +24,10 @@ async function connectBluetooth(page: Page) {
   await expect(page.getByTestId('device-ble')).toContainText('Bluetooth device connected', { timeout: 15_000 });
 }
 
+/** Nothing to choose: Alice is found on the device by her key prefix, and the Reader says so. */
 async function chooseAlice(page: Page) {
-  await page.getByLabel('Device contact').selectOption({ label: 'Alice Synthetic (a1a1a1)' });
+  await expect(page.getByTestId('device-destination')).toHaveText("Device contact: Alice Synthetic (a1a1a1), found by the contact's key prefix.");
+  await expect(page.getByLabel('Device contact')).toHaveCount(0);
 }
 
 async function signedInAndCached(page: Page, context: BrowserContext, lease: Parameters<typeof mockLeaseBackend>[1] = {}) {
@@ -128,9 +130,9 @@ test.describe(`${SIMULATED}: offline local sends are gated by the lease`, () => 
     expect(be.msg.posts).toHaveLength(0);
     await page.screenshot({ path: 'e2e-artifacts/local-send-offline-lease-valid.png' });
 
-    // A channel has no local path and no slot entry, offline either.
+    // A channel: this simulated device has no channel list, so no local path and no slot entry, offline either.
     await page.getByRole('button', { name: /Demo Channel/ }).click();
-    await expect(page.getByTestId('channel-local-unavailable')).toContainText("Sending to a channel through a device needs the device's channel list (coming soon)");
+    await expect(page.getByTestId('local-unavailable-ble')).toContainText("Sending to a channel through a device needs the device's channel list");
     await expect(page.getByRole('spinbutton')).toHaveCount(0);
     await page.getByRole('textbox', { name: 'Message', exact: true }).fill('to a channel');
     await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeDisabled();

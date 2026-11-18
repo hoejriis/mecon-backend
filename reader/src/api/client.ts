@@ -3,6 +3,7 @@ import type {
   Capabilities,
   CapabilityState,
   ChannelList,
+  ContactList,
   Conversation,
   ConversationList,
   DeviceList,
@@ -108,6 +109,8 @@ export interface ApiClient {
    */
   markConversationRead(conversationId: string, upTo: string): Promise<void>;
   listMessages(conversationId: string, page?: PageOpts): Promise<MessageList>;
+  /** M2 draft: Backend contacts, one page. The Reader needs each one's `public_key_prefix` to find it on a connected device. */
+  listContacts(page?: PageOpts): Promise<ContactList>;
   listChannels(): Promise<ChannelList>;
   /**
    * POST one attempt. The Idempotency-Key is the request's client_attempt_id.
@@ -252,6 +255,10 @@ export function createApiClient(opts: ApiClientOptions = {}): ApiClient {
         `/conversations/${encodeURIComponent(conversationId)}/messages${pageQuery(page)}`,
         { cache: 'no-store' },
       );
+    },
+    async listContacts(page) {
+      need('messaging');
+      return json<ContactList>(`/contacts${pageQuery(page)}`, { cache: 'no-store' });
     },
     async listChannels() {
       need('messaging');

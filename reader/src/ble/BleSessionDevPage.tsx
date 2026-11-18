@@ -79,7 +79,12 @@ export default function BleSessionDevPage() {
       </ul>
       <h2>Send</h2>
       <p>
-        <button type="button" disabled={!session.can('message.send.direct') || !first} onClick={() => void run(() => session.sendDirect({ clientDraftId: draft, clientAttemptId: newId('attempt'), contactKey: first!.publicKey, text: 'hello dm', auth: { op: 'send.direct', identityId: 'dev', deviceId: 'dev', identityKeyPrefix: s.companion?.selfInfo?.publicKey.slice(0, 8) ?? '' } }))}>
+        <button type="button" disabled={!session.can('message.send.direct') || !first} onClick={() => void run(() => {
+          // The dev page maps like the Reader does: by the contact's key prefix, refusing when it is not unique.
+          const m = session.mapDestination({ kind: 'contact', targetId: 'dev', prefix: first!.publicKey.slice(0, 12) });
+          if (!m.ok) throw new Error(m.reason);
+          return session.sendDirect({ clientDraftId: draft, clientAttemptId: newId('attempt'), text: 'hello dm', mapping: m.token, auth: { op: 'send.direct', identityId: 'dev', deviceId: 'dev', targetId: 'dev', identityKeyPrefix: s.companion?.selfInfo?.publicKey.slice(0, 8) ?? '' } });
+        })}>
           Send DM to first contact
         </button>{' '}
         <button type="button" onClick={() => setDraft(newId('draft'))}>New draft</button>

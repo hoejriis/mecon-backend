@@ -32,7 +32,10 @@ const page = (items: unknown[], next: string | null = null) => ({ items, next_cu
  * finite text/event-stream per connection (Playwright cannot hold a response
  * open): the Reader reconnects with Last-Event-ID, which is what is asserted.
  */
-export async function mockMessagingBackend(page_: Page, opts: { identityPrefix?: string } = {}): Promise<MsgBackend> {
+export async function mockMessagingBackend(
+  page_: Page,
+  opts: { identityPrefix?: string; channelName?: string; contactPrefix?: string } = {},
+): Promise<MsgBackend> {
   const session = fixture('session-device-user');
   session.capabilities = { devices: 'available', messaging: 'available', send: 'available', events: 'available', observations: 'unavailable' };
   const conversations = [
@@ -58,7 +61,9 @@ export async function mockMessagingBackend(page_: Page, opts: { identityPrefix?:
       content: { kind: 'text', text: 'Hello from the peer' }, attempt_id: null,
     },
   ];
-  const channels = [{ id: 'chan_demo_0001', name: 'Demo Channel', visibility: 'public' }];
+  const channels = [{ id: 'chan_demo_0001', name: opts.channelName ?? 'Demo Channel', visibility: 'public' }];
+  // The DM peer of the demo conversation is Alice on the synthetic device (key prefix a1a1a1).
+  const contacts = [{ id: 'contact_demo_0001', display_name: 'Demo Peer', public_key_prefix: opts.contactPrefix ?? 'a1a1a1', kind: 'companion', last_heard_at: '2030-01-15T09:58:00Z' }];
 
   // Not in the list page, so reachable only by GET /conversations/{id}.
   const deepConversation = {
@@ -101,6 +106,7 @@ export async function mockMessagingBackend(page_: Page, opts: { identityPrefix?:
     if (m === 'GET' && path === '/health') return j(route, 200, fixture('health'));
     if (m === 'GET' && path === '/identities') return j(route, 200, page(identities));
     if (m === 'GET' && path === '/channels') return j(route, 200, page(channels));
+    if (m === 'GET' && path === '/contacts') return j(route, 200, page(contacts));
     if (m === 'GET' && path === '/conversations') return j(route, 200, page(conversations));
     if (m === 'GET' && path === '/conversations/conv_demo_0001/messages') return j(route, 200, page(dmMsgs));
     if (m === 'GET' && path === '/conversations/conv_demo_0002/messages') return j(route, 200, page(channelMsgs));

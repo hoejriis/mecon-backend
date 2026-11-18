@@ -1,10 +1,12 @@
 import { vi } from 'vitest';
 import { MockCompanion, type MockCompanionOptions } from '../ble/mockCompanion';
+import type { DestinationToken } from './destinations';
 import { DeviceSession, type LocalSendAuth, type SessionOptions } from './session';
 import { installFakeSerial, type FakeSerialHandle } from './sim/fakeSerial';
 import { CompanionSerialPeer, MockRepeater, MockSilentDevice, type CompanionPeerOptions, type SerialPeer } from './sim/serialPeers';
 import { WebSerialTransport } from './webSerialTransport';
 
+export const TARGET_ID = 'target_test';
 export const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export function serialRig(peer: SerialPeer, o: { writeTimeoutMs?: number } = {}) {
@@ -47,5 +49,26 @@ export const authFor = (op: 'send.direct' | 'send.channel' = 'send.direct', over
   deviceId: 'dev_test',
   ...(op === 'send.channel' ? { channelId: 'chan_test' } : {}),
   identityKeyPrefix: '111111',
+  targetId: TARGET_ID,
   ...over,
 });
+
+/** A destination token for a contact, issued by the session's own mapping (prefix `a1a1a1`: Alice). */
+export function mapDirect(s: DeviceSession, prefix = 'a1a1a1', pick?: string): DestinationToken {
+  const m = s.mapDestination({ kind: 'contact', targetId: TARGET_ID, prefix }, pick);
+  if (!m.ok) throw new Error(`test setup: ${m.reason}`);
+  return m.token;
+}
+
+/** A destination token for a channel (own, uniquely named) by its name on the device. */
+export function mapChannel(s: DeviceSession, name = 'Crew'): DestinationToken {
+  const m = s.mapDestination({ kind: 'channel', targetId: TARGET_ID, name, ownLinked: true, sameNameCount: 1 });
+  if (!m.ok) throw new Error(`test setup: ${m.reason}`);
+  return m.token;
+}
+
+/** Like mapDirect, but a device that cannot map yields an unusable token, so a test can show the send is refused. */
+export function tryMapDirect(s: DeviceSession): DestinationToken {
+  const m = s.mapDestination({ kind: 'contact', targetId: TARGET_ID, prefix: 'a1a1a1' });
+  return m.ok ? m.token : ({} as DestinationToken);
+}

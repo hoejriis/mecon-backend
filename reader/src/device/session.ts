@@ -2,7 +2,9 @@ import { BleAdapter, type AttemptFacts, type BleAdapterOptions, type BleSnapshot
 import { BleError, type BleDeviceInfo, type BleErrorCode, type CompanionTransport, type DisconnectReason, type TransportSupport } from '../ble/transport';
 import { CompanionSerialTransport } from './companionSerial';
 import { detectBleDevice, detectDevice, type Capability, type DetectedDevice, type DetectOptions } from './detect';
-import { MeconReassembler, buildRequest, encodeMeconFrames, type Envelope } from './meconIface';
+import { MAX_CHANNEL_PAGES, parseChannelPage } from './channelList';
+import { matchDestination, sameDestination, type BackendDest, type Destination, type DestinationToken, type DeviceChannelRef, type DeviceChannelsState, type DeviceContactRef, type MapOutcome, type SessionMapping } from './destinations';
+import { MeconReassembler, buildRequest, encodeMeconFrames, type Envelope, type ReadArgs } from './meconIface';
 import type { ByteTransport } from './serialBytes';
 import { OfflineSendBlocked, offlineSendGuard } from '../offline/gate';
 import type { PermitQuery } from '../offline/lease';
@@ -41,6 +43,8 @@ export interface SessionSnapshot {
   detected: DetectedDevice | null;
   /** The Companion driver's own facts (attempts, contacts, inbox), when attached. */
   companion: BleSnapshot | null;
+  /** The device's own channel list (`channel.list`, class read), read once the link is ready. Never typed in, never guessed. */
+  deviceChannels: DeviceChannelsState;
 }
 
 export interface SessionOptions {
@@ -56,6 +60,8 @@ export interface SessionOptions {
  */
 export interface LocalSendAuth extends PermitQuery {
   identityKeyPrefix: string;
+  /** The Backend target id this send is for. The destination token must have been issued for exactly this target. */
+  targetId: string;
 }
 
 export interface SessionResult {
@@ -79,7 +85,7 @@ interface Link {
   companionTransport(stallMs: number | undefined): CompanionTransport & { dispose(): void };
 }
 
-const BUILDABLE: readonly string[] = ['hello', 'status.get', 'clock.get'];
+const BUILDABLE: readonly string[] = ['hello', 'status.get', 'clock.get', 'channel.list'];
 
 export function isByteTransport(t: ByteTransport | CompanionTransport): t is ByteTransport {
   return typeof (t as ByteTransport).writeBytes === 'function';
@@ -182,13 +188,15 @@ export class DeviceSession {
   private offs: Array<() => void> = [];
   private busy = false;
   private reqSeq = 0;
+  /** Every destination token this session issued. A token not in here (forged, from another session) is refused. */
+  private readonly minted = new WeakSet<object>();
 
   constructor(
     transport: ByteTransport | CompanionTransport,
     private readonly opts: SessionOptions = {},
   ) {
     this.link = isByteTransport(transport) ? usbLink(transport) : bleLink(transport);
-    this.snap = { link: this.link.support === 'supported' ? 'idle' : 'unsupported', phase: 'idle', lastError: null, trust: this.link.trust, detected: null, companion: null };
+    this.snap = { link: this.link.support === 'supported' ? 'idle' : 'unsupported', phase: 'idle', lastError: null, trust: this.link.trust, detected: null, companion: null, deviceChannels: { status: 'idle' } };
     this.offs.push(this.link.onDisconnect((r) => this.onLinkEnd(r)));
   }
 
@@ -226,7 +234,7 @@ export class DeviceSession {
     if (l === 'unsupported') return Promise.resolve({ ok: false, error: 'unsupported' });
     if (this.busy || l === 'connected') return Promise.resolve({ ok: false, error: 'busy' });
     this.busy = true;
-    this.set({ link: 'requesting', phase: 'choosing', lastError: null, detected: null });
+    this.set({ link: 'requesting', phase: 'choosing', lastError: null, detected: null, deviceChannels: { status: 'idle' } });
     const chooser = this.link.requestDevice();
     return this.afterChooser(chooser).finally(() => {
       this.busy = false;
@@ -239,7 +247,7 @@ export class DeviceSession {
     if (this.busy || l === 'connected' || l === 'requesting') return Promise.resolve({ ok: false, error: 'busy' });
     if (!this.link.hasChosen()) return Promise.resolve({ ok: false, error: 'not_connected' });
     this.busy = true;
-    this.set({ link: 'requesting', phase: 'opening', lastError: null, detected: null });
+    this.set({ link: 'requesting', phase: 'opening', lastError: null, detected: null, deviceChannels: { status: 'idle' } });
     return this.openAndIdentify().finally(() => {
       this.busy = false;
     });
@@ -281,6 +289,7 @@ export class DeviceSession {
       }
     }
     this.set({ phase: 'ready' });
+    await this.refreshChannels();
     return { ok: true, error: null };
   }
 
@@ -303,7 +312,7 @@ export class DeviceSession {
 
   private onLinkEnd(reason?: DisconnectReason): void {
     const wasLive = this.snap.link === 'connected' || this.snap.link === 'requesting';
-    if (wasLive) this.set({ link: reason === 'port_lost' ? 'unplugged' : 'disconnected', phase: 'closed' });
+    if (wasLive) this.set({ link: reason === 'port_lost' ? 'unplugged' : 'disconnected', phase: 'closed', deviceChannels: { status: 'idle' } });
   }
 
   // -- capability-gated operations ------------------------------------------
@@ -327,18 +336,105 @@ export class DeviceSession {
     if (!own || want === '' || !own.startsWith(want)) throw new BleError('wrong_device', 'the connected device is not the one this identity belongs to');
   }
 
-  async sendDirect(input: { clientDraftId: string; clientAttemptId: string; contactKey: string; text: string; auth: LocalSendAuth }): Promise<AttemptFacts> {
-    const { auth, ...rest } = input;
-    const adapter = this.require('message.send.direct');
-    this.authorize('direct', auth);
-    return adapter.sendDirect(rest);
+  /** The device's own contacts, as the Companion driver last read them. */
+  private deviceContacts(): DeviceContactRef[] {
+    return (this.snap.companion?.contacts ?? []).map((c) => ({ publicKey: c.publicKey, name: c.name }));
   }
 
-  async sendChannel(input: { clientDraftId: string; clientAttemptId: string; channelIndex: number; text: string; auth: LocalSendAuth }): Promise<AttemptFacts> {
-    const { auth, ...rest } = input;
+  private resolve(dest: BackendDest, pick: string | undefined): MapOutcome {
+    return matchDestination(dest, this.deviceContacts(), this.snap.deviceChannels, pick);
+  }
+
+  /**
+   * The only way to obtain a destination for a send. Matches the Backend target against what this
+   * device itself reports (its contact keys, its channel list) and issues a token for exactly that
+   * target, or refuses with the reason. `pick` is accepted only to choose among the contacts that
+   * already match the key prefix; it can never name a contact or slot that does not.
+   */
+  mapDestination(dest: BackendDest, pick?: string): SessionMapping {
+    const kind = dest.kind === 'contact' ? 'direct' : 'channel';
+    if (!this.can(kind === 'direct' ? 'message.send.direct' : 'message.send.channel')) {
+      return { ok: false, code: 'not_ready', reason: 'This device cannot send that kind of message right now.', candidates: [] };
+    }
+    const out = this.resolve(dest, pick);
+    if (!out.ok) return out;
+    const token: DestinationToken = Object.freeze({ kind, targetId: dest.targetId, dest, pick, destination: out.destination });
+    this.minted.add(token);
+    return { ok: true, destination: out.destination, token };
+  }
+
+  /**
+   * Re-verifies a token at the call that writes: issued here, for this very Backend target, and the
+   * matcher still gives the same destination against the device's current tables. Throws
+   * 'unmapped_destination' otherwise; nothing has been written at that point.
+   */
+  private verifyToken(kind: 'direct' | 'channel', token: DestinationToken | undefined, auth: LocalSendAuth): Destination {
+    const bad = (why: string): never => {
+      throw new BleError('unmapped_destination', `refused: ${why}`);
+    };
+    if (!token || typeof token !== 'object' || !this.minted.has(token)) return bad('the destination was not chosen by the device mapping for this target');
+    if (token.kind !== kind) return bad('the destination is for another kind of message');
+    if (!auth.targetId || token.targetId !== auth.targetId) return bad('the destination was mapped for another target');
+    const now = this.resolve(token.dest, token.pick);
+    if (!now.ok || !sameDestination(now.destination, token.destination)) return bad('the device no longer matches this target to that destination');
+    return now.destination;
+  }
+
+  async sendDirect(input: { clientDraftId: string; clientAttemptId: string; text: string; auth: LocalSendAuth; mapping: DestinationToken }): Promise<AttemptFacts> {
+    const { auth, mapping, ...rest } = input;
+    const adapter = this.require('message.send.direct');
+    this.authorize('direct', auth);
+    const d = this.verifyToken('direct', mapping, auth);
+    if (d.kind !== 'direct') throw new BleError('unmapped_destination', 'refused: not a contact destination');
+    return adapter.sendDirect({ ...rest, contactKey: d.contactKey });
+  }
+
+  async sendChannel(input: { clientDraftId: string; clientAttemptId: string; text: string; auth: LocalSendAuth; mapping: DestinationToken }): Promise<AttemptFacts> {
+    const { auth, mapping, ...rest } = input;
     const adapter = this.require('message.send.channel');
     this.authorize('channel', auth);
-    return adapter.sendChannel(rest);
+    const d = this.verifyToken('channel', mapping, auth);
+    if (d.kind !== 'channel') throw new BleError('unmapped_destination', 'refused: not a channel destination');
+    return adapter.sendChannel({ ...rest, channelIndex: d.slot });
+  }
+
+  /**
+   * Reads the device's channel list with `channel.list` (class read: no key, no secret; allowed on the
+   * cable and on a trusted link, never requested where the device did not list it). A device without
+   * it (a stock Companion, a link the device does not trust) leaves local channel sends unavailable,
+   * with the reason. Nothing here ever writes to the device.
+   */
+  async refreshChannels(): Promise<DeviceChannelsState> {
+    const set = (deviceChannels: DeviceChannelsState): DeviceChannelsState => {
+      this.set({ deviceChannels });
+      return deviceChannels;
+    };
+    const d = this.snap.detected;
+    if (!d || this.snap.link !== 'connected' || this.snap.phase !== 'ready') return set({ status: 'idle' });
+    if (!d.interfaceOps.includes('channel.list')) {
+      if (d.interfaceRefused) return set({ status: 'unavailable', reason: "the device does not trust this link (default PIN or Hardened), so it refused its interface. Pair with the device's own PIN." });
+      if (d.firmware !== 'mecon') return set({ status: 'unavailable', reason: 'this device is not running MECON firmware (a stock Companion), which has no channel list the Reader can read.' });
+      return set({ status: 'unavailable', reason: `this ${d.role} does not offer a channel list.` });
+    }
+    const all: DeviceChannelRef[] = [];
+    let cursor: number | null = null;
+    try {
+      for (let i = 0; i < MAX_CHANNEL_PAGES; i++) {
+        const env: Envelope = await this.request('channel.list', 3000, cursor === null ? undefined : { cursor });
+        const page = parseChannelPage(env);
+        if (!page.ok) return set({ status: 'error', reason: page.reason });
+        all.push(...page.channels);
+        if (page.next === null) {
+          if (new Set(all.map((c) => c.slot)).size !== all.length) return set({ status: 'error', reason: 'The device listed the same channel slot twice.' });
+          return set({ status: 'ready', channels: all });
+        }
+        if (cursor !== null && page.next <= cursor) return set({ status: 'error', reason: 'The device channel list did not advance.' });
+        cursor = page.next;
+      }
+      return set({ status: 'error', reason: 'The device channel list was longer than the Reader reads.' });
+    } catch (e) {
+      return set({ status: 'error', reason: e instanceof BleError ? `the device did not answer channel.list (${e.code}).` : 'the device channel list could not be read.' });
+    }
   }
 
   /**
@@ -347,9 +443,9 @@ export class DeviceSession {
    * for is refused before anything else is looked at and nothing is written; then the detected
    * capability (an operation the device did not list answers `unknown-op`, so it is not sent);
    * then the carriage. Only requests the Reader can build are sent (`hello`, `status.get`,
-   * `clock.get`). The console-line carriage (Repeater, Room server over USB) is not wired here.
+   * `clock.get`, `channel.list` with its cursor). The console-line carriage (Repeater, Room server over USB) is not wired here.
    */
-  async request(op: string, timeoutMs = 3000): Promise<Envelope> {
+  async request(op: string, timeoutMs = 3000, args?: ReadArgs): Promise<Envelope> {
     assertOperationAllowed(this.snap.trust, op);
     const d = this.snap.detected;
     if (this.snap.link !== 'connected' || this.snap.phase !== 'ready' || !d) throw new BleError('not_connected');
@@ -377,7 +473,7 @@ export class DeviceSession {
       });
     });
     try {
-      for (const f of encodeMeconFrames(1, buildRequest(id, op as 'hello'))) await t.write(f);
+      for (const f of encodeMeconFrames(1, buildRequest(id, op as 'hello', args))) await t.write(f);
       return await answer;
     } finally {
       clearTimeout(timer);

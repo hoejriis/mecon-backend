@@ -26,7 +26,7 @@ export function OfflineSync() {
   // A short signature, so the effect runs when something changed rather than on every render.
   const sig =
     convs.items.map((c) => `${c.id}:${c.last_activity_at}:${c.unread_count}:${m.messagesFor(c.id).items.length}:${m.messagesFor(c.id).items[0]?.message_id ?? ''}`).join('|') +
-    `#${idents.items.length}#${channels.items.length}`;
+    `#${idents.items.length}#${channels.items.length}#${m.contacts.items.length}`;
 
   useEffect(() => {
     if (!cache || convs.status !== 'ready' || idents.status !== 'ready') return;
@@ -36,13 +36,19 @@ export function OfflineSync() {
       if (p.status === 'ready') messages[c.id] = p.items;
     }
     const h = setTimeout(() => {
-      void reconcile(cache, { identities: idents.items, conversations: convs.items, channels: channels.items, messages })
+      void reconcile(cache, {
+        identities: idents.items,
+        conversations: convs.items,
+        channels: channels.status === 'ready' ? channels.items : undefined,
+        contacts: m.contacts.status === 'ready' ? m.contacts.items : undefined,
+        messages,
+      })
         .then(() => cache.checkPressure())
         .catch(() => undefined);
     }, 300);
     return () => clearTimeout(h);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cache, sig, convs.status, idents.status]);
+  }, [cache, sig, convs.status, idents.status, channels.status, m.contacts.status]);
 
   // Drafts and send attempts: write through; restore saved drafts and attempts once per unlock.
   const targets: Target[] = convs.items.map((c) => c.target);

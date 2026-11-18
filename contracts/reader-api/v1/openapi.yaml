@@ -1,0 +1,665 @@
+openapi: 3.1.0
+info:
+  title: MECON Reader API
+  version: 1.0.0-draft.1
+  summary: Interface between the MECON Reader and an authorized MECON Backend.
+  description: |
+    Machine-readable form of docs/READER_API_CONTRACT.md. Target specification,
+    not a claim that any Backend serves it today.
+
+    * **M1** (session) operations are frozen for the first restricted deployment:
+      login, login poll, session, logout, health, devices (may be empty).
+    * **M2** (messaging) operations are drafts and may change by pull request
+      until the Backend implements them.
+
+    The Reader is served at the same origin as this API (the API is reached
+    through the Reader host's reverse proxy). The Backend authenticates with a
+    host-only, `Secure`, `HttpOnly` session cookie named `__Host-mecon_session`.
+    No bearer tokens, no CORS. State-changing requests carry `X-CSRF-Token`
+    (from `GET /session`) and an `Origin` header the Backend allowlists.
+  license:
+    name: Apache-2.0
+    identifier: Apache-2.0
+servers:
+  - url: /api/reader/v1
+    description: Same origin as the Reader
+security:
+  - sessionCookie: []
+tags:
+  - name: session
+    description: M1. Login, session, logout and health.
+  - name: devices
+    description: M1 (may be empty). Assigned Companions.
+  - name: messaging
+    description: M2 draft. Identities, conversations, contacts, channels, sends.
+  - name: events
+    description: M2 draft. Server-sent events.
+
+paths:
+  /health:
+    get:
+      tags: [session]
+      operationId: getHealth
+      summary: Public liveness and deployed commit
+      security: []
+      responses:
+        '200':
+          description: Backend is up
+          headers:
+            Cache-Control: { $ref: '#/components/headers/NoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Health' }
+              examples:
+                ok: { externalValue: fixtures/health.json }
+
+  /login:
+    post:
+      tags: [session]
+      operationId: startLogin
+      summary: Request a magic-link login for an existing account
+      description: |
+        Sends a one-time link to the address if, and only if, it belongs to an
+        existing account. The response is identical either way (no account
+        oracle). Opening the link approves the request; it does **not** sign in
+        the browser that opened it. The Reader that asked polls
+        `GET /login/{request_id}` and receives the session cookie on the
+        winning poll. Pre-session, so no CSRF token: protected by the Origin
+        allowlist and per-source rate limits.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '202':
+          description: Accepted (sent or silently not sent)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LoginStarted' }
+              examples:
+                started: { externalValue: fixtures/login-started.json }
+        '422': { $ref: '#/components/responses/Invalid' }
+        '429': { $ref: '#/components/responses/Throttled' }
+
+  /login/{request_id}:
+    get:
+      tags: [session]
+      operationId: pollLogin
+      summary: Poll a pending login request
+      description: |
+        `approved` is returned exactly once, with `Set-Cookie` for the session;
+        later polls return `delivered`. Over the per-source limit the response
+        reads `pending` (no oracle). Unknown or expired ids read `expired`.
+      security: []
+      parameters:
+        - name: request_id
+          in: path
+          required: true
+          schema: { type: string, minLength: 16, maxLength: 128 }
+      responses:
+        '200':
+          description: Current state of the login request
+          headers:
+            Set-Cookie:
+              description: Present only on the single `approved` response.
+              schema: { type: string }
+            Cache-Control: { $ref: '#/components/headers/NoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LoginState' }
+              examples:
+                pending: { externalValue: fixtures/login-pending.json }
+                approved: { externalValue: fixtures/login-approved.json }
+                delivered: { externalValue: fixtures/login-delivered.json }
+                expired: { externalValue: fixtures/login-expired.json }
+
+  /session:
+    get:
+      tags: [session]
+      operationId: getSession
+      summary: Current user, capabilities, contract version and CSRF token
+      responses:
+        '200':
+          description: Signed in
+          headers:
+            Cache-Control: { $ref: '#/components/headers/NoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Session' }
+              examples:
+                deviceUser: { externalValue: fixtures/session-device-user.json }
+                noDevices: { externalValue: fixtures/session-no-devices.json }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+
+  /logout:
+    post:
+      tags: [session]
+      operationId: logout
+      summary: Revoke the current session server-side
+      parameters:
+        - $ref: '#/components/parameters/Csrf'
+      responses:
+        '204':
+          description: Session revoked; cookie cleared
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /devices:
+    get:
+      tags: [devices]
+      operationId: listDevices
+      summary: Companions assigned to the caller
+      description: In M1 a Backend may return an empty list and set `capabilities.devices` to `unavailable`.
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Assigned devices
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeviceList' }
+              examples:
+                empty: { externalValue: fixtures/devices-empty.json }
+                one: { externalValue: fixtures/devices-one.json }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+
+  /identities:
+    get:
+      tags: [messaging]
+      operationId: listIdentities
+      summary: (M2 draft) Messaging identities the caller may use
+      responses:
+        '200':
+          description: Authorized identities
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IdentityList' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+
+  /conversations:
+    get:
+      tags: [messaging]
+      operationId: listConversations
+      summary: (M2 draft) Authorized conversation summaries
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Conversation summaries
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ConversationList' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+
+  /conversations/{conversation_id}/messages:
+    get:
+      tags: [messaging]
+      operationId: listMessages
+      summary: (M2 draft) Messages in one authorized conversation
+      parameters:
+        - name: conversation_id
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/OpaqueId' }
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Messages, newest first
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MessageList' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /contacts:
+    get:
+      tags: [messaging]
+      operationId: listContacts
+      summary: (M2 draft) Authorized contacts
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Contacts
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ContactList' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+
+  /channels:
+    get:
+      tags: [messaging]
+      operationId: listChannels
+      summary: (M2 draft) Public and private channels the caller may read
+      responses:
+        '200':
+          description: Channels
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChannelList' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+
+  /send-attempts:
+    post:
+      tags: [messaging]
+      operationId: createSendAttempt
+      summary: (M2 draft) Explicit Backend-path send
+      description: |
+        One logical attempt. The Backend chooses transmitting origins; the
+        Reader never selects gateways. Same `Idempotency-Key` with the same
+        body returns the existing attempt; with a different body returns 409.
+        A BLE-path attempt is never posted here.
+      parameters:
+        - $ref: '#/components/parameters/Csrf'
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: Must equal `client_attempt_id`.
+          schema: { $ref: '#/components/schemas/OpaqueId' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SendRequest' }
+      responses:
+        '201':
+          description: Attempt created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SendAttempt' }
+        '200':
+          description: Idempotent repeat of an existing attempt
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SendAttempt' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Invalid' }
+        '429': { $ref: '#/components/responses/Throttled' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /send-attempts/{attempt_id}:
+    get:
+      tags: [messaging]
+      operationId: getSendAttempt
+      summary: (M2 draft) Send attempt and its evidenced state
+      parameters:
+        - name: attempt_id
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/OpaqueId' }
+      responses:
+        '200':
+          description: Attempt
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SendAttempt' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /events:
+    get:
+      tags: [events]
+      operationId: streamEvents
+      summary: (M2 draft) Authorized incremental updates (SSE)
+      description: |
+        `text/event-stream`. Each `data:` line is one `EventEnvelope`. Resume
+        with the standard `Last-Event-ID` header or `cursor`. An expired cursor
+        yields 410; the Reader then reloads snapshots. Heartbeats are SSE
+        comments. Private content is never replayed after revocation.
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - name: Last-Event-ID
+          in: header
+          required: false
+          schema: { type: string }
+      responses:
+        '200':
+          description: Event stream
+          content:
+            text/event-stream:
+              schema: { $ref: '#/components/schemas/EventEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '410': { $ref: '#/components/responses/Gone' }
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: __Host-mecon_session
+
+  headers:
+    NoStore:
+      schema: { type: string, const: no-store }
+
+  parameters:
+    Csrf:
+      name: X-CSRF-Token
+      in: header
+      required: true
+      description: Value of `csrf_token` from `GET /session`.
+      schema: { type: string, minLength: 16 }
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      schema: { type: string, maxLength: 512 }
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+
+  responses:
+    Unauthenticated:
+      description: No valid session
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' }, examples: { e: { externalValue: fixtures/error-401.json } } } }
+    Forbidden:
+      description: Authenticated but not permitted (also a failed CSRF or Origin check)
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' }, examples: { e: { externalValue: fixtures/error-403.json } } } }
+    NotFound:
+      description: Unavailable or not found, without disclosing existence
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Conflict:
+      description: Idempotency key reused with a different request
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Gone:
+      description: Cursor expired or outside retention
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Invalid:
+      description: Request failed validation
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Throttled:
+      description: Rate limited
+      headers:
+        Retry-After: { schema: { type: integer } }
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Unavailable:
+      description: Temporarily unavailable
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+
+  schemas:
+    OpaqueId:
+      type: string
+      minLength: 1
+      maxLength: 128
+      description: Opaque; clients never parse or construct it.
+    Timestamp:
+      type: string
+      format: date-time
+      description: UTC, ISO-8601, with `Z`.
+
+    Error:
+      type: object
+      required: [code, message, request_id, retryable]
+      additionalProperties: false
+      properties:
+        code: { type: string, examples: [unauthenticated, forbidden, csrf_failed, origin_rejected, not_found, conflict, invalid, throttled, unavailable, cursor_expired] }
+        message: { type: string }
+        request_id: { type: string }
+        retryable: { type: boolean }
+
+    Health:
+      type: object
+      required: [status, commit]
+      properties:
+        status: { type: string, enum: [ok, degraded] }
+        commit:
+          type: [string, 'null']
+          description: Deployed commit, or null for a local build.
+
+    LoginRequest:
+      type: object
+      required: [email]
+      additionalProperties: false
+      properties:
+        email: { type: string, format: email, maxLength: 254 }
+
+    LoginStarted:
+      type: object
+      required: [request_id, poll_after_ms, expires_at]
+      properties:
+        request_id: { type: string }
+        poll_after_ms: { type: integer, minimum: 500 }
+        expires_at: { $ref: '#/components/schemas/Timestamp' }
+
+    LoginState:
+      type: object
+      required: [state]
+      properties:
+        state: { type: string, enum: [pending, approved, delivered, expired] }
+        poll_after_ms: { type: integer, minimum: 500 }
+
+    CapabilityState:
+      type: string
+      enum: [available, unavailable, forbidden]
+      description: |
+        `available`: the Backend serves it for this user. `unavailable`: not
+        implemented or not reachable on this Backend. `forbidden`: exists but
+        this user lacks the grant. The Reader shows each truthfully and never
+        simulates an unavailable function.
+
+    Session:
+      type: object
+      required: [user, capabilities, contract_version, csrf_token, expires_at]
+      properties:
+        user:
+          type: object
+          required: [id, display_name]
+          properties:
+            id: { $ref: '#/components/schemas/OpaqueId' }
+            display_name: { type: string }
+        capabilities:
+          type: object
+          required: [devices, messaging, send, events, observations]
+          additionalProperties: { $ref: '#/components/schemas/CapabilityState' }
+          properties:
+            devices: { $ref: '#/components/schemas/CapabilityState' }
+            messaging: { $ref: '#/components/schemas/CapabilityState' }
+            send: { $ref: '#/components/schemas/CapabilityState' }
+            events: { $ref: '#/components/schemas/CapabilityState' }
+            observations: { $ref: '#/components/schemas/CapabilityState' }
+        contract_version:
+          type: string
+          pattern: '^1\.[0-9]+$'
+          description: Major is fixed by the URL prefix; minor advertises additions.
+        csrf_token: { type: string, minLength: 16 }
+        expires_at: { $ref: '#/components/schemas/Timestamp' }
+
+    ListMeta:
+      type: object
+      required: [next_cursor, as_of]
+      properties:
+        next_cursor: { type: [string, 'null'] }
+        as_of: { $ref: '#/components/schemas/Timestamp' }
+
+    Device:
+      type: object
+      required: [id, role, label, capability_evidence, reachability, observed_at]
+      properties:
+        id: { $ref: '#/components/schemas/OpaqueId' }
+        role: { type: string, enum: [companion, repeater, room_server, unknown] }
+        label: { type: string }
+        capability_evidence:
+          type: object
+          description: From the device's own reported capabilities, never inferred from board model.
+          additionalProperties: { type: boolean }
+        battery_pct: { type: [integer, 'null'], minimum: 0, maximum: 100 }
+        reachability: { type: string, enum: [online, stale, offline, unknown] }
+        observed_at: { $ref: '#/components/schemas/Timestamp' }
+    DeviceList:
+      allOf:
+        - $ref: '#/components/schemas/ListMeta'
+        - type: object
+          required: [items]
+          properties:
+            items: { type: array, items: { $ref: '#/components/schemas/Device' } }
+
+    Identity:
+      type: object
+      required: [id, display_name, public_key_prefix, device_id, can_send]
+      properties:
+        id: { $ref: '#/components/schemas/OpaqueId' }
+        display_name: { type: string }
+        public_key_prefix: { type: string, pattern: '^[0-9a-f]{2,16}$' }
+        device_id: { type: [string, 'null'] }
+        can_send: { type: boolean }
+    IdentityList:
+      allOf:
+        - $ref: '#/components/schemas/ListMeta'
+        - type: object
+          required: [items]
+          properties:
+            items: { type: array, items: { $ref: '#/components/schemas/Identity' } }
+
+    Target:
+      type: object
+      required: [kind, id]
+      properties:
+        kind: { type: string, enum: [contact, channel] }
+        id: { $ref: '#/components/schemas/OpaqueId' }
+
+    Conversation:
+      type: object
+      required: [id, identity_id, target, title, unread_count, last_activity_at]
+      properties:
+        id: { $ref: '#/components/schemas/OpaqueId' }
+        identity_id: { $ref: '#/components/schemas/OpaqueId' }
+        target: { $ref: '#/components/schemas/Target' }
+        title: { type: string }
+        unread_count: { type: integer, minimum: 0 }
+        last_activity_at: { $ref: '#/components/schemas/Timestamp' }
+    ConversationList:
+      allOf:
+        - $ref: '#/components/schemas/ListMeta'
+        - type: object
+          required: [items]
+          properties:
+            items: { type: array, items: { $ref: '#/components/schemas/Conversation' } }
+
+    Message:
+      type: object
+      required: [message_id, conversation_id, identity_id, direction, source_path, observed_at, content]
+      properties:
+        message_id: { $ref: '#/components/schemas/OpaqueId' }
+        conversation_id: { $ref: '#/components/schemas/OpaqueId' }
+        identity_id: { $ref: '#/components/schemas/OpaqueId' }
+        direction: { type: string, enum: [inbound, outbound] }
+        sender_label: { type: [string, 'null'] }
+        source_path: { type: string, enum: [backend, ble, unknown] }
+        observed_at: { $ref: '#/components/schemas/Timestamp' }
+        content:
+          type: object
+          required: [kind, text]
+          properties:
+            kind: { type: string, enum: [text] }
+            text: { type: string }
+        attempt_id: { type: [string, 'null'] }
+    MessageList:
+      allOf:
+        - $ref: '#/components/schemas/ListMeta'
+        - type: object
+          required: [items]
+          properties:
+            items: { type: array, items: { $ref: '#/components/schemas/Message' } }
+
+    Contact:
+      type: object
+      required: [id, display_name, public_key_prefix, last_heard_at]
+      properties:
+        id: { $ref: '#/components/schemas/OpaqueId' }
+        display_name: { type: string }
+        public_key_prefix: { type: string, pattern: '^[0-9a-f]{2,16}$' }
+        kind: { type: string, enum: [companion, repeater, room_server, unknown] }
+        favourite: { type: boolean }
+        last_heard_at: { type: [string, 'null'], format: date-time }
+    ContactList:
+      allOf:
+        - $ref: '#/components/schemas/ListMeta'
+        - type: object
+          required: [items]
+          properties:
+            items: { type: array, items: { $ref: '#/components/schemas/Contact' } }
+
+    Channel:
+      type: object
+      required: [id, name, visibility]
+      properties:
+        id: { $ref: '#/components/schemas/OpaqueId' }
+        name: { type: string }
+        visibility: { type: string, enum: [public, private] }
+        favourite: { type: boolean }
+    ChannelList:
+      allOf:
+        - $ref: '#/components/schemas/ListMeta'
+        - type: object
+          required: [items]
+          properties:
+            items: { type: array, items: { $ref: '#/components/schemas/Channel' } }
+
+    SendRequest:
+      type: object
+      required: [client_draft_id, client_attempt_id, identity_id, target, content]
+      additionalProperties: false
+      properties:
+        client_draft_id: { $ref: '#/components/schemas/OpaqueId' }
+        client_attempt_id: { $ref: '#/components/schemas/OpaqueId' }
+        identity_id: { $ref: '#/components/schemas/OpaqueId' }
+        target: { $ref: '#/components/schemas/Target' }
+        content:
+          type: object
+          required: [kind, text]
+          additionalProperties: false
+          properties:
+            kind: { type: string, enum: [text] }
+            text: { type: string, minLength: 1 }
+
+    SendStatus:
+      type: string
+      enum: [queued, duty_held, transmitted, acked, timed_out, failed, unknown]
+      description: |
+        `acked` exists only for direct messages (native ACK; not a read
+        receipt). `unknown` and `timed_out` do not prove non-transmission; the
+        Reader never resends automatically.
+
+    SendAttempt:
+      type: object
+      required: [id, client_attempt_id, path, identity_id, status, status_evidence, created_at, updated_at]
+      properties:
+        id: { $ref: '#/components/schemas/OpaqueId' }
+        client_attempt_id: { $ref: '#/components/schemas/OpaqueId' }
+        path: { type: string, const: backend }
+        identity_id: { $ref: '#/components/schemas/OpaqueId' }
+        status: { $ref: '#/components/schemas/SendStatus' }
+        status_evidence:
+          type: object
+          required: [accepted_at]
+          description: What the Backend has actually seen. No gateway identities or fleet topology.
+          properties:
+            accepted_at: { $ref: '#/components/schemas/Timestamp' }
+            first_transmitted_at: { type: [string, 'null'], format: date-time }
+            transmissions: { type: integer, minimum: 0 }
+            acked_at: { type: [string, 'null'], format: date-time }
+            detail: { type: [string, 'null'] }
+        created_at: { $ref: '#/components/schemas/Timestamp' }
+        updated_at: { $ref: '#/components/schemas/Timestamp' }
+
+    EventEnvelope:
+      type: object
+      required: [event_id, kind, occurred_at, version]
+      properties:
+        event_id: { type: string }
+        kind:
+          type: string
+          enum: [message, conversation, device_status, attempt_status, authorization_changed, resync_required]
+        occurred_at: { $ref: '#/components/schemas/Timestamp' }
+        resource_id: { type: [string, 'null'] }
+        version: { type: integer, minimum: 1 }

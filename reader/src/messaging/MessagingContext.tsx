@@ -1,0 +1,497 @@
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
+import { ApiError, CapabilityError } from '../api/client';
+import { startEventStream, type StreamStatus } from '../api/eventStream';
+import type {
+  Channel,
+  Conversation,
+  EventEnvelope,
+  Identity,
+  Message,
+  SendAttempt,
+  SendRequest,
+  Target,
+} from '../api/types';
+import { useAuth } from '../auth/AuthContext';
+import { describeAttempt, type LocalAttempt } from './attemptStatus';
+import {
+  DEFAULT_RETRY_DELAYS_MS,
+  newAttemptId,
+  newDraftId,
+  postAttempt,
+  type SendOutcome,
+} from './sendFlow';
+
+export interface Paged<T> {
+  status: 'idle' | 'loading' | 'ready' | 'error';
+  items: T[];
+  nextCursor: string | null;
+  loadingMore: boolean;
+  error: string | null;
+  requestId: string | null;
+}
+
+const idle = <T,>(): Paged<T> => ({
+  status: 'idle',
+  items: [],
+  nextCursor: null,
+  loadingMore: false,
+  error: null,
+  requestId: null,
+});
+
+export const PAGE_SIZE = 50;
+
+export const targetKey = (t: Target) => `${t.kind}:${t.id}`;
+
+/** Merge a freshly fetched first page into what is loaded, newest first. */
+function mergeNewest<T>(
+  old: T[],
+  fresh: T[],
+  key: (t: T) => string,
+  time: (t: T) => string,
+): T[] {
+  const ids = new Set(fresh.map(key));
+  const merged = [...fresh, ...old.filter((o) => !ids.has(key(o)))];
+  return merged.sort((a, b) => (time(a) < time(b) ? 1 : time(a) > time(b) ? -1 : 0));
+}
+
+function failure(e: unknown): { error: string; requestId: string | null } {
+  if (e instanceof ApiError) {
+    return {
+      error: e.status === 404 ? 'This is not available to your account.' : 'The Backend could not answer.',
+      requestId: e.requestId,
+    };
+  }
+  if (e instanceof CapabilityError) return { error: 'This is not available.', requestId: null };
+  return { error: 'Could not reach the Backend.', requestId: null };
+}
+
+export interface MessagingValue {
+  messaging: boolean;
+  sendState: 'available' | 'unavailable' | 'forbidden';
+  streamStatus: StreamStatus | 'off';
+  conversations: Paged<Conversation>;
+  identities: Paged<Identity>;
+  channels: Paged<Channel>;
+  messagesFor(conversationId: string): Paged<Message>;
+  attemptsFor(target: Target): LocalAttempt[];
+  loadConversations(): void;
+  loadMoreConversations(): void;
+  loadChannels(): void;
+  loadIdentities(): void;
+  openConversation(id: string | null): void;
+  loadMessages(conversationId: string): void;
+  loadOlderMessages(conversationId: string): void;
+  draftText(target: Target): string;
+  setDraftText(target: Target, text: string): void;
+  /** Explicit Send tap: a new attempt id, same draft id until it is sent. */
+  send(target: Target, identityId: string): void;
+  /** Explicit "Send again": a NEW attempt id for the same draft. */
+  sendAgain(clientAttemptId: string): void;
+  /** Re-POST the SAME attempt (same key, same body) to learn its fate. */
+  recheck(clientAttemptId: string): void;
+}
+
+const Ctx = createContext<MessagingValue | null>(null);
+
+export function useMessaging(): MessagingValue {
+  const v = useContext(Ctx);
+  if (!v) throw new Error('useMessaging outside MessagingProvider');
+  return v;
+}
+
+export interface MessagingProviderProps {
+  children: ReactNode;
+  /** Delays for automatic same-attempt re-POSTs after an ambiguous failure. */
+  retryDelaysMs?: readonly number[];
+  /** Polling for non-terminal attempts when no live stream; 0 disables. */
+  pollMs?: number;
+}
+
+export function MessagingProvider({
+  children,
+  retryDelaysMs = DEFAULT_RETRY_DELAYS_MS,
+  pollMs = 4000,
+}: MessagingProviderProps) {
+  const { api, session, refreshSession } = useAuth();
+  const caps = session?.capabilities;
+  const messaging = caps?.messaging === 'available';
+  const sendState = caps?.send ?? 'unavailable';
+  const eventsOn = messaging && caps?.events === 'available';
+
+  const [conversations, setConversations] = useState<Paged<Conversation>>(idle);
+  const [identities, setIdentities] = useState<Paged<Identity>>(idle);
+  const [channels, setChannels] = useState<Paged<Channel>>(idle);
+  const [messages, setMessages] = useState<Record<string, Paged<Message>>>({});
+  const [attempts, setAttempts] = useState<LocalAttempt[]>([]);
+  const [draftVersion, bumpDrafts] = useState(0);
+  const [streamStatus, setStreamStatus] = useState<StreamStatus | 'off'>('off');
+
+  // Drafts live in memory only; message text never goes to web storage.
+  const drafts = useRef(new Map<string, { draftId: string; text: string }>());
+  const active = useRef<string | null>(null);
+  const seq = useRef({ conv: 0, ident: 0, chan: 0 });
+  const msgSeq = useRef(new Map<string, number>());
+  const attemptsRef = useRef<LocalAttempt[]>([]);
+  attemptsRef.current = attempts;
+  const live = useRef(false);
+
+  const patchAttempt = useCallback((clientAttemptId: string, patch: Partial<LocalAttempt>) => {
+    setAttempts((all) =>
+      all.map((a) => (a.clientAttemptId === clientAttemptId ? { ...a, ...patch } : a)),
+    );
+  }, []);
+
+  /* ---------------- snapshots ---------------- */
+
+  const fetchConversations = useCallback(
+    async (mode: 'first' | 'more' | 'reset') => {
+      if (!messaging) return;
+      const n = ++seq.current.conv;
+      if (mode === 'more') setConversations((c) => ({ ...c, loadingMore: true }));
+      else if (mode === 'reset') setConversations({ ...idle<Conversation>(), status: 'loading' });
+      else setConversations((c) => (c.status === 'idle' ? { ...c, status: 'loading' } : c));
+      try {
+        const cursor = mode === 'more' ? conversationsRef.current.nextCursor : null;
+        if (mode === 'more' && !cursor) return;
+        const page = await api.listConversations({ cursor, limit: PAGE_SIZE });
+        if (n !== seq.current.conv) return;
+        setConversations((c) => {
+          const items =
+            mode === 'reset'
+              ? page.items
+              : mergeNewest(c.items, page.items, (x) => x.id, (x) => x.last_activity_at);
+          // A refresh of page one keeps a cursor for older pages already loaded.
+          const keepCursor = mode === 'first' && c.items.length > page.items.length;
+          return {
+            status: 'ready',
+            items,
+            nextCursor: keepCursor ? c.nextCursor : page.next_cursor,
+            loadingMore: false,
+            error: null,
+            requestId: null,
+          };
+        });
+      } catch (e) {
+        if (n !== seq.current.conv) return;
+        setConversations((c) => ({ ...c, status: c.items.length ? 'ready' : 'error', loadingMore: false, ...failure(e) }));
+      }
+    },
+    [api, messaging],
+  );
+  const conversationsRef = useRef(conversations);
+  conversationsRef.current = conversations;
+
+  const fetchIdentities = useCallback(async () => {
+    if (!messaging) return;
+    const n = ++seq.current.ident;
+    setIdentities((c) => (c.status === 'idle' ? { ...c, status: 'loading' } : c));
+    try {
+      const page = await api.listIdentities();
+      if (n !== seq.current.ident) return;
+      setIdentities({ ...idle<Identity>(), status: 'ready', items: page.items, nextCursor: page.next_cursor });
+    } catch (e) {
+      if (n !== seq.current.ident) return;
+      setIdentities((c) => ({ ...c, status: 'error', ...failure(e) }));
+    }
+  }, [api, messaging]);
+
+  const fetchChannels = useCallback(async () => {
+    if (!messaging) return;
+    const n = ++seq.current.chan;
+    setChannels((c) => (c.status === 'idle' ? { ...c, status: 'loading' } : c));
+    try {
+      const page = await api.listChannels();
+      if (n !== seq.current.chan) return;
+      setChannels({ ...idle<Channel>(), status: 'ready', items: page.items, nextCursor: page.next_cursor });
+    } catch (e) {
+      if (n !== seq.current.chan) return;
+      setChannels((c) => ({ ...c, status: 'error', ...failure(e) }));
+    }
+  }, [api, messaging]);
+
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
+
+  const fetchMessages = useCallback(
+    async (id: string, mode: 'first' | 'more' | 'reset') => {
+      if (!messaging) return;
+      const n = (msgSeq.current.get(id) ?? 0) + 1;
+      msgSeq.current.set(id, n);
+      const cur = messagesRef.current[id] ?? idle<Message>();
+      const cursor = mode === 'more' ? cur.nextCursor : null;
+      if (mode === 'more' && !cursor) return;
+      setMessages((m) => {
+        const c = m[id] ?? idle<Message>();
+        if (mode === 'more') return { ...m, [id]: { ...c, loadingMore: true } };
+        if (mode === 'reset') return { ...m, [id]: { ...idle<Message>(), status: 'loading' } };
+        return { ...m, [id]: c.status === 'idle' ? { ...c, status: 'loading' } : c };
+      });
+      try {
+        const page = await api.listMessages(id, { cursor, limit: PAGE_SIZE });
+        if (msgSeq.current.get(id) !== n) return;
+        setMessages((m) => {
+          const c = m[id] ?? idle<Message>();
+          const items =
+            mode === 'reset'
+              ? page.items
+              : mergeNewest(c.items, page.items, (x) => x.message_id, (x) => x.observed_at);
+          const keepCursor = mode === 'first' && c.items.length > page.items.length;
+          return {
+            ...m,
+            [id]: {
+              status: 'ready',
+              items,
+              nextCursor: keepCursor ? c.nextCursor : page.next_cursor,
+              loadingMore: false,
+              error: null,
+              requestId: null,
+            },
+          };
+        });
+      } catch (e) {
+        if (msgSeq.current.get(id) !== n) return;
+        setMessages((m) => {
+          const c = m[id] ?? idle<Message>();
+          return { ...m, [id]: { ...c, status: c.items.length ? 'ready' : 'error', loadingMore: false, ...failure(e) } };
+        });
+      }
+    },
+    [api, messaging],
+  );
+
+  const refreshAttempt = useCallback(
+    async (a: LocalAttempt) => {
+      if (a.phase !== 'accepted' || !a.attempt || sendState !== 'available') return;
+      try {
+        const fresh: SendAttempt = await api.getSendAttempt(a.attempt.id);
+        patchAttempt(a.clientAttemptId, { attempt: fresh });
+      } catch {
+        /* keep what we have; the next event or poll tries again */
+      }
+    },
+    [api, sendState, patchAttempt],
+  );
+
+  const resetSnapshots = useCallback(() => {
+    msgSeq.current.clear();
+    setMessages({});
+    void fetchConversations('reset');
+    void fetchIdentities();
+    void fetchChannels();
+    if (active.current) void fetchMessages(active.current, 'reset');
+  }, [fetchConversations, fetchIdentities, fetchChannels, fetchMessages]);
+
+  /* ---------------- live updates ---------------- */
+
+  const handlers = useRef<{
+    event?: (e: EventEnvelope) => void;
+    resync?: (reason: string) => void;
+  }>({});
+  const onEvent = (e: EventEnvelope) => {
+    if (e.kind === 'message' || e.kind === 'conversation') {
+      void fetchConversations('first');
+      if (active.current) void fetchMessages(active.current, 'first');
+    } else if (e.kind === 'attempt_status') {
+      const hit = attemptsRef.current.filter(
+        (a) => a.attempt?.id === e.resource_id || a.clientAttemptId === e.resource_id,
+      );
+      const todo = hit.length
+        ? hit
+        : attemptsRef.current.filter((a) => a.phase === 'accepted' && !describeAttempt(a, a.request.target.kind).terminal);
+      todo.forEach((a) => void refreshAttempt(a));
+      if (active.current) void fetchMessages(active.current, 'first');
+    }
+    // device_status concerns Nodes, not messaging.
+  };
+  const onResync = (reason: string) => {
+    void (async () => {
+      // Permissions may have changed: session first, then every snapshot.
+      if (reason !== 'cursor_expired') await refreshSession();
+      resetSnapshots();
+    })();
+  };
+  useEffect(() => {
+    handlers.current = { event: onEvent, resync: onResync };
+  });
+
+  useEffect(() => {
+    if (!eventsOn) {
+      setStreamStatus('off');
+      live.current = false;
+      return;
+    }
+    const stop = startEventStream({
+      open: (o) => api.openEvents(o),
+      onEvent: (e) => handlers.current.event?.(e),
+      onResync: (r) => handlers.current.resync?.(r),
+      onStatus: (s) => {
+        live.current = s === 'live';
+        setStreamStatus(s);
+      },
+    });
+    return () => {
+      stop();
+      live.current = false;
+    };
+  }, [api, eventsOn]);
+
+  // Without a live stream, poll attempts that can still change.
+  useEffect(() => {
+    if (!messaging || sendState !== 'available' || pollMs <= 0) return;
+    const t = setInterval(() => {
+      if (live.current) return;
+      for (const a of attemptsRef.current) {
+        if (a.phase === 'accepted' && !describeAttempt(a, a.request.target.kind).terminal) void refreshAttempt(a);
+      }
+    }, pollMs);
+    return () => clearInterval(t);
+  }, [messaging, sendState, pollMs, refreshAttempt]);
+
+  // Drop everything when messaging stops being available (sign-out, revocation).
+  useEffect(() => {
+    if (messaging) return;
+    msgSeq.current.clear();
+    setConversations(idle());
+    setIdentities(idle());
+    setChannels(idle());
+    setMessages({});
+    setAttempts([]);
+    drafts.current.clear();
+  }, [messaging]);
+
+  /* ---------------- sending ---------------- */
+
+  const runPost = useCallback(
+    async (a: LocalAttempt, auto: boolean) => {
+      patchAttempt(a.clientAttemptId, { phase: 'posting', error: null });
+      const out: SendOutcome = await postAttempt(api, a.request, {
+        retryDelaysMs: auto ? retryDelaysMs : [],
+        onAmbiguous: () => patchAttempt(a.clientAttemptId, { phase: 'ambiguous' }),
+      });
+      if (out.phase === 'accepted') {
+        patchAttempt(a.clientAttemptId, { phase: 'accepted', attempt: out.attempt, error: null });
+        void fetchConversations('first');
+        const conv = conversationsRef.current.items.find((c) => targetKey(c.target) === targetKey(a.request.target));
+        if (conv) void fetchMessages(conv.id, 'first');
+      } else if (out.phase === 'ambiguous') {
+        patchAttempt(a.clientAttemptId, { phase: 'ambiguous' });
+      } else {
+        patchAttempt(a.clientAttemptId, { phase: 'rejected', error: out.error });
+      }
+    },
+    [api, retryDelaysMs, patchAttempt, fetchConversations, fetchMessages],
+  );
+
+  const startAttempt = useCallback(
+    (draftId: string, base: Omit<SendRequest, 'client_attempt_id' | 'client_draft_id'>) => {
+      const clientAttemptId = newAttemptId();
+      const request: SendRequest = { ...base, client_draft_id: draftId, client_attempt_id: clientAttemptId };
+      const a: LocalAttempt = {
+        clientAttemptId,
+        draftId,
+        request,
+        phase: 'posting',
+        attempt: null,
+        error: null,
+        supersededBy: null,
+        createdAt: Date.now(),
+      };
+      attemptsRef.current = [...attemptsRef.current, a];
+      setAttempts(attemptsRef.current);
+      void runPost(a, true);
+      return clientAttemptId;
+    },
+    [runPost],
+  );
+
+  const send = useCallback(
+    (target: Target, identityId: string) => {
+      const key = targetKey(target);
+      const d = drafts.current.get(key);
+      const text = d?.text ?? '';
+      if (!d || text.trim() === '' || sendState !== 'available') return;
+      // The draft is consumed synchronously so a double tap cannot send twice.
+      drafts.current.delete(key);
+      bumpDrafts((n) => n + 1);
+      startAttempt(d.draftId, { identity_id: identityId, target, content: { kind: 'text', text } });
+    },
+    [sendState, startAttempt],
+  );
+
+  const sendAgain = useCallback(
+    (clientAttemptId: string) => {
+      const old = attemptsRef.current.find((a) => a.clientAttemptId === clientAttemptId);
+      if (!old || old.supersededBy || sendState !== 'available') return;
+      const { identity_id, target, content } = old.request;
+      const next = startAttempt(old.draftId, { identity_id, target, content });
+      patchAttempt(clientAttemptId, { supersededBy: next });
+    },
+    [sendState, startAttempt, patchAttempt],
+  );
+
+  const recheck = useCallback(
+    (clientAttemptId: string) => {
+      const a = attemptsRef.current.find((x) => x.clientAttemptId === clientAttemptId);
+      if (!a || a.phase !== 'ambiguous') return;
+      void runPost(a, false);
+    },
+    [runPost],
+  );
+
+  /* ---------------- value ---------------- */
+
+  // Stable action identities: components list them as effect dependencies.
+  const actions = useMemo(
+    () => ({
+      loadConversations: () => void fetchConversations('first'),
+      loadMoreConversations: () => void fetchConversations('more'),
+      loadChannels: () => void fetchChannels(),
+      loadIdentities: () => void fetchIdentities(),
+      openConversation: (id: string | null) => {
+        active.current = id;
+      },
+      loadMessages: (id: string) => void fetchMessages(id, 'first'),
+      loadOlderMessages: (id: string) => void fetchMessages(id, 'more'),
+      draftText: (t: Target) => drafts.current.get(targetKey(t))?.text ?? '',
+      setDraftText: (t: Target, text: string) => {
+        const k = targetKey(t);
+        const cur = drafts.current.get(k);
+        drafts.current.set(k, { draftId: cur?.draftId ?? newDraftId(), text });
+        bumpDrafts((n) => n + 1);
+      },
+      send,
+      sendAgain,
+      recheck,
+    }),
+    [fetchConversations, fetchChannels, fetchIdentities, fetchMessages, send, sendAgain, recheck],
+  );
+
+  const value = useMemo<MessagingValue>(
+    () => ({
+      messaging,
+      sendState,
+      streamStatus,
+      conversations,
+      identities,
+      channels,
+      messagesFor: (id) => messages[id] ?? idle<Message>(),
+      attemptsFor: (t) => attempts.filter((a) => targetKey(a.request.target) === targetKey(t)),
+      ...actions,
+    }),
+    // draftVersion re-renders consumers when a draft (kept in a ref) changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [messaging, sendState, streamStatus, conversations, identities, channels, messages, attempts, actions, draftVersion],
+  );
+
+  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+}

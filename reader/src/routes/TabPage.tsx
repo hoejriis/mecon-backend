@@ -5,7 +5,6 @@ import type { CapabilityState, Device } from '../api/types';
 import { BUILD_COMMIT } from '../buildInfo';
 import type { TabDef } from '../tabs';
 import { Empty, ErrorState, Forbidden, Loading, Offline, Unavailable, useOnline } from '../components/States';
-import { ChatsList } from './ChatsPage';
 
 function CapState({ state }: { state: Exclude<CapabilityState, 'available'> }) {
   return state === 'forbidden' ? <Forbidden /> : <Unavailable />;
@@ -86,7 +85,6 @@ export function TabPage({ tab }: { tab: TabDef }) {
   const online = useOnline();
   let body;
   if (tab.id === 'settings') body = <SettingsBody />;
-  else if (tab.id === 'chats' && state) body = <ChatsList state={state} />;
   else if (tab.id === 'nodes' && state) body = <NodesBody state={state} />;
   else if (state && state !== 'available') body = <CapState state={state} />;
   else if (state === 'available' && !online) body = <Offline />;

@@ -1,6 +1,7 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
+import { createApiClient } from '../api/client';
 import { AuthContext, type AuthValue } from '../auth/AuthContext';
 import { Shell } from '../App';
 import { fx } from '../test/backend';
@@ -9,6 +10,8 @@ const signedIn: AuthValue = {
   status: 'signedIn',
   session: fx.session as AuthValue['session'],
   devices: { status: 'idle' },
+  api: createApiClient(),
+  refreshSession: async () => null,
   loginPhase: 'idle',
   loginMessage: null,
   signOutError: null,

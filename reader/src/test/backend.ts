@@ -1,4 +1,5 @@
 import { vi } from 'vitest';
+import type { Capabilities, Session } from '../api/types';
 import deviceOne from '../../../contracts/reader-api/v1/fixtures/devices-one.json';
 import error401 from '../../../contracts/reader-api/v1/fixtures/error-401.json';
 import error403 from '../../../contracts/reader-api/v1/fixtures/error-403.json';
@@ -70,3 +71,9 @@ export function createBackend() {
 }
 
 export type Backend = ReturnType<typeof createBackend>;
+
+/** The contract's session fixture with some capabilities overridden. */
+export function sessionWith(caps: Partial<Capabilities>): Session {
+  const base = fx.session as unknown as Session;
+  return { ...base, capabilities: { ...base.capabilities, ...caps } as Capabilities };
+}

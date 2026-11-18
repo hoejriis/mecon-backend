@@ -1,31 +1,15 @@
-import { useId, useState, type FormEvent } from 'react';
-import { MIN_PIN_LENGTH, type UnlockMethod } from './unlock';
+import { useState } from 'react';
 
-/** Unlock with the stored method: a passkey button, or a PIN field. */
-export function UnlockForm({
-  method,
-  onPin,
-  onPasskey,
-}: {
-  method: UnlockMethod;
-  onPin(pin: string): Promise<{ ok: boolean; message: string | null }>;
-  onPasskey(): Promise<{ ok: boolean; message: string | null }>;
-}) {
-  const id = useId();
-  const [pin, setPin] = useState('');
+/** Unlock with the stored passkey. */
+export function UnlockForm({ onPasskey }: { onPasskey(): Promise<{ ok: boolean; message: string | null }> }) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
-  const run = async (f: () => Promise<{ ok: boolean; message: string | null }>) => {
+  const run = async () => {
     setBusy(true);
     setMsg(null);
-    const r = await f();
+    const r = await onPasskey();
     setBusy(false);
     if (!r.ok) setMsg(r.message);
-    setPin('');
-  };
-  const submit = (e: FormEvent) => {
-    e.preventDefault();
-    void run(() => onPin(pin));
   };
   return (
     <div className="login-form">
@@ -34,27 +18,9 @@ export function UnlockForm({
           {msg}
         </p>
       )}
-      {method === 'passkey' ? (
-        <button type="button" className="btn" disabled={busy} onClick={() => void run(onPasskey)}>
-          {busy ? 'Unlocking…' : 'Unlock with passkey'}
-        </button>
-      ) : (
-        <form onSubmit={submit} className="login-form">
-          <label htmlFor={id}>Offline PIN</label>
-          <input
-            id={id}
-            type="password"
-            autoComplete="off"
-            minLength={MIN_PIN_LENGTH}
-            required
-            value={pin}
-            onChange={(e) => setPin(e.target.value)}
-          />
-          <button type="submit" className="btn" disabled={busy || pin.length < MIN_PIN_LENGTH}>
-            {busy ? 'Unlocking…' : 'Unlock'}
-          </button>
-        </form>
-      )}
+      <button type="button" className="btn" disabled={busy} onClick={() => void run()}>
+        {busy ? 'Unlocking…' : 'Unlock with passkey'}
+      </button>
     </div>
   );
 }

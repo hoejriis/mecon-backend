@@ -21,8 +21,7 @@ export interface OfflineValue {
   warnings: string[];
   passkeyPossible: boolean;
   /** Set up for the signed-in user. Returns a user-facing note (a fallback explanation) or an error message. */
-  setup(userId: string, o: { preferPasskey: boolean; pin?: string }): Promise<{ ok: boolean; message: string | null; needsPin?: boolean }>;
-  unlockPin(userId: string, pin: string): Promise<{ ok: boolean; message: string | null }>;
+  setup(userId: string): Promise<{ ok: boolean; message: string | null }>;
   unlockPasskey(userId: string): Promise<{ ok: boolean; message: string | null }>;
   lock(): void;
   /** For the BLE and USB send paths. */
@@ -43,7 +42,6 @@ const INERT: OfflineValue = {
   passkeyPossible: false,
   session: null,
   setup: async () => ({ ok: false, message: 'Offline access is not available.' }),
-  unlockPin: async () => ({ ok: false, message: 'Offline access is not available.' }),
   unlockPasskey: async () => ({ ok: false, message: 'Offline access is not available.' }),
   lock: () => undefined,
 };
@@ -178,18 +176,17 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
       warnings: s ? [...s.warnings] : [],
       passkeyPossible: passkeyMaybeSupported(),
       session: s,
-      async setup(uid, o) {
+      async setup(uid) {
         if (!s) return { ok: false, message: 'Offline access is not available in this browser.' };
         try {
-          const r = await s.setup(uid, o);
+          const r = await s.setup(uid);
           await refreshProfiles();
-          if (r.status === 'needs-pin') return { ok: false, message: r.note, needsPin: true };
-          return { ok: r.opened?.ok ?? false, message: r.note };
+          if (r.status === 'unsupported') return { ok: false, message: r.note };
+          return { ok: r.opened?.ok ?? false, message: null };
         } catch (e) {
           return { ok: false, message: errorText(e) };
         }
       },
-      unlockPin: (uid, pin) => (s ? wrap(() => s.unlockPin(uid, pin)) : Promise.resolve({ ok: false, message: 'Offline access is not available.' })),
       unlockPasskey: (uid) => (s ? wrap(() => s.unlockPasskey(uid)) : Promise.resolve({ ok: false, message: 'Offline access is not available.' })),
       lock: () => s?.lock(),
     };

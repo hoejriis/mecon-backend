@@ -17,7 +17,6 @@ import {
   getUnlockRecord,
   setupUnlock,
   unlockWithPasskey,
-  unlockWithPin,
   type IdleTimers,
   type OfflineKeys,
   type SetupResult,
@@ -101,13 +100,10 @@ export class OfflineSession {
     return { ok: true };
   }
 
-  async setup(userId: string, o: { preferPasskey: boolean; pin?: string }): Promise<SetupResult & { opened?: OpenOutcome }> {
-    const r = await setupUnlock(this.store, userId, { ...o, webauthn: this.opts.webauthn });
+  async setup(userId: string): Promise<SetupResult & { opened?: OpenOutcome }> {
+    const r = await setupUnlock(this.store, userId, { webauthn: this.opts.webauthn });
     if (r.status === 'ready') return { ...r, opened: await this.adopt(r.keys) };
     return r;
-  }
-  async unlockPin(userId: string, pin: string): Promise<OpenOutcome> {
-    return this.adopt(await unlockWithPin(this.store, userId, pin));
   }
   async unlockPasskey(userId: string): Promise<OpenOutcome> {
     return this.adopt(await unlockWithPasskey(this.store, userId, { webauthn: this.opts.webauthn }));

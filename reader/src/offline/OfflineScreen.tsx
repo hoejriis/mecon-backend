@@ -45,7 +45,7 @@ function Locked() {
       {off.profiles.map((p, i) => (
         <div key={p.userId}>
           {off.profiles.length > 1 && <h3>Account {i + 1}</h3>}
-          <UnlockForm method={p.method} onPin={(pin) => off.unlockPin(p.userId, pin)} onPasskey={() => off.unlockPasskey(p.userId)} />
+          <UnlockForm onPasskey={() => off.unlockPasskey(p.userId)} />
         </div>
       ))}
     </section>

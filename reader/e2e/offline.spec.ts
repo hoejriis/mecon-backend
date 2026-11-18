@@ -4,16 +4,24 @@ import { mockMessagingBackend } from './messagingBackend';
 
 // Backend is SIMULATED (route mocks); the browser, the production CSP, IndexedDB, WebCrypto
 // (PBKDF2, AES-GCM, HKDF, Ed25519), the service worker and the offline switch are real Chromium.
-const PIN = 'e2e-synthetic-pin-4821';
+const ORIGIN = 'http://localhost:4173'; // WebAuthn needs a domain as relying party id, not 127.0.0.1
 const SECRET_TEXT = 'Hello from the peer';
 
+async function addAuthenticator(page: Page, context: BrowserContext, hasPrf = true) {
+  const cdp = await context.newCDPSession(page);
+  await cdp.send('WebAuthn.enable');
+  await cdp.send('WebAuthn.addVirtualAuthenticator', {
+    options: { protocol: 'ctap2', transport: 'internal', hasResidentKey: true, hasUserVerification: true, isUserVerified: true, automaticPresenceSimulation: true, hasPrf } as never,
+  });
+}
+
 async function signedInAndCached(page: Page, context: BrowserContext, lease: Parameters<typeof mockLeaseBackend>[1] = {}) {
+  await addAuthenticator(page, context);
   await mockMessagingBackend(page);
   const be = await mockLeaseBackend(page, lease);
-  await page.goto('/settings');
-  await page.getByLabel(/Offline PIN/).fill(PIN);
-  await page.getByRole('button', { name: 'Set up with a PIN' }).click();
-  await expect(page.getByText('Unlocked with your PIN')).toBeVisible();
+  await page.goto(`${ORIGIN}/settings`);
+  await page.getByRole('button', { name: 'Set up with a passkey' }).click();
+  await expect(page.getByText('Unlocked with a passkey')).toBeVisible({ timeout: 15_000 });
   await expect.poll(() => be.leaseRequests).toBeGreaterThan(0);
   await expect(page.getByText('Offline lease valid.')).toBeVisible();
   // Load a conversation while unlocked so the cache fills.
@@ -50,7 +58,7 @@ async function goOffline(page: Page, context: BrowserContext, be: { down: boolea
 }
 
 test.describe('offline cache and lease (Backend simulated)', () => {
-  test('PIN setup, offline reload shows only a locked shell, unlock shows cached history, no plaintext in IndexedDB', async ({ page, context }) => {
+  test('passkey setup, offline reload shows only a locked shell, unlock shows cached history, no plaintext in IndexedDB', async ({ page, context }) => {
     const violations: string[] = [];
     page.on('console', (m) => {
       if (m.text().includes('Content Security Policy')) violations.push(m.text());
@@ -59,7 +67,7 @@ test.describe('offline cache and lease (Backend simulated)', () => {
 
     // Real browser storage holds no readable private content.
     const dump = await idbDump(page);
-    for (const needle of [SECRET_TEXT, 'Demo Peer', 'Demo Channel', 'conv_demo_0001', PIN]) expect(dump).not.toContain(needle);
+    for (const needle of [SECRET_TEXT, 'Demo Peer', 'Demo Channel', 'conv_demo_0001']) expect(dump).not.toContain(needle);
     expect(await page.evaluate(() => JSON.stringify(Object.entries(localStorage)) + JSON.stringify(Object.entries(sessionStorage)))).not.toContain('Demo Peer');
 
     await goOffline(page, context, be);
@@ -69,13 +77,7 @@ test.describe('offline cache and lease (Backend simulated)', () => {
     await expect(page.getByText('Demo Peer')).toHaveCount(0);
     await expect(page.getByText(SECRET_TEXT)).toHaveCount(0);
 
-    await page.getByLabel('Offline PIN').fill('wrong-pin-000');
-    await page.getByRole('button', { name: 'Unlock', exact: true }).click();
-    await expect(page.getByRole('alert')).toContainText('Wrong PIN');
-    await expect(page.getByText('Demo Peer')).toHaveCount(0);
-
-    await page.getByLabel('Offline PIN').fill(PIN);
-    await page.getByRole('button', { name: 'Unlock', exact: true }).click();
+    await page.getByRole('button', { name: 'Unlock with passkey' }).click();
     await expect(page.getByTestId('lease-line')).toContainText('Offline lease valid until');
     await page.getByRole('button', { name: /Demo Peer \(merged pair\)/ }).click();
     await expect(page.getByText(SECRET_TEXT)).toBeVisible();
@@ -85,7 +87,7 @@ test.describe('offline cache and lease (Backend simulated)', () => {
     // Lock again: the content goes away, and is not erased.
     await page.getByRole('button', { name: 'Lock', exact: true }).click();
     await expect(page.getByText(SECRET_TEXT)).toHaveCount(0);
-    await expect(page.getByLabel('Offline PIN')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Unlock with passkey' })).toBeVisible();
     expect(violations).toEqual([]);
   });
 
@@ -94,8 +96,7 @@ test.describe('offline cache and lease (Backend simulated)', () => {
     const be = await signedInAndCached(page, context, { issuedOffsetMs: -(7 * 86_400_000 - 6000), lifeMs: 7 * 86_400_000 });
     await page.waitForTimeout(6500);
     await goOffline(page, context, be);
-    await page.getByLabel('Offline PIN').fill(PIN);
-    await page.getByRole('button', { name: 'Unlock', exact: true }).click();
+    await page.getByRole('button', { name: 'Unlock with passkey' }).click();
     await expect(page.getByTestId('read-only')).toContainText('Read-only');
     await expect(page.getByTestId('lease-line')).toContainText('expired');
     await page.getByRole('button', { name: /Demo Peer \(merged pair\)/ }).click();
@@ -108,34 +109,55 @@ test.describe('offline cache and lease (Backend simulated)', () => {
   test('reconnecting returns to the signed-in app, and the reload locks the cache again (keys live in memory only)', async ({ page, context }) => {
     const be = await signedInAndCached(page, context);
     await goOffline(page, context, be);
-    await page.getByLabel('Offline PIN').fill(PIN);
-    await page.getByRole('button', { name: 'Unlock', exact: true }).click();
+    await page.getByRole('button', { name: 'Unlock with passkey' }).click();
     await expect(page.getByTestId('lease-line')).toBeVisible();
     be.down = false;
     await context.setOffline(false);
     await page.reload();
-    await page.goto('/settings');
+    await page.goto(`${ORIGIN}/settings`);
     await expect(page.getByRole('heading', { name: 'Offline access' })).toBeVisible();
     // A reload locks (keys live in memory only), so the user unlocks again to keep syncing.
     await expect(page.getByText('Offline data is locked on this device.')).toBeVisible();
   });
 
-  test('passkey path (WebAuthn PRF) with a SIMULATED virtual authenticator', async ({ page, context }) => {
-    const cdp = await context.newCDPSession(page);
-    await cdp.send('WebAuthn.enable');
-    let prf = true;
-    try {
-      await cdp.send('WebAuthn.addVirtualAuthenticator', {
-        options: { protocol: 'ctap2', transport: 'internal', hasResidentKey: true, hasUserVerification: true, isUserVerified: true, automaticPresenceSimulation: true, hasPrf: true } as never,
-      });
-    } catch {
-      prf = false;
-    }
-    test.skip(!prf, 'This Chromium has no PRF virtual authenticator');
+  test('an authenticator without PRF: no offline setup works, the cache never opens, and the Reader says so (SIMULATED authenticator)', async ({ page, context }) => {
+    await addAuthenticator(page, context, false);
     await mockMessagingBackend(page);
     await mockLeaseBackend(page);
-    // WebAuthn needs a domain as relying party id, so this test uses localhost rather than 127.0.0.1.
-    await page.goto('http://localhost:4173/settings');
+    await page.goto(`${ORIGIN}/settings`);
+    await page.getByRole('button', { name: 'Set up with a passkey' }).click();
+    await expect(page.getByRole('status').filter({ hasText: /passkey|offline access/i }).first()).toBeVisible();
+    await expect(page.getByText('Unlocked with a passkey')).toHaveCount(0);
+    const keys = await page.evaluate(
+      () =>
+        new Promise<string[]>((resolve) => {
+          const open = indexedDB.open('mecon-reader-offline');
+          open.onerror = () => resolve([]);
+          open.onsuccess = () => {
+            const r = open.result.transaction('kv', 'readonly').objectStore('kv').getAllKeys();
+            r.onsuccess = () => resolve(r.result as string[]);
+          };
+        }),
+    );
+    expect(keys).toEqual([]); // no unlock record, no schema marker, no cache
+  });
+
+  test('no WebAuthn at all: no setup option, only the online-only explanation', async ({ page }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(window, 'PublicKeyCredential', { value: undefined, configurable: true });
+    });
+    await mockMessagingBackend(page);
+    await mockLeaseBackend(page);
+    await page.goto(`${ORIGIN}/settings`);
+    await expect(page.getByText("Offline access needs a passkey this browser can't provide here; the Reader works online only on this device.")).toBeVisible();
+    await expect(page.getByRole('button', { name: /Set up/ })).toHaveCount(0);
+  });
+
+  test('passkey path (WebAuthn PRF) with a SIMULATED virtual authenticator: lock and unlock again', async ({ page, context }) => {
+    await addAuthenticator(page, context);
+    await mockMessagingBackend(page);
+    await mockLeaseBackend(page);
+    await page.goto(`${ORIGIN}/settings`);
     await page.getByRole('button', { name: 'Set up with a passkey' }).click();
     await expect(page.getByText('Unlocked with a passkey')).toBeVisible({ timeout: 15_000 });
     await page.getByRole('button', { name: 'Lock offline data' }).click();

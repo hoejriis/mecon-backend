@@ -1,24 +1,15 @@
 /**
- * Local unlock for the offline cache.
+ * Local unlock for the offline cache: a passkey through the WebAuthn PRF
+ * extension only (owner decision, 2026-11-18). There is no PIN and no fallback:
+ * a browser without PRF gets no offline cache and works online only.
  *
  * A random 256-bit data key protects the cache. It is stored only wrapped
- * (AES-GCM) by a key-encryption key (KEK) that exists only while unlocked:
- *
- *   passkey path  WebAuthn create/get with the PRF extension; the PRF output
- *                 goes through HKDF-SHA-256 to give the KEK. The PRF output
- *                 never leaves the authenticator unless the user verifies.
- *   PIN path      PBKDF2-HMAC-SHA-256, at least 600,000 iterations, random
- *                 per-user 16-byte salt, PIN of at least 6 characters. Argon2
- *                 is not in WebCrypto, so PBKDF2 is the strongest slow KDF a
- *                 strict-CSP page can use without shipping its own KDF code
- *                 (WASM needs 'wasm-unsafe-eval'; a JS Argon2 is far slower and
- *                 unreviewed). The iteration count is stored with the record so
- *                 it can be raised later; a record below the floor is refused.
- *
- * Nothing secret persists unwrapped: the store holds the wrapped data key, salts
- * and the credential id (all non-secret). The unwrapped data key lives only as a
- * non-extractable HKDF key in memory and is dropped on lock (sign-out, idle).
+ * (AES-GCM) by a key-encryption key (KEK) that exists only while unlocked. The
+ * KEK is HKDF-SHA-256 over the PRF output. The store holds the wrapped data key,
+ * a salt and the credential id (all non-secret). The unwrapped data key lives only
+ * as a non-extractable HKDF key in memory and is dropped on lock (sign-out, idle).
  * Per-user, per-purpose keys come from HKDF with the user id and purpose in `info`.
+ * Any stored record whose method is not `passkey` is ignored and removed.
  */
 import type { KvStore } from '../storage/migrations';
 import { b64uDecode, b64uEncode, randomBytes, utf8, type Bytes } from './bytes';
@@ -34,21 +25,15 @@ import {
   type Sealed,
 } from './crypto';
 
-/** The PBKDF2 floor. A stored record below this is refused, and new records are never written below it. */
-export const MIN_PBKDF2_ITERATIONS = 600_000;
-export const PIN_PBKDF2_ITERATIONS = 600_000;
-export const MIN_PIN_LENGTH = 6;
 export const DEFAULT_IDLE_MS = 5 * 60_000;
 
-export type UnlockMethod = 'pin' | 'passkey';
+export type UnlockMethod = 'passkey';
 
 export type UnlockErrorCode =
-  | 'pin-too-short'
   | 'wrong-credential'
   | 'prf-unsupported'
   | 'passkey-cancelled'
   | 'no-record'
-  | 'weak-parameters'
   | 'already-set-up'
   | 'bad-record';
 
@@ -75,9 +60,8 @@ export interface UnlockRecord {
   userId: string;
   method: UnlockMethod;
   createdAt: string;
-  /** Random per-user salt (PBKDF2 salt for the PIN, HKDF salt for the passkey KEK). */
+  /** Random per-user HKDF salt for the passkey KEK. */
   salt: string;
-  pin?: { kdf: 'PBKDF2-SHA-256'; iterations: number };
   passkey?: { credentialId: string; prfSalt: string };
   /** The random data key, wrapped by the KEK. */
   wrapped: Sealed;
@@ -141,25 +125,6 @@ const kekFromHkdf = (master: CryptoKey, userId: string, salt: Bytes, kind: strin
     ['encrypt', 'decrypt'],
   );
 
-export const normalizePin = (pin: string): string => pin.normalize('NFKC');
-
-export function checkPin(pin: string): void {
-  if ([...normalizePin(pin)].length < MIN_PIN_LENGTH) {
-    throw new UnlockError('pin-too-short', `The PIN needs at least ${MIN_PIN_LENGTH} characters.`);
-  }
-}
-
-async function pinKek(pin: string, salt: Bytes, iterations: number): Promise<CryptoKey> {
-  const material = await crypto.subtle.importKey('raw', utf8(normalizePin(pin)), 'PBKDF2', false, ['deriveKey']);
-  return crypto.subtle.deriveKey(
-    { name: 'PBKDF2', hash: 'SHA-256', salt, iterations },
-    material,
-    { name: 'AES-GCM', length: 256 },
-    false,
-    ['encrypt', 'decrypt'],
-  );
-}
-
 /* --------------------------------------------------------------- WebAuthn */
 
 /** The two WebAuthn calls this module makes, injectable for tests. */
@@ -215,21 +180,25 @@ async function prfOutput(w: WebAuthnLike, credentialId: Bytes, prfSalt: Bytes): 
 /* ----------------------------------------------------------------- store */
 
 export async function getUnlockRecord(store: KvStore, userId: string): Promise<UnlockRecord | null> {
-  const raw = await store.get(recordKey(await userToken(userId)));
+  const key = recordKey(await userToken(userId));
+  const raw = await store.get(key);
   if (raw === undefined) return null;
   const r = raw as UnlockRecord;
-  if (!r || r.v !== 1 || r.userId !== userId || typeof r.salt !== 'string' || !r.wrapped) throw new UnlockError('bad-record');
+  if (!r || r.v !== 1 || r.method !== 'passkey' || !r.passkey) {
+    await store.delete(key); // not a passkey record: never usable, removed
+    return null;
+  }
+  if (r.userId !== userId || typeof r.salt !== 'string' || !r.wrapped) throw new UnlockError('bad-record');
   return r;
 }
 
-/** User ids that have an unlock record on this device (opaque ids; no names, no content). */
+/** User ids with a passkey unlock record on this device. Records of any other kind are removed. */
 export async function listUnlockUsers(store: KvStore): Promise<Array<{ userId: string; method: UnlockMethod }>> {
   const out: Array<{ userId: string; method: UnlockMethod }> = [];
   for (const k of await store.keys('unlock/')) {
     const r = (await store.get(k)) as UnlockRecord | undefined;
-    if (r && r.v === 1 && typeof r.userId === 'string' && (r.method === 'pin' || r.method === 'passkey')) {
-      out.push({ userId: r.userId, method: r.method });
-    }
+    if (r && r.v === 1 && r.method === 'passkey' && r.passkey && typeof r.userId === 'string') out.push({ userId: r.userId, method: 'passkey' });
+    else await store.delete(k);
   }
   return out;
 }
@@ -250,30 +219,6 @@ async function writeRecord(
 
 async function guardNew(store: KvStore, userId: string) {
   if (await getUnlockRecord(store, userId)) throw new UnlockError('already-set-up');
-}
-
-export async function setupWithPin(store: KvStore, userId: string, pin: string): Promise<OfflineKeys> {
-  checkPin(pin);
-  await guardNew(store, userId);
-  const salt = randomBytes(16);
-  const kek = await pinKek(pin, salt, PIN_PBKDF2_ITERATIONS);
-  return writeRecord(store, userId, { method: 'pin', pin: { kdf: 'PBKDF2-SHA-256', iterations: PIN_PBKDF2_ITERATIONS } }, salt, kek);
-}
-
-export async function unlockWithPin(store: KvStore, userId: string, pin: string): Promise<OfflineKeys> {
-  const rec = await getUnlockRecord(store, userId);
-  if (!rec || rec.method !== 'pin' || !rec.pin) throw new UnlockError('no-record');
-  if (rec.pin.kdf !== 'PBKDF2-SHA-256' || !Number.isInteger(rec.pin.iterations) || rec.pin.iterations < MIN_PBKDF2_ITERATIONS) {
-    throw new UnlockError('weak-parameters', 'The stored unlock parameters are below the minimum; refusing to use them.');
-  }
-  const kek = await pinKek(pin, b64uDecode(rec.salt), rec.pin.iterations);
-  try {
-    const dataKey = await open(kek, userId, WRAP.purpose, WRAP.slot, rec.wrapped);
-    return await keysFromDataKey(userId, 'pin', dataKey);
-  } catch (e) {
-    if (e instanceof CryptoFailure) throw new UnlockError('wrong-credential', 'Wrong PIN.');
-    throw e;
-  }
 }
 
 export async function setupWithPasskey(
@@ -339,43 +284,29 @@ export async function unlockWithPasskey(store: KvStore, userId: string, opts: { 
 }
 
 export type SetupResult =
-  | { status: 'ready'; keys: OfflineKeys; method: UnlockMethod; fellBack: boolean; note: string | null }
-  | { status: 'needs-pin'; note: string };
+  | { status: 'ready'; keys: OfflineKeys; method: UnlockMethod }
+  | { status: 'unsupported'; note: string };
+
+export const PASSKEY_REQUIRED_NOTE =
+  "Offline access needs a passkey this browser can't provide here; the Reader works online only on this device.";
 
 /**
- * Passkey first where asked and possible; otherwise the PIN. When a passkey is
- * wanted but PRF is not supported and no PIN was given, nothing is stored and the
- * caller is told to ask for a PIN.
+ * Sets up the passkey unlock. When PRF is not supported (or the passkey step is
+ * cancelled) nothing is stored and no offline cache is opened.
  */
-export async function setupUnlock(
-  store: KvStore,
-  userId: string,
-  opts: { preferPasskey: boolean; pin?: string; webauthn?: WebAuthnLike | null },
-): Promise<SetupResult> {
-  let note: string | null = null;
-  if (opts.preferPasskey) {
-    try {
-      const keys = await setupWithPasskey(store, userId, { webauthn: opts.webauthn });
-      return { status: 'ready', keys, method: 'passkey', fellBack: false, note: null };
-    } catch (e) {
-      if (!(e instanceof UnlockError) || (e.code !== 'prf-unsupported' && e.code !== 'passkey-cancelled')) throw e;
-      note =
-        e.code === 'prf-unsupported'
-          ? 'A passkey cannot protect the cache in this browser, so a PIN is used instead.'
-          : 'The passkey step was cancelled, so a PIN is used instead.';
-    }
-    if (opts.pin === undefined) return { status: 'needs-pin', note: note! };
+export async function setupUnlock(store: KvStore, userId: string, opts: { webauthn?: WebAuthnLike | null } = {}): Promise<SetupResult> {
+  try {
+    const keys = await setupWithPasskey(store, userId, { webauthn: opts.webauthn });
+    return { status: 'ready', keys, method: 'passkey' };
+  } catch (e) {
+    if (e instanceof UnlockError && e.code === 'prf-unsupported') return { status: 'unsupported', note: PASSKEY_REQUIRED_NOTE };
+    if (e instanceof UnlockError && e.code === 'passkey-cancelled') return { status: 'unsupported', note: 'The passkey step was cancelled, so offline access was not set up.' };
+    throw e;
   }
-  if (opts.pin === undefined) return { status: 'needs-pin', note: 'Choose a PIN to protect the offline cache.' };
-  const keys = await setupWithPin(store, userId, opts.pin);
-  return { status: 'ready', keys, method: 'pin', fellBack: opts.preferPasskey, note };
 }
 
 /** Whether the passkey PRF path could be tried here (API present). Real support is confirmed at setup. */
-export const describeUnlockOptions = (w: WebAuthnLike | null = browserWebAuthn()) => ({
-  passkey: passkeyMaybeSupported(w),
-  pin: true,
-});
+export const describeUnlockOptions = (w: WebAuthnLike | null = browserWebAuthn()) => ({ passkey: passkeyMaybeSupported(w) });
 
 /* ------------------------------------------------------------------ idle */
 

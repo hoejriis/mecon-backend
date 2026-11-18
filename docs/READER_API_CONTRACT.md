@@ -58,6 +58,8 @@ Clock rule. A lease is expired when the effective time reaches `expires_at`, wit
 
 Lease states in the Reader: `valid`, `expired`, `missing`, `invalid-signature` (bad signature, unknown or out-of-validity `key_id`, a lifetime over 7 days, another user's lease, a malformed payload) and `unsupported` (no Ed25519). Only `valid` permits anything, and only the identities, operations and devices it lists.
 
+Unlock for the cache that holds a lease is a passkey through the WebAuthn PRF extension only (owner decision, 2026-11-18). There is no PIN: a browser without PRF has no offline cache, and so no stored lease, and works online only.
+
 Fixtures: `lease-issued.json` and `lease-keys.json` are synthetic and signed with a **test-only** keypair (`contracts/reader-api/v1/test-only/lease-test-keypair.json`, regenerate with `contracts/scripts/gen-lease-fixtures.mjs`). That key protects nothing and no Reader or Backend may trust it.
 
 

@@ -130,7 +130,7 @@ describe('account switch', () => {
 
   it('locks the previous user, isolates their cache, and returns it intact only to them', async () => {
     const { session, store } = await rig();
-    expect((await session.setup('usr_a', { preferPasskey: true })).status).toBe('ready');
+    expect((await session.setup('usr_a')).status).toBe('ready');
     await session.cache!.putConversations([conv('c1')]);
     await session.cache!.putMessages('c1', [msg('c1', 1, 'a private')]);
     await session.cache!.saveDraft({ draftId: 'dr1', target: { kind: 'contact', id: 'ct_1' }, identityId: 'idn_a', text: 'a draft', updatedAt: 1 });
@@ -143,7 +143,7 @@ describe('account switch', () => {
     await expect(aCache.listConversations()).rejects.toBeInstanceOf(LockedError); // the old handle is dead
 
     // B sets up on the same device: sees nothing of A's.
-    expect((await session.setup('usr_b', { preferPasskey: true })).status).toBe('ready');
+    expect((await session.setup('usr_b')).status).toBe('ready');
     expect(await session.cache!.listConversations()).toEqual([]);
     expect(await session.cache!.listDrafts()).toEqual([]);
 
@@ -158,7 +158,7 @@ describe('account switch', () => {
 
   it('sign-out (the session ending) locks; the same user staying does not', async () => {
     const { session } = await rig();
-    await session.setup('usr_a', { preferPasskey: true });
+    await session.setup('usr_a');
     session.followSession('usr_a');
     expect(session.unlockedUserId).toBe('usr_a');
     session.followSession(null);
@@ -184,7 +184,7 @@ describe('account switch', () => {
     };
     const store = await freshStore();
     const session = new OfflineSession({ store, webauthn: fakePasskey(), idleMs: 1000, idleTimers });
-    await session.setup('usr_a', { preferPasskey: true });
+    await session.setup('usr_a');
     advance(900);
     session.touch();
     advance(900);
@@ -197,7 +197,7 @@ describe('account switch', () => {
 
   it('after a reload the interrupted attempt is marked ambiguous exactly once and the lease is evaluated offline', async () => {
     const { session, store, signer, now } = await rig();
-    await session.setup('usr_a', { preferPasskey: true });
+    await session.setup('usr_a');
     await session.cache!.saveAttempt(att('att_1', 'posting'));
     await session.cache!.putLeaseKeys([signer.key]);
     await session.cache!.putLease(await signer.sign(leasePayload({ issuedMs: now.t })));

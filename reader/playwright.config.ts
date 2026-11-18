@@ -3,13 +3,31 @@ import { defineConfig, devices } from '@playwright/test';
 export default defineConfig({
   testDir: './e2e',
   outputDir: './e2e-artifacts/results',
-  reporter: [['list']],
+  reporter: [['list'], ['./e2e/bleMatrixReporter.ts']],
   use: { baseURL: 'http://127.0.0.1:4173' },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
-  webServer: {
-    command: 'npm run build && npx vite preview --host 127.0.0.1 --port 4173 --strictPort',
-    url: 'http://127.0.0.1:4173',
-    reuseExistingServer: false,
-    timeout: 120_000,
-  },
+  projects: [
+    { name: 'chromium', use: { ...devices['Desktop Chrome'] }, testIgnore: /ble\.spec\.ts/ },
+    // Android-oriented BLE simulation: Android Chrome user agent, mobile viewport, fake Web Bluetooth.
+    // Runs against the dev server because the BLE harness route exists only in dev builds.
+    {
+      name: 'android-ble-sim',
+      use: { ...devices['Pixel 7'], baseURL: 'http://127.0.0.1:4174' },
+      testMatch: /ble\.spec\.ts/,
+    },
+  ],
+  webServer: [
+    {
+      command: 'npm run build && npx vite preview --host 127.0.0.1 --port 4173 --strictPort',
+      url: 'http://127.0.0.1:4173',
+      reuseExistingServer: false,
+      timeout: 120_000,
+    },
+    {
+      // Bounded dev server (10 minutes) for the BLE harness route.
+      command: "perl -e 'alarm shift; exec @ARGV' 600 npx vite --host 127.0.0.1 --port 4174 --strictPort",
+      url: 'http://127.0.0.1:4174',
+      reuseExistingServer: false,
+      timeout: 120_000,
+    },
+  ],
 });

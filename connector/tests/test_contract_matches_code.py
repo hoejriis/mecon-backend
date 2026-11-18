@@ -71,3 +71,14 @@ def test_topic_templates_equal_contract():
 
 def test_metrics_identity_is_what_the_code_checks():
     assert "upstream_envelopes_total" in MAPPING["metrics_identity"]
+
+
+def test_gate_contract_matches_code():
+    g = MAPPING["enrolment_gate"]
+    c = make_cfg()
+    assert g["timeout_s_default"] == c.gate.timeout_s == 8
+    assert json.loads(g["request"]["text"].replace("<n>", "1")) == {"v": 1, "id": "cg-1", "op": "deployment.get"}
+    assert g["request"]["id_prefix_reserved"] == "cg-"
+    assert (c.gate.recheck_s, c.gate.retry_s) == (600, 30)
+    answered = {q["id"] for q in MAPPING["open_questions"] if q["status"] == "answered"}
+    assert {"Q1", "Q2", "Q3", "Q5"} <= answered

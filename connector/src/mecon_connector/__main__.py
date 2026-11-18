@@ -55,7 +55,7 @@ def main(argv: list[str] | None = None) -> int:
     if cfg.health.enabled:
         server = make_server(cfg.health.bind, cfg.health.port, metrics, bridge.snapshot)
         serve_in_thread(server)
-    log.info("started", version=__version__, mode=cfg.device.mode, downlink=cfg.downlink_enabled, brokers=len(cfg.mqtt.brokers))
+    log.info("started", version=__version__, mode=cfg.device.mode, brokers=len(cfg.mqtt.brokers))
     try:
         bridge.run(stop)
     finally:

@@ -57,9 +57,20 @@ One TOML file, validated at start. Every problem is listed and the process exits
 | `mqtt.topic_root` | Required. The topic root provisioned for this device. The Connector never reads it from the device. |
 | `mqtt.brokers` | One to six. First is primary, the rest are fallbacks. TLS with peer and host-name verification is the default; plain MQTT needs `insecure_allow_plain = true` and is for loopback or a closed test LAN. |
 | `*.password_file` | A file read when connecting. The value is never in the config, the logs or the metrics. Mode 600. |
-| `downlink.enabled` | Required, no default. `false` makes the Connector upstream-only (it subscribes to nothing). See the warning below. |
+| `downlink.gate` | Optional timings for the enrolment gate (below). There is no switch to turn downlink on: it opens only for an enrolled device. |
 
-**Downlink warning.** The firmware treats a USB cable caller as local, and a device that holds no Deployment record accepts unsigned cable requests, including first provisioning. Anything the Connector writes arrives as that caller. Enable `downlink` only for an enrolled device, and let only the Backend publish to the down topic (broker ACL). This is open question Q2 in the contract.
+## The enrolment gate
+
+The firmware treats a USB cable caller as local, and a device with no Deployment record accepts unsigned requests from it, including first provisioning and resets. Anything the Connector wrote from the broker would arrive as that caller. So broker messages reach the device **only while the device itself says it is enrolled**; an unenrolled device gets uplink only. The state is never taken from configuration.
+
+- **How it asks.** The Connector sends the device `{"v":1,"id":"cg-<n>","op":"deployment.get"}`, an unsigned read, in the active framing (`0x7F` frames in `companion` mode, one `mecon> ` line in `console` mode). Downlink opens only when the answer is `status` `ok` with `result.state` `"provisioned"`. `none`, `corrupt`, a `refused`, an answer that does not parse, no answer within 8 s, or anything else means closed.
+- **When.** When the serial port opens, when a broker session is (re)established, on a new `epoch` (a reboot), every 10 minutes while open, and every 30 s while closed. The two intervals and the timeout are `downlink.gate` settings with bounds.
+- **Close at once.** While a record exists, every interface event and result carries `usig`. The first uplink interface message without it closes downlink immediately (that is what follows a `deployment.reset`), the message is still forwarded unchanged, and downlink reopens only after a fresh `deployment.get` says `provisioned`.
+- **What it reads.** Only its own reply (matched by the reserved id prefix `cg-`), whether a top-level `usig` member is present, and an epoch (`epoch`, `result.epoch` or `usig_boot`). Uplink is never altered and always forwarded, except the device's answer to the Connector's own request, which is the Connector's traffic: neither the request nor its answer is published upstream.
+- **While closed,** broker messages are dropped and counted (`downlink_closed_total`), never held and never replayed after the gate reopens.
+- **When open,** the Connector is a plain bridge: it does not check signatures or operations on relayed content. For an enrolled device the firmware requires a member's signature for everything but reads, and unsigned reads are relayed by decision. Restrict who may publish to `down` with the broker ACL anyway.
+- **One request at a time.** The firmware handles one interface message at a time, so the Connector's request can interleave with a Backend request in flight; the Backend re-sends with the same id on a `busy` answer.
+- **Native Companion frames** are not interface messages: they stay dropped and counted, uplink and downlink.
 
 ## What it does
 
@@ -69,7 +80,9 @@ Serial to broker:
 - `console` mode reads `mecon> {` lines (at most 1600 bytes with the prefix, CR or LF terminated) and skips echo and log lines without buffering them.
 - Each complete message becomes one MQTT publish of exactly those bytes, QoS 1, not retained.
 
-Broker to serial (when enabled): each message on the down topic is wrapped (`0x7F` frames in `<` wrappers, or one `mecon> ` line) and written once. Retained messages are refused. An empty, oversize or (console) line-breaking message is dropped and counted, never rewritten.
+Broker to serial (only while the gate is open): each message on the down topic is wrapped (`0x7F` frames in `<` wrappers, or one `mecon> ` line) and written once. Retained messages are refused. An empty, oversize or (console) line-breaking message is dropped and counted, never rewritten.
+
+On shutdown the Connector releases the device explicitly: it publishes the status `offline` and closes the broker session before it exits.
 
 The Connector also publishes a retained status message `{"v":1,"connector":"online|offline","serial":"up|down|unknown"}` with a last will. It is the Connector's own state, never the device's presence.
 
@@ -80,10 +93,10 @@ The Connector also publishes a retained status message `{"v":1,"connector":"onli
 | Broker down | Envelopes wait in a bounded queue (64 messages, 256 KiB, 60 s). On reconnect they go out once, in order. This is their first send. |
 | Publish handed over, session ends before the PUBACK | Counted as `upstream_uncertain_total` and **never resent**. The broker may already hold it. A new session uses a new MQTT client object, so the library has nothing to replay. |
 | Queue full | The newest envelope is dropped and counted. Nothing is dropped without a metric. |
-| Command arrives, serial is unplugged | Dropped and counted. It is not held for a replug. |
+| Command arrives while the enrolment gate is closed (unenrolled, unknown, serial unplugged, after an unsigned uplink or a reboot) | Dropped and counted as `downlink_closed_total`. Not held, not replayed when the gate reopens. |
 | Command waited more than 5 s | Dropped and counted. |
 | Serial write fails | Counted. Never retried: the device may have seen all, part or none of it. |
-| Broker drops and reconnects | No command is written a second time. Downlink is subscribed at QoS 0 on a clean session and retained messages are refused. |
+| Broker drops and reconnects | No command is written a second time. Downlink is subscribed at QoS 0 on a clean session, retained messages are refused, and the gate closes at every broker reconnect and asks again. |
 
 If the sender needs a result it re-sends with the same request `id` and reads the answer; the firmware's id cache makes that safe for state-changing operations. The Connector never does this for it.
 
@@ -129,12 +142,12 @@ python scripts/gen_fixtures.py      # regenerates contracts/connector/v1/fixture
 - Every fixture in `contracts/connector/v1/fixtures` runs through the real bridge at several chunkings.
 - `tests/test_integration_mosquitto.py` runs the real bridge and the real MQTT client against mosquitto: round trip, retained status, last will after a dropped connection, broker restart without duplicates, failover, TLS and password, and fail-closed on a wrong CA or password.
 - `tests/test_contract_matches_code.py` fails when the code and `mapping.json` disagree (metrics, limits, defaults, topic templates).
-- The mutation script breaks 18 rules (payload altered, in-doubt publish re-queued, a command written again after a reconnect, unbounded buffering, a duplicate publish on a repeated frame, silent drops and others) and requires a test failure for each.
+- The mutation script breaks 27 rules (payload altered, in-doubt publish re-queued, a command written again after a reconnect, unbounded buffering, a duplicate publish on a repeated frame, silent drops and others) and requires a test failure for each.
 
 ## What is not verified
 
 - Nothing has run with a real USB radio. Not verified: that a Companion's USB accepts `0x7F` frames on every build and before the app handshake, that boot text never precedes frames, that opening the port does not reset the board (an ESP32-S3 may reset on open, an nRF52 bridge may need DTR), and that 115200 baud is right for every board.
-- Nothing has run against the Backend or its broker policy. Topic names, ACLs, the single up topic (the Connector cannot split responses from events without reading them), and the dual-transport arbitration are open (contract questions Q1 to Q6).
+- Nothing has run against the Backend or its broker policy. Topic names are provisional until the Backend confirms the mapping at stage C3. The enrolment gate has run only against a fake device that models `deployment.get`, `epoch` and `usig` from the firmware docs; the real answers, the exact place of `epoch` in them, and whether an enrolled device accepts any unsigned read that returns data the Backend alone should see are unverified. Q4 and Q6 in the contract are open.
 - No Pi measurements: resident memory, CPU at sustained traffic, reconnect time, and behaviour under UART byte loss are unknown.
 - The TLS check was exercised against a synthetic CA and mosquitto 2.0.x only. Failure classification between a certificate failure and a plain network failure depends on paho's log text and is best effort; both fail closed.
 - Hot-unplug on Linux is covered by a fake device. The real error codes from a vanished USB serial port were not observed.

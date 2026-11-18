@@ -137,14 +137,14 @@ class Backendish:
 class Live:
     """The real Bridge with the real PahoTransport on its own thread, fake serial."""
 
-    def __init__(self, brokers, **over):
+    def __init__(self, brokers, enrolment="provisioned", **over):
         over.setdefault("mqtt", {})["brokers"] = brokers
         base = {"backoff": {"base_s": 0.2, "max_s": 1.0, "jitter": 0.0, "stable_after_s": 5, "hold_down_s": 3}}
         over["mqtt"].update(base and {"backoff": base["backoff"], "connect_timeout_s": 3.0, "keepalive_s": 5})
         cfg = make_cfg(**over)
         self.metrics = Metrics()
         self.transport = PahoTransport(cfg.mqtt.client_id, cfg.mqtt.keepalive_s)
-        self.opener = FakeOpener()
+        self.opener = FakeOpener(enrolment=enrolment)
         self.dev = self.opener.plug()
         self.bridge = Bridge(cfg, self.transport, self.opener, self.metrics)
         self.cfg = cfg
@@ -185,10 +185,12 @@ def test_roundtrip_and_retained_status(tmp, procs):
         late.close()
         # downlink: broker to serial, byte for byte, once
         cmd = b'{"v":1,"id":"syn-cmd-1","op":"clock.get"}'
+        assert until(lambda: live.bridge.snapshot()["downlink"] == "open")  # the device answered deployment.get
         obs.publish(f"{ROOT}/down", cmd)
         assert until(lambda: live.dev.written)
         time.sleep(0.5)
-        assert live.dev.written_bytes == encode_serial_frame(encode_mecon_frames(1, cmd)[0], 0x3C)
+        w = live.dev.written_bytes  # one frame: '<' len 0x7f xid index count body; the xid depends on how many enrolment requests came first
+        assert len(live.dev.written) == 1 and w[0] == 0x3C and w[3:4] == b"\x7f" and w[5:7] == b"\x00\x01" and w[7:] == cmd
         # A command left retained on the broker comes back at every (re)subscribe. The Connector must
         # refuse it: the broker flags it retained exactly then.
         obs.publish(f"{ROOT}/down", cmd, retain=True)  # delivered live (not flagged), so it runs once
@@ -201,6 +203,59 @@ def test_roundtrip_and_retained_status(tmp, procs):
     finally:
         live.close()
         obs.close()
+
+
+def test_gate_closed_then_provisioned_opens_then_unsigned_event_closes(tmp, procs):
+    m = Mosq(tmp).start()
+    procs.append(m)
+    obs = Backendish(m.port, f"{ROOT}/up")
+    gate = {"gate": {"retry_s": 5, "recheck_s": 30, "timeout_s": 3}}
+    live = Live([plain(m.port)], enrolment="none", downlink=gate)
+    cmd = b'{"v":1,"id":"syn-cmd-2","op":"clock.get"}'
+    try:
+        assert until(lambda: live.bridge.snapshot()["ready"])
+        # 1. the device reports no Deployment record: a command from the broker is refused
+        assert until(lambda: live.metrics.get("downlink_gate_probes_total", "none") >= 1)
+        obs.publish(f"{ROOT}/down", cmd)
+        assert until(lambda: live.metrics.get("downlink_closed_total") == 1)
+        assert live.dev.written == []
+        # 2. it becomes enrolled; the next check opens the gate and a command goes through, once
+        live.dev.enrolment = "provisioned"
+        assert until(lambda: live.bridge.snapshot()["downlink"] == "open", 15)
+        obs.publish(f"{ROOT}/down", cmd)
+        assert until(lambda: len(live.dev.written) == 1)
+        # 3. an unsigned event (what follows a deployment.reset) closes it at once, and is forwarded unchanged
+        live.dev.enrolment = "none"
+        ev = live.dev.event(signed=False)
+        live.dev.say(ev)
+        assert until(lambda: ev in [p for _t, p, _q, _r in obs.on(f"{ROOT}/up")])
+        assert until(lambda: live.bridge.snapshot()["downlink"] == "closed")
+        before = live.metrics.get("downlink_closed_total")
+        obs.publish(f"{ROOT}/down", cmd)
+        assert until(lambda: live.metrics.get("downlink_closed_total") == before + 1)
+        time.sleep(0.5)
+        assert len(live.dev.written) == 1
+        # the Connector's own deployment.get requests were never published upstream
+        assert all(b"deployment.get" not in p and b"cg-" not in p for _t, p, _q, _r in obs.on(f"{ROOT}/up"))
+    finally:
+        live.close()
+        obs.close()
+
+
+def test_clean_shutdown_releases_the_session_with_offline_status(tmp, procs):
+    m = Mosq(tmp).start()
+    procs.append(m)
+    live = Live([plain(m.port)])
+    assert until(lambda: live.bridge.snapshot()["ready"])
+    live.close()
+    late = Backendish(m.port, f"{ROOT}/connector/status")
+    try:
+        assert until(lambda: late.on(f"{ROOT}/connector/status"))
+        assert json.loads(late.on(f"{ROOT}/connector/status")[-1][1])["connector"] == "offline"
+        # a clean DISCONNECT: the will message is not what said offline (it says serial unknown)
+        assert json.loads(late.on(f"{ROOT}/connector/status")[-1][1])["serial"] == "up"
+    finally:
+        late.close()
 
 
 def test_abrupt_loss_leaves_will_then_reconnects(tmp, procs):

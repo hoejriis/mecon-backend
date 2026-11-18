@@ -35,9 +35,12 @@ password_file = "/etc/mecon-connector/broker-password"   # a file, mode 600; the
 # ca_file = "/etc/mecon-connector/lan-ca.pem"
 
 [downlink]
-# Forwarding broker messages to the device makes the broker's publishers act as the device's local
-# cable caller. Set true only for an enrolled device whose broker ACL lets only the Backend publish.
-enabled = false
+# There is no on/off switch. Downlink opens by itself only while the device answers deployment.get
+# with state "provisioned", and closes on anything else (see the README). These only tune how often it asks.
+# [downlink.gate]
+# recheck_s = 600   # while open
+# retry_s = 30      # while closed
+# timeout_s = 8     # an unanswered request counts as closed
 
 [queues]
 upstream_max_messages = 64

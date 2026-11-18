@@ -81,6 +81,15 @@ class QueueConfig:
 
 
 @dataclass(frozen=True)
+class GateConfig:
+    """The enrolment gate: how often the Connector asks the device `deployment.get`."""
+
+    recheck_s: float  # while open, ask again this often
+    retry_s: float  # while closed, ask again this often
+    timeout_s: float  # an unanswered request counts as "closed"
+
+
+@dataclass(frozen=True)
 class HealthConfig:
     enabled: bool
     bind: str
@@ -91,7 +100,7 @@ class HealthConfig:
 class Config:
     device: DeviceConfig
     mqtt: MqttConfig
-    downlink_enabled: bool
+    gate: GateConfig
     queues: QueueConfig
     health: HealthConfig
     log_level: str = "info"
@@ -243,12 +252,21 @@ def parse(raw: dict[str, Any]) -> Config:
     )
 
     dl = raw.get("downlink", {})
-    _check_unknown(dl, {"enabled"}, "downlink", errs)
-    if "enabled" not in dl or not isinstance(dl["enabled"], bool):
+    if "enabled" in dl:
         errs.append(
-            "downlink.enabled must be set explicitly to true or false: forwarding broker messages to the "
-            "device makes the broker's publishers act as the device's local cable caller"
+            "downlink.enabled was removed: downlink opens by itself, and only while the device reports an "
+            "enrolled Deployment record (deployment.get). Delete the key."
         )
+    _check_unknown(dl, {"enabled", "gate"}, "downlink", errs)
+    g = dl.get("gate", {})
+    _check_unknown(g, {"recheck_s", "retry_s", "timeout_s"}, "downlink.gate", errs)
+    gate = GateConfig(
+        float(_get(g, "recheck_s", (int, float), 600.0, errs, "downlink.gate")),
+        float(_get(g, "retry_s", (int, float), 30.0, errs, "downlink.gate")),
+        float(_get(g, "timeout_s", (int, float), 8.0, errs, "downlink.gate")),
+    )
+    if not (30 <= gate.recheck_s <= 3600 and 5 <= gate.retry_s <= 600 and 2 <= gate.timeout_s <= 30):
+        errs.append("downlink.gate: recheck_s must be 30-3600, retry_s 5-600, timeout_s 2-30")
     q = raw.get("queues", {})
     _check_unknown(
         q,
@@ -281,7 +299,7 @@ def parse(raw: dict[str, Any]) -> Config:
         errs.append("log.level must be info or debug")
     if errs:
         raise ConfigError(errs)
-    return Config(device, mqtt, bool(dl["enabled"]), queues, health, level)
+    return Config(device, mqtt, gate, queues, health, level)
 
 
 def load(path: str | Path) -> Config:

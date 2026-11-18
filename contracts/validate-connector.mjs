@@ -39,6 +39,9 @@ for (const f of readdirSync(join(dir, 'fixtures')).filter((x) => x.endsWith('.js
         const allowed = m && Object.values(m.labels)[0];
         if (!m || (label ? !allowed?.includes(label) : Object.keys(m.labels).length > 0)) fail(`fixtures/${f}/${c.id}: metric ${key} is not in the contract`);
       }
+    } else if (doc.direction === 'enrolment_gate') {
+      const probes = metricValues.get('downlink_gate_probes_total').labels.result;
+      if (!probes.includes(c.expect.probe_result)) fail(`fixtures/${f}/${c.id}: probe result ${c.expect.probe_result} is not in the contract`);
     } else if (c.expect?.dropped_reason && !dropReasons.has(c.expect.dropped_reason)) {
       fail(`fixtures/${f}/${c.id}: drop reason ${c.expect.dropped_reason} is not in the contract`);
     }

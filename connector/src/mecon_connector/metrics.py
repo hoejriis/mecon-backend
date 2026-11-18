@@ -30,6 +30,10 @@ REGISTRY: dict[str, tuple[str, str, tuple[str, ...]]] = {
     "upstream_acked_total": ("counter", "Publishes the broker acknowledged (QoS 1)", ()),
     "upstream_uncertain_total": ("counter", "Publishes whose outcome is unknown; never retried", ()),
     "upstream_dropped_total": ("counter", "Envelopes dropped before publishing", ("reason",)),
+    "downlink_gate_open": ("gauge", "1 while downlink is open (the device reported an enrolled record)", ()),
+    "downlink_closed_total": ("counter", "Downlink messages refused because the gate was closed; never held", ()),
+    "downlink_gate_closes_total": ("counter", "Times an open gate was closed", ("reason",)),
+    "downlink_gate_probes_total": ("counter", "Outcomes of the Connector's own deployment.get requests", ("result",)),
     "downlink_received_total": ("counter", "Messages received on the downlink topic", ()),
     "downlink_written_total": ("counter", "Messages written to the serial port", ()),
     "downlink_dropped_total": ("counter", "Downlink messages dropped before writing", ("reason",)),
@@ -43,6 +47,10 @@ REASONS = {
     "serial_discarded_bytes_total": {"garbage", "stall", "native", "unplug"},
     "upstream_dropped_total": {"queue_full", "ttl", "oversize", "shutdown"},
     "downlink_dropped_total": {"queue_full", "ttl", "serial_down", "retained", "invalid", "too_large", "shutdown"},
+    "downlink_gate_closes_total": {
+        "unsigned_uplink", "not_provisioned", "probe_failed", "epoch_changed", "serial_lost", "reconnect",
+    },
+    "downlink_gate_probes_total": {"provisioned", "none", "corrupt", "malformed", "refused", "timeout", "late"},
     "serial_frames_total": {"native", "mecon_frame", "console_line"},
     "serial_anomalies_total": {
         "oversize_length", "empty_frame", "malformed_frame", "duplicate_frame",
@@ -55,6 +63,8 @@ _LABEL_KEY = {
     "upstream_dropped_total": "reason",
     "downlink_dropped_total": "reason",
     "serial_frames_total": "kind",
+    "downlink_gate_closes_total": "reason",
+    "downlink_gate_probes_total": "result",
     "serial_anomalies_total": "kind",
     "broker_connect_attempts_total": "result",
 }

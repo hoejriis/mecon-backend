@@ -5,7 +5,6 @@ from mecon_connector.config import ConfigError, parse, read_secret
 BASE = {
     "device": {"mode": "companion", "select": {"by_id": "usb-X-*"}},
     "mqtt": {"client_id": "c1", "topic_root": "a/b", "brokers": [{"host": "h.invalid"}]},
-    "downlink": {"enabled": False},
 }
 
 
@@ -40,8 +39,11 @@ def test_mode_must_be_explicit():
     assert "device.mode" in problems(mod(device__mode="auto"))
 
 
-def test_downlink_must_be_chosen():
-    assert "downlink.enabled" in problems(mod(downlink={}))
+def test_downlink_switch_is_gone_and_gate_limits_are_bounded():
+    assert "was removed" in problems(mod(downlink={"enabled": True}))
+    assert "recheck_s" in problems(mod(downlink={"gate": {"recheck_s": 5}}))
+    c = parse(BASE)
+    assert (c.gate.recheck_s, c.gate.retry_s, c.gate.timeout_s) == (600, 30, 8)
 
 
 def test_raw_tty_path_and_wildcard_selectors_refused():

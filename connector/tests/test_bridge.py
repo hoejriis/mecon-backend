@@ -8,7 +8,8 @@ DEV_SERIAL_MARKER = 0x3E
 
 
 def wire(msg: bytes, xid: int = 1) -> bytes:
-    return b"".join(encode_serial_frame(f, DEV_SERIAL_MARKER) for f in encode_mecon_frames(xid, msg))
+    # xids from 100 up: the fake device numbers its own replies from 1, and a device never repeats an xid back to back
+    return b"".join(encode_serial_frame(f, DEV_SERIAL_MARKER) for f in encode_mecon_frames((100 + xid) % 256, msg))
 
 
 def status(rig, broker="primary"):
@@ -202,15 +203,6 @@ def test_inflight_window_is_bounded():
 # ---- downlink ------------------------------------------------------------------------------
 
 
-def test_downlink_disabled_subscribes_to_nothing_and_ignores_messages():
-    rig = Rig(downlink=False)
-    rig.settle()
-    assert rig.transport._subs == []
-    rig.transport.deliver(rig.down, b"{}")
-    rig.step(3)
-    assert rig.dev.written == []
-
-
 def test_downlink_subscription_is_qos0():
     rig = Rig()
     rig.settle()
@@ -224,7 +216,7 @@ def test_downlink_written_once_and_xid_advances():
         rig.transport.deliver(rig.down, b'{"v":1,"id":"a","op":"hello"}')
         rig.step(2)
     xids = [w[4] for w in rig.dev.written]  # '<' len(2) 7f xid ...
-    assert xids == [1, 2, 3]
+    assert xids == [2, 3, 4]  # xid 1 was the enrolment request
     assert rig.metrics.get("downlink_written_total") == 3
 
 
@@ -255,7 +247,7 @@ def test_command_dropped_when_serial_is_down_and_not_held_for_replug():
     rig.step(3)
     rig.transport.deliver(rig.down, b'{"id":"c"}')
     rig.step(3)
-    assert rig.metrics.get("downlink_dropped_total", "serial_down") == 1
+    assert rig.metrics.get("downlink_closed_total") == 1  # the gate closed with the serial port
     new = rig.opener.plug()
     rig.step(200, dt=0.05)
     assert new.written == []
@@ -301,7 +293,7 @@ def test_downlink_payload_is_not_modified():
     rig.transport.deliver(rig.down, msg)
     rig.step(3)
     sent = rig.dev.written_bytes
-    assert sent[0] == 0x3C and sent[3:7] == b"\x7f\x01\x00\x01" and sent[7:] == msg
+    assert sent[0] == 0x3C and sent[3:7] == b"\x7f\x02\x00\x01" and sent[7:] == msg
 
 
 def test_other_topics_and_retained_are_ignored_or_refused():

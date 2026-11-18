@@ -55,13 +55,17 @@ Updated 18 November 2026. Nothing below has run against hardware or the private 
 
 | Stage | State |
 | --- | --- |
-| C0 contract and fixtures | **Draft published** in `contracts/connector/v1` (mapping, schemas, synthetic fixtures, validator in the contracts CI). Topic names are provisional and open questions Q1 to Q6 in `mapping.json` are for the Backend and firmware owners. The fake serial device and fake and real-mosquitto broker harness are in `connector/tests`. |
-| C1 transport | **Core implemented** in `connector/` (Python; see "Runtime choice" below): serial selection by stable id, bounded framing, transparent forwarding both ways, one broker session with fallback and backoff, bounded queues with counted drops, health and metrics. Verified with unit tests, fakes and a real mosquitto in CI, plus a mutation check of the transport-safety rules. Not verified on a USB device, a Pi or against the Backend. |
+| C0 contract and fixtures | **Draft published** in `contracts/connector/v1` (mapping, schemas, synthetic fixtures, validator in the contracts CI). Topic names are provisional. Q1, Q2, Q3 and Q5 in `mapping.json` are answered; Q4 and Q6 are open. The fake serial device and fake and real-mosquitto broker harness are in `connector/tests`. |
+| C1 transport | **Core implemented** in `connector/` (Python; see "Runtime choice" below): serial selection by stable id, bounded framing, transparent forwarding both ways, one broker session with fallback and backoff, bounded queues with counted drops, health and metrics, and the enrolment gate on downlink (below). Verified with unit tests, fakes and a real mosquitto in CI, plus a mutation check of the transport-safety rules. Not verified on a USB device, a Pi or against the Backend. |
 | C2 local deployment | Not started. A container image exists; systemd packaging, USB permissions on a real Pi, TLS secret handling and Pi Zero 2 W measurements are open. |
-| C3 interoperability | Not started. Needs the Backend's topic and ACL mapping, a real public-firmware device, and the dual-transport decision. |
+| C3 interoperability | Not started. Needs the Backend's topic and ACL mapping, a real public-firmware device (including the real `deployment.get`, `epoch` and `usig` behaviour the gate relies on), and a firmware answer on whether an enrolled device accepts any unsigned read of data only the Backend should see. |
 | C4 acceptance | Not started. |
 
 Related: [Reader MVP2 design](READER_MVP2_DESIGN.md), [components](COMPONENTS.md), [deployments](DEPLOYMENTS.md), [ADR](ARCHITECTURE_DECISIONS.md).
+
+## Downlink enrolment gate
+
+The firmware gives an unsigned USB cable caller local trust, and an unenrolled device accepts unsigned first provisioning and resets from it. The Connector would carry that trust onto the broker. Owner decision (18 November 2026): it relays broker messages to the device only while the device reports an enrolled Deployment record, learned from the device (`deployment.get`, `result.state` `provisioned`), never from configuration, and fails closed on anything else. It asks at attach, at each broker connection, on a new boot epoch and periodically; it closes at once on the first uplink interface message without `usig`; refused messages are counted, never held. Unsigned reads are relayed for an enrolled device, with no signature check on relayed content. Its own request and the answer are not published upstream. Detail: `enrolment_gate` in the contract and the Connector README.
 
 ## Runtime choice
 

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import random
+import re
 import time
 from collections import deque
 from dataclasses import dataclass
@@ -43,6 +44,7 @@ from .transport import (
     Will,
 )
 
+GATE_ID_RE = re.compile(r"^cg-(\d+)$")  # ids of the Connector's own deployment.get requests
 READ_CHUNK = 1024
 SERIAL_RETRY_S = 1.0
 SERIAL_AMBIGUOUS_RETRY_S = 5.0
@@ -115,6 +117,15 @@ class Bridge:
         self._down: deque[_Entry] = deque()
         self._last_drop_log = 0.0
 
+        # enrolment gate: downlink is open only while the device says it holds a Deployment record
+        self._status_pending: set[int] = set()
+        self._gate_open = False
+        self._probe_seq = 0
+        self._probe_id: str | None = None  # the request in flight, if any
+        self._probe_deadline = 0.0
+        self._next_probe = 0.0
+        self._epoch: int | None = None
+
     # ---- broker callbacks (any thread) -------------------------------------------------
 
     def on_connected(self, session: int, result: ConnectResult) -> None:
@@ -135,17 +146,20 @@ class Bridge:
         now = self.clock()
         self._drain_events(now)
         self._serial_step(now)
+        self._gate_step(now)
         self._broker_step(now)
         self._flush_upstream(now)
         self._flush_downlink(now)
         self._update_gauges(now)
 
     def run(self, stop) -> None:  # type: ignore[no-untyped-def]
-        while not stop.is_set():
-            self.step()
-            if self._link is None:
-                time.sleep(0.05)
-        self.stop()
+        try:
+            while not stop.is_set():
+                self.step()
+                if self._link is None:
+                    time.sleep(0.05)
+        finally:
+            self.stop()  # release the broker session cleanly even if the loop failed
 
     def stop(self) -> None:
         """Explicit shutdown. Queued envelopes are dropped and counted, never sent late."""
@@ -153,7 +167,13 @@ class Bridge:
             return
         self._stopped = True
         if self._state == "connected":
-            self._publish_status(online=False)
+            # Release explicitly: the retained status says offline before the session is closed.
+            mid = self._publish_status(online=False)
+            for _ in range(50):
+                self._drain_events(self.clock())
+                if mid is None or mid not in self._status_pending:
+                    break
+                time.sleep(0.02)
         self.transport.disconnect()
         self._state = "idle"
         self._active = -1
@@ -184,6 +204,7 @@ class Bridge:
             elif kind == "disconnected":
                 self._on_disconnected(now)
             elif kind == "acked":
+                self._status_pending.discard(ev[2])
                 if self._inflight.pop(ev[2], None) is not None:
                     self.m.inc("upstream_acked_total")
             elif kind == "message":
@@ -201,6 +222,8 @@ class Bridge:
         if self._last_connected not in (-1, self._active):
             self.m.inc("broker_failovers_total")
         self._last_connected = self._active
+        # Re-read the enrolment state on every (re)connect, with downlink closed meanwhile.
+        self._close_gate("reconnect", now, abandon=False)
         self.log.info("broker_connected", broker=self.cfg.mqtt.brokers[self._active].name)
         self._publish_status(online=True)
 
@@ -227,13 +250,16 @@ class Bridge:
         self._end_session()
 
     def _on_message(self, now: float, topic: str, payload: bytes, retain: bool) -> None:
-        if topic != self.cfg.mqtt.topic_down or not self.cfg.downlink_enabled:
+        if topic != self.cfg.mqtt.topic_down:
             return
         self.m.inc("downlink_received_total")
         dev = self.cfg.device
         if retain:
             # A retained command would run again at every reconnect.
             self.m.inc("downlink_dropped_total", 1, "retained")
+        elif not self._gate_open:
+            # Never held and never replayed: the sender re-sends if it still wants it.
+            self.m.inc("downlink_closed_total")
         elif not payload:
             self.m.inc("downlink_dropped_total", 1, "invalid")
         elif len(payload) > dev.max_downlink_bytes:
@@ -297,21 +323,23 @@ class Bridge:
     def _start_connect(self, now: float, i: int, b: BrokerConfig) -> None:
         c = self.cfg.mqtt
         will = Will(c.topic_status, status_payload(False, None), 1, True)
-        subs = [(c.topic_down, 0)] if self.cfg.downlink_enabled else []
+        subs = [(c.topic_down, 0)]
         self._active = i
         self._state = "connecting"
         self._connect_started = now
         self._session = self.transport.connect(b, will, subs)
 
-    def _publish_status(self, online: bool) -> None:
+    def _publish_status(self, online: bool) -> int | None:
         if self._state != "connected":
-            return
+            return None
         try:
-            self.transport.publish(
+            mid = self.transport.publish(
                 self.cfg.mqtt.topic_status, status_payload(online, self._link is not None), 1, True
             )
         except TransportError:
-            pass
+            return None
+        self._status_pending.add(mid)
+        return mid
 
     # ---- upstream (device -> broker) ---------------------------------------------------
 
@@ -355,6 +383,10 @@ class Bridge:
         ttl = self.cfg.queues.downlink_ttl_s
         while self._down:
             e = self._down[0]
+            if not self._gate_open:
+                self._down.popleft()
+                self.m.inc("downlink_closed_total")
+                continue
             if now - e.at > ttl:
                 self._down.popleft()
                 self.m.inc("downlink_dropped_total", 1, "ttl")
@@ -367,13 +399,15 @@ class Bridge:
             self._down.popleft()
             self._write_down(e.payload, now)
 
+    def _encode_for_device(self, message: bytes) -> bytes:
+        if self.cfg.device.mode == "console":
+            return encode_console_line(message)
+        self._xid = (self._xid + 1) & 0xFF
+        return b"".join(encode_serial_frame(f) for f in encode_mecon_frames(self._xid, message))
+
     def _write_down(self, message: bytes, now: float) -> None:
         assert self._link is not None
-        if self.cfg.device.mode == "console":
-            data = encode_console_line(message)
-        else:
-            self._xid = (self._xid + 1) & 0xFF
-            data = b"".join(encode_serial_frame(f) for f in encode_mecon_frames(self._xid, message))
+        data = self._encode_for_device(message)
         try:
             self._link.write(data)
         except SerialGone:
@@ -427,6 +461,8 @@ class Bridge:
             self.m.inc("serial_reconnects_total")
         self._opened_before = True
         self._serial_note = None
+        self._epoch = None
+        self._next_probe = now
         self.m.set("serial_connected", 1)
         self.log.info("serial_connected")
         self._publish_status(online=True)
@@ -441,6 +477,8 @@ class Bridge:
             self._link.close()
         self._link = None
         self._next_open = now + 0.5
+        self._close_gate("serial_lost", now)
+        self._probe_id = None
         lost = self._reset_readers()
         self.m.inc("serial_discarded_bytes_total", lost, "unplug")
         self.m.inc("serial_disconnects_total")
@@ -467,14 +505,14 @@ class Bridge:
         if self.cfg.device.mode == "console":
             for line in self._console.feed(data):
                 self.m.inc("serial_frames_total", 1, "console_line")
-                self._on_envelope(line, now)
+                self._on_device_message(line, now)
         else:
             for frame in self._deframer.feed(data):
                 if frame[0] == CMD_MECON:
                     self.m.inc("serial_frames_total", 1, "mecon_frame")
                     message = self._assembler.feed(frame, now)
                     if message is not None:
-                        self._on_envelope(message, now)
+                        self._on_device_message(message, now)
                 else:
                     # Native companion traffic is not interface traffic and is not forwarded.
                     self.m.inc("serial_frames_total", 1, "native")
@@ -501,6 +539,115 @@ class Bridge:
                 self.m.inc(name, delta, label)
                 self._seen[key] = v
 
+    # ---- enrolment gate ----------------------------------------------------------------
+
+    def _close_gate(self, reason: str, now: float, abandon: bool = True) -> None:
+        """Closes downlink at once and asks the device again. Anything queued for the device is
+        refused and counted, never kept for when the gate reopens."""
+        if self._gate_open:
+            self._gate_open = False
+            self.m.inc("downlink_gate_closes_total", 1, reason)
+            self.log.warn("downlink_closed", reason=reason)
+        n = len(self._down)
+        self._down.clear()
+        self.m.inc("downlink_closed_total", n)
+        if abandon:
+            self._probe_id = None  # an answer to an older request says nothing about now
+        self._next_probe = now
+
+    def _gate_step(self, now: float) -> None:
+        if self._link is None or self._stopped:
+            return
+        if self._probe_id is not None:
+            if now >= self._probe_deadline:
+                self._probe_id = None
+                self.m.inc("downlink_gate_probes_total", 1, "timeout")
+                self._gate_result(False, "probe_failed", now)
+            return
+        if now >= self._next_probe:
+            self._probe_seq += 1
+            pid = f"cg-{self._probe_seq}"
+            msg = json.dumps({"v": 1, "id": pid, "op": "deployment.get"}, separators=(",", ":")).encode()
+            data = self._encode_for_device(msg)
+            try:
+                assert self._link is not None
+                self._link.write(data)
+            except SerialGone:
+                self._serial_lost(now)
+                return
+            self.m.inc("serial_bytes_out_total", len(data))
+            self._probe_id = pid
+            self._probe_deadline = now + self.cfg.gate.timeout_s
+
+    def _gate_result(self, provisioned: bool, reason: str, now: float) -> None:
+        g = self.cfg.gate
+        if provisioned:
+            if not self._gate_open:
+                self.log.info("downlink_open")
+            self._gate_open = True
+            self._next_probe = now + g.recheck_s
+        else:
+            self._close_gate(reason, now, abandon=False)
+            self._next_probe = now + g.retry_s
+
+    @staticmethod
+    def _parse(payload: bytes) -> dict | None:
+        try:
+            obj = json.loads(payload)
+        except (ValueError, RecursionError):
+            return None
+        return obj if isinstance(obj, dict) else None
+
+    def _on_device_message(self, payload: bytes, now: float) -> None:
+        """Looks at an uplink message only for the gate: its own request id, `epoch` and `usig`.
+        The message itself is never changed, and is always forwarded, except the device's answer to
+        the Connector's own deployment.get, which is the Connector's traffic and not the device's."""
+        obj = self._parse(payload)
+        mid = GATE_ID_RE.match(obj["id"]) if obj is not None and isinstance(obj.get("id"), str) else None
+        if mid is not None and int(mid.group(1)) <= self._probe_seq:
+            self._on_probe_reply(obj, mid.group(0), now)  # type: ignore[arg-type]
+            return
+        epoch = None
+        if obj is not None:
+            res = obj.get("result")
+            for cand in (obj.get("epoch"), res.get("epoch") if isinstance(res, dict) else None, obj.get("usig_boot")):
+                if isinstance(cand, int) and not isinstance(cand, bool):
+                    epoch = cand
+                    break
+        if epoch is not None:
+            if self._epoch is not None and epoch != self._epoch:
+                self._epoch = epoch
+                self._close_gate("epoch_changed", now)  # rebooted: ask again before relaying anything
+            self._epoch = epoch
+        if self._gate_open and (obj is None or "usig" not in obj):
+            self._close_gate("unsigned_uplink", now)
+        self._on_envelope(payload, now)
+
+    def _on_probe_reply(self, obj: dict, pid: str, now: float) -> None:
+        if pid != self._probe_id:
+            self.m.inc("downlink_gate_probes_total", 1, "late")
+            return
+        self._probe_id = None
+        res = obj.get("result")
+        state = res.get("state") if isinstance(res, dict) else None
+        epoch = res.get("epoch") if isinstance(res, dict) else obj.get("epoch")
+        if isinstance(obj.get("epoch"), int) and not isinstance(obj.get("epoch"), bool):
+            self._epoch = obj["epoch"]
+        elif isinstance(epoch, int) and not isinstance(epoch, bool):
+            self._epoch = epoch
+        if obj.get("status") != "ok":
+            self.m.inc("downlink_gate_probes_total", 1, "refused")
+            self._gate_result(False, "not_provisioned", now)
+        elif state == "provisioned":
+            self.m.inc("downlink_gate_probes_total", 1, "provisioned")
+            self._gate_result(True, "", now)
+        elif state in ("none", "corrupt"):
+            self.m.inc("downlink_gate_probes_total", 1, state)
+            self._gate_result(False, "not_provisioned", now)
+        else:
+            self.m.inc("downlink_gate_probes_total", 1, "malformed")
+            self._gate_result(False, "not_provisioned", now)
+
     # ---- observability -----------------------------------------------------------------
 
     def _update_gauges(self, now: float) -> None:
@@ -512,6 +659,7 @@ class Bridge:
         m.set("upstream_queue_bytes", self._up_bytes)
         m.set("upstream_inflight", len(self._inflight))
         m.set("downlink_queue_depth", len(self._down))
+        m.set("downlink_gate_open", 1 if self._gate_open else 0)
         m.set("uptime_seconds", now - self._started)
 
     def snapshot(self) -> dict:
@@ -521,6 +669,7 @@ class Bridge:
             "broker": self._state,
             "broker_name": self.cfg.mqtt.brokers[self._active].name if self._state == "connected" else None,
             "upstream_queue": len(self._up),
+            "downlink": "open" if self._gate_open else "closed",
             "ready": self._link is not None and self._state == "connected",
         }
 

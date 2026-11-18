@@ -3,7 +3,7 @@
   "$id": "https://github.com/hoejriis/mecon-backend/contracts/connector/v1/mapping.schema.json",
   "title": "MECON USB Connector contract",
   "type": "object",
-  "required": ["contract", "version", "status", "sources", "transparency", "serial", "mqtt", "delivery", "queues", "health", "metrics", "metrics_prefix", "errors", "open_questions"],
+  "required": ["contract", "version", "status", "sources", "transparency", "serial", "mqtt", "enrolment_gate", "delivery", "queues", "health", "metrics", "metrics_prefix", "errors", "open_questions"],
   "additionalProperties": true,
   "properties": {
     "contract": { "const": "mecon-usb-connector" },
@@ -99,6 +99,14 @@
       "type": "object", "required": ["upstream", "downlink", "silent_drops"],
       "properties": { "silent_drops": { "const": "forbidden: every drop increments a metric" } }
     },
+    "enrolment_gate": {
+      "type": "object", "required": ["decision", "request", "open_only_when", "closed_when", "ask_when", "own_traffic_upstream", "unsigned_rule"],
+      "properties": {
+        "request": { "type": "object", "required": ["op", "text"], "properties": { "op": { "const": "deployment.get" } } },
+        "closed_when": { "type": "array", "minItems": 6 },
+        "ask_when": { "type": "array", "minItems": 5 }
+      }
+    },
     "metrics_prefix": { "const": "mecon_connector_" },
     "metrics": {
       "type": "array", "minItems": 1,
@@ -119,7 +127,7 @@
     },
     "open_questions": {
       "type": "array",
-      "items": { "type": "object", "required": ["id", "owner", "question"], "additionalProperties": false, "properties": { "id": { "type": "string" }, "owner": { "type": "string" }, "question": { "type": "string" } } }
+      "items": { "type": "object", "required": ["id", "owner", "status", "question"], "additionalProperties": false, "properties": { "id": { "type": "string" }, "owner": { "type": "string" }, "status": { "enum": ["open", "answered"] }, "question": { "type": "string" }, "answer": { "type": "string" } }, "if": { "properties": { "status": { "const": "answered" } } }, "then": { "required": ["answer"] } }
     }
   },
   "$defs": {

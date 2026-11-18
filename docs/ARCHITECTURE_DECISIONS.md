@@ -32,6 +32,7 @@
 | ADR-016 | User lifecycle | Disabling a user revokes application access immediately; their private data is recoverably retained for 30 days, then deleted; assigned devices become unassigned. Offline radio revocation is constrained by physical/cryptographic realities. | [Access](ACCESS_MODEL.md), [Security](SECURITY_AND_PRIVACY.md) |
 | ADR-017 | Sessions | Email magic-link login establishes a device session targeting 30 days, with immediate revocation on explicit logout or disablement. | [Security](SECURITY_AND_PRIVACY.md) |
 | ADR-018 | Backend pairing | One Backend creates a short-lived pairing code, the other redeems it; both retain mutually authenticated instance keys. | [Target architecture](TARGET_ARCHITECTURE.md) |
+| ADR-019 | USB Connector downlink | The Connector relays broker messages to a device only while the device itself reports an enrolled Deployment record, and fails closed otherwise; an unenrolled device gets uplink only. For an enrolled device unsigned reads are relayed too, with no signature check on relayed content. Owner decision, 18 November 2026. | [Implementation design](USB_CONNECTOR_IMPLEMENTATION_DESIGN.md) |
 
 ## Confirmed refinements — 17 November 2026
 

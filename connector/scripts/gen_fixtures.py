@@ -146,9 +146,9 @@ def dcase(cid, desc, mode, inbound, serial_hex=None, dropped=None, retain=False,
 
 D1 = env(21)
 D_BIG = env(22, 300)
-dcase("companion-single-frame", "A downlink message is wrapped as one interface frame (xid 1, count 1) with the '<' marker.", "companion", D1,
-      h(wrap(iface(1, 0, 1, D1), marker=0x3C)))
-fr = split(D_BIG, 1)
+dcase("companion-single-frame", "A downlink message is wrapped as one interface frame (count 1) with the '<' marker. The xid is 2 because the enrolment request (deployment.get) used xid 1.", "companion", D1,
+      h(wrap(iface(2, 0, 1, D1), marker=0x3C)))
+fr = split(D_BIG, 2)
 dcase("companion-multi-frame", "A larger message is split into 168-byte interface frames, each wrapped.", "companion", D_BIG,
       h(b"".join(wrap(f, marker=0x3C) for f in fr)))
 dcase("console-line", "Console mode writes `mecon> ` + message + CR in one write.", "console", D1, h(b"mecon> " + D1 + b"\r"))
@@ -158,4 +158,28 @@ dcase("retained-refused", "A retained message would run again at every reconnect
 dcase("empty-refused", "An empty message is refused.", "companion", b"", None, "invalid")
 dcase("too-large-refused", "Above max_downlink_bytes is refused (default 1536 companion).", "companion", b"x" * 1537, None, "too_large")
 (OUT / "downlink.json").write_text(json.dumps({"contract": CONTRACT, "synthetic": True, "note": NOTE, "direction": "broker_to_device", "cases": dn}, indent=1) + "\n")
+
+# ---- enrolment gate --------------------------------------------------------------------
+PROBE = b'{"v":1,"id":"cg-1","op":"deployment.get"}'
+PROBE_HEX = {"companion": h(wrap(iface(1, 0, 1, PROBE), marker=0x3C)), "console": h(b"mecon> " + PROBE + b"\r")}
+gt = []
+
+
+def gcase(cid, desc, mode, enrolment, gate_open, probe_result, then=None, upstream=0):
+    gt.append({"id": cid, "description": desc, "mode": mode, "enrolment": enrolment,
+               "expect": {"probe_request_hex": PROBE_HEX[mode], "gate_open": gate_open, "probe_result": probe_result,
+                          "upstream_publishes": upstream}, "then": then or []})
+
+
+gcase("provisioned-opens", "Only result.state \"provisioned\" opens downlink; the request is a read and never goes upstream.", "companion", "provisioned", True, "provisioned")
+gcase("provisioned-opens-console", "The same on a console, as one `mecon> ` line.", "console", "provisioned", True, "provisioned")
+for st, res in (("none", "none"), ("corrupt", "corrupt"), ("refused", "refused"), ("bad_state", "malformed"), ("silent", "timeout"), ("garbage", "timeout")):
+    gcase("closed-" + st.replace("_", "-"), f"Device answer '{st}' keeps downlink closed (fails closed)." + (" Bytes that do not parse cannot be told from device traffic, so they are forwarded." if st == "garbage" else ""),
+          "companion", st, False, res, upstream=1 if st == "garbage" else 0)
+gcase("unsigned-uplink-closes", "The first uplink message without usig closes downlink at once; it is still forwarded unchanged.", "companion", "provisioned", True, "provisioned",
+      [{"uplink": "signed_event", "enrolment_after": None, "gate_open_after": True, "forwarded": True},
+       {"uplink": "unsigned_event", "enrolment_after": "none", "gate_open_after": False, "forwarded": True}])
+gcase("new-epoch-closes-and-rechecks", "A new epoch (a reboot) closes downlink and asks again; the device still answers provisioned, so it reopens.", "companion", "provisioned", True, "provisioned",
+      [{"uplink": "new_epoch_event", "enrolment_after": None, "gate_open_after": True, "forwarded": True}])
+(OUT / "gate.json").write_text(json.dumps({"contract": CONTRACT, "synthetic": True, "note": NOTE, "direction": "enrolment_gate", "cases": gt}, indent=1) + "\n")
 print("wrote", len(up), "upstream and", len(dn), "downlink cases")

@@ -56,7 +56,7 @@
         "published_bytes": "the concatenated bodies, exactly"
       },
       "downlink": {
-        "wrap": "marker 0x3C, then one 0x7F frame per 168 bytes, xid from a Connector counter 1..255 then 0",
+        "wrap": "marker 0x3C, then one 0x7F frame per 168 bytes, xid from one Connector counter 1..255 then 0, shared with the enrolment request (which takes xid 1)",
         "one_write_per_message": true,
         "max_message_bytes_default": 1536,
         "max_message_bytes_limit": 4096,
@@ -111,7 +111,8 @@
         "carries": "host-to-device requests, one MQTT message per envelope",
         "subscribe_qos": 0,
         "retained_messages": "refused and counted",
-        "enabled_by": "downlink.enabled, required in the config with no default",
+        "opens_when": "the enrolment gate is open (see enrolment_gate); there is no configuration switch",
+        "while_closed": "messages are refused and counted (downlink_closed_total), never held, never replayed",
         "provisional": true
       },
       "status": {
@@ -153,6 +154,20 @@
       }
     }
   },
+  "enrolment_gate": {
+    "decision": "Downlink opens only while the device itself reports an enrolled Deployment record, and fails closed on anything else. An unenrolled device gets uplink only. Owner decision, 2026-11-18.",
+    "request": { "op": "deployment.get", "text": "{\"v\":1,\"id\":\"cg-<n>\",\"op\":\"deployment.get\"}", "class": "read, open to the unsigned cable on every role", "id_prefix_reserved": "cg-", "framing": "the active one: 0x7F frames in companion mode, one `mecon> ` line in console mode" },
+    "open_only_when": "reply status is ok and result.state is \"provisioned\"",
+    "closed_when": ["result.state none or corrupt", "status other than ok", "no answer within timeout_s", "an answer that does not parse or has another state", "the serial port is lost", "a broker session is (re)established", "a new epoch is seen", "an uplink interface message without a usig member"],
+    "ask_when": ["the serial port opens", "a broker session is established", "an epoch different from the last one is seen", "the first unsigned uplink message closes an open gate", "every recheck_s while open (default 600, 30-3600)", "every retry_s while closed (default 30, 5-600)"],
+    "timeout_s_default": 8,
+    "inspection": "Only: the Connector's own reply (matched by its request id), whether the top-level usig member is present, and an epoch (top-level epoch, result.epoch or usig_boot). Nothing else is read. Uplink is never altered and always forwarded, except the device's reply to the Connector's own request.",
+    "own_traffic_upstream": "The request is never published upstream and the reply to it is not published upstream: they are the Connector's traffic, not device-originated. The protocol does not require them upstream. Replies are matched by the reserved id prefix cg-; a late reply is dropped and counted (result late).",
+    "unsigned_rule": "While a record exists every interface event and result ends with usig_boot, usig_seq and usig. The first uplink 0x7F or `mecon> {` message with no usig closes downlink at once, because that is what follows a deployment.reset. It reopens only after a fresh deployment.get says provisioned. Native Companion frames are not interface messages and never count.",
+    "downlink_content": "No signature or operation check on relayed content: for an enrolled device the firmware requires a member's signature for everything but reads, and the owner decided unsigned reads are relayed too. The broker ACL on down stays a further layer.",
+    "one_request_at_a_time": "The firmware handles one interface message at a time. The Connector's request can interleave with a Backend request that is in flight; a Backend that gets a busy answer re-sends with the same id.",
+    "xid": "The request is the first message written after the port opens (xid 1), so the first relayed message uses xid 2."
+  },
   "delivery": {
     "stages": ["serial_connected", "broker_connected", "forwarded (handed to the broker connection)", "transport_accepted (PUBACK)", "backend_processed (not observable by the Connector)", "rf_outcome (not observable by the Connector)"],
     "retry_rules": [
@@ -167,7 +182,7 @@
     "why_no_replay": "a device command repeated by an intermediary is a duplicate business action. The firmware keeps an id cache, but only for state-changing operations and only for a bounded number of ids, and a Backend may have signed the request once. Recovery belongs to the sender: it re-sends with the same id and reads the result.",
     "duplicates_upstream": "QoS 1 can deliver a message twice at the broker. The Connector adds none of its own. Envelopes carry (epoch, seq) or a request id; the Backend de-duplicates by those, which the Connector does not read.",
     "ordering": "upstream envelopes keep the order the device sent them in, per session; across a lost publish there is a gap, never a reorder",
-    "never": ["fabricate an ACK or result", "publish an envelope the device did not send", "write a command the broker did not deliver", "write a command twice"]
+    "never": ["write a command while the enrolment gate is closed", "hold a refused command for when the gate reopens", "fabricate an ACK or result", "publish an envelope the device did not send", "write a command the broker did not deliver", "write a command twice"]
   },
   "queues": {
     "upstream": {
@@ -215,6 +230,10 @@
     { "name": "upstream_acked_total", "type": "counter", "labels": {} },
     { "name": "upstream_uncertain_total", "type": "counter", "labels": {} },
     { "name": "upstream_dropped_total", "type": "counter", "labels": { "reason": ["queue_full", "ttl", "oversize", "shutdown"] } },
+    { "name": "downlink_gate_open", "type": "gauge", "labels": {} },
+    { "name": "downlink_closed_total", "type": "counter", "labels": {} },
+    { "name": "downlink_gate_closes_total", "type": "counter", "labels": { "reason": ["unsigned_uplink", "not_provisioned", "probe_failed", "epoch_changed", "serial_lost", "reconnect"] } },
+    { "name": "downlink_gate_probes_total", "type": "counter", "labels": { "result": ["provisioned", "none", "corrupt", "malformed", "refused", "timeout", "late"] } },
     { "name": "downlink_received_total", "type": "counter", "labels": {} },
     { "name": "downlink_written_total", "type": "counter", "labels": {} },
     { "name": "downlink_dropped_total", "type": "counter", "labels": { "reason": ["queue_full", "ttl", "serial_down", "retained", "invalid", "too_large", "shutdown"] } },
@@ -226,6 +245,8 @@
   "metrics_prefix": "mecon_connector_",
   "metrics_identity": "upstream_envelopes_total = upstream_published_total + sum(upstream_dropped_total) + upstream_queue_depth",
   "errors": [
+    { "id": "gate_closed", "condition": "the device is not known to be enrolled, or its state cannot be read", "behaviour": "refuse downlink and count it (downlink_closed_total); uplink continues; ask again" },
+    { "id": "gate_unsigned_uplink", "condition": "an open gate and an uplink interface message with no usig", "behaviour": "close downlink at once, forward the message unchanged, ask deployment.get" },
     { "id": "serial_not_found", "condition": "no port matches the selector", "behaviour": "poll every 1 s; serial_connected 0; not fatal" },
     { "id": "serial_ambiguous", "condition": "more than one port matches", "behaviour": "refuse to open any; poll every 5 s; log once" },
     { "id": "serial_lost", "condition": "read or write error, unplug", "behaviour": "close, drop partial frames, status serial=down, reopen on the same selector" },
@@ -243,11 +264,11 @@
     { "id": "config_invalid", "condition": "any config check fails", "behaviour": "refuse to start, exit 2, list every problem" }
   ],
   "open_questions": [
-    { "id": "Q1", "owner": "backend", "question": "Real topic names and ACL. The Connector uses one up topic and one down topic under a configured root; the firmware's own MQTT shape splits responses and events (resp, ev/<stream>), which the Connector cannot do without reading the payload. Does the Backend de-multiplex?" },
-    { "id": "Q2", "owner": "firmware+backend", "question": "Principal on the cable. The firmware treats a USB cable caller as local (AUTHORITY.md section 9). A device with no Deployment record accepts unsigned cable requests including first provisioning. Anything the Connector writes from the broker arrives as the cable caller. Is downlink to be enabled only for enrolled devices, with the broker ACL restricting publishers to the Backend?" },
-    { "id": "Q3", "owner": "backend", "question": "Dual transport arbitration: when a device has both Wi-Fi MQTT and a USB Connector, how does the Backend choose which path carries a command, and how are duplicate events (same epoch and seq on both) de-duplicated?" },
-    { "id": "Q4", "owner": "firmware", "question": "Does a Companion's USB serial accept 0x7F frames before the app handshake, and does boot-time text ever precede frames on every USB build?" },
-    { "id": "Q5", "owner": "backend", "question": "Should native (non-0x7F) Companion frames ever be forwarded? Default: no." },
-    { "id": "Q6", "owner": "backend", "question": "Is the Connector status topic wanted, and under what name? It is the Connector's own state and never stands for the device's presence." }
+    { "id": "Q1", "owner": "backend", "status": "answered", "question": "One up topic for results and events; the Connector cannot split them without reading the payload. Does the Backend de-multiplex?", "answer": "Yes (deimos-mesh, 2026-11-18). The Backend parses each message by its own shape. Keep the bytes untouched: the usig signature is checked over them. Topic names stay provisional until the Backend confirms the mapping at stage C3." },
+    { "id": "Q2", "owner": "owner", "status": "answered", "question": "A relayed write arrives as the unsigned local cable caller.", "answer": "Owner decision, 2026-11-18: downlink is relayed only while the device reports an enrolled Deployment record, and fails closed otherwise (enrolment_gate). Unsigned reads are relayed too for an enrolled device; there is no signature check on downlink content. Still to confirm with mecon-firmware before stage C3: whether an enrolled device accepts any unsigned read that returns data the Backend alone should see." },
+    { "id": "Q3", "owner": "backend", "status": "answered", "question": "Dual transport arbitration and duplicate events.", "answer": "The Backend de-duplicates by (device, stream, epoch, seq) after the signature verifies, and sends a request over the path that currently holds the device. The holder must release cleanly: the Connector publishes its status offline and closes the broker session on shutdown. Gap counting across transports is a Backend gap, tracked on their side." },
+    { "id": "Q4", "owner": "firmware", "status": "open", "question": "Does a Companion's USB serial accept 0x7F frames before the app handshake, and does boot-time text ever precede frames on every USB build?" },
+    { "id": "Q5", "owner": "firmware+backend", "status": "answered", "question": "Should native (non-0x7F) Companion frames be forwarded?", "answer": "No (mecon-firmware, 2026-11-18). Downlink they would run at cable trust (CLI command frame, native key export and import, set-PIN, factory reset); uplink they carry private messages. Dropped and counted both ways." },
+    { "id": "Q6", "owner": "backend", "status": "open", "question": "Is the Connector status topic wanted, and under what name? It is the Connector's own state and never stands for the device's presence." }
   ]
 }

@@ -17,7 +17,7 @@ from fakes.fake_serial import FakeOpener  # noqa: E402
 FIXTURES = pathlib.Path(__file__).resolve().parents[2] / "contracts" / "connector" / "v1" / "fixtures"
 
 
-def make_cfg(mode="companion", brokers=("primary",), downlink=True, **over):
+def make_cfg(mode="companion", brokers=("primary",), **over):
     raw = {
         "device": {"mode": mode, "select": {"by_id": "usb-TEST_synthetic-*"}},
         "mqtt": {
@@ -27,7 +27,6 @@ def make_cfg(mode="companion", brokers=("primary",), downlink=True, **over):
                 {"name": n, "host": f"{n}.invalid", "tls": False, "insecure_allow_plain": True} for n in brokers
             ],
         },
-        "downlink": {"enabled": downlink},
     }
     for k, v in over.items():
         raw.setdefault(k, {}).update(v)
@@ -48,12 +47,12 @@ class Clock:
 class Rig:
     """A bridge wired to fakes, a fake clock and no jitter."""
 
-    def __init__(self, cfg=None, brokers=("primary",), plugged=True, **kw):
+    def __init__(self, cfg=None, brokers=("primary",), plugged=True, enrolment="provisioned", **kw):
         self.cfg = cfg or make_cfg(brokers=brokers, **kw)
         names = [b.name for b in self.cfg.mqtt.brokers]
         self.net = FakeNetwork(*names)
         self.transport = FakeTransport(self.net)
-        self.opener = FakeOpener()
+        self.opener = FakeOpener(mode=self.cfg.device.mode, enrolment=enrolment)
         self.dev = self.opener.plug() if plugged else None
         self.clock = Clock()
         self.metrics = Metrics()

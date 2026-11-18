@@ -1,4 +1,4 @@
-import { checkStaleShell, REPAIR_KEY, VERSION_URL, type StaleDeps } from './staleShell';
+import { checkStaleShell, REPAIR_KEY, UNVERSIONED, VERSION_URL, type StaleDeps } from './staleShell';
 
 const A = 'a'.repeat(40);
 const B = 'b'.repeat(40);
@@ -74,6 +74,40 @@ describe('checkStaleShell', () => {
   it('does nothing when /version.json is not JSON (dev server answers HTML)', async () => {
     const t = setup(null, A);
     t.deps.fetchImpl = (async () => new Response('<html>')) as unknown as typeof fetch;
+    expect(await checkStaleShell(t.deps)).toBe('skipped-unreadable');
+    expect(t.reload).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['200 text/html (the host SPA fallback)', () => new Response('<html>', { headers: { 'content-type': 'text/html; charset=utf-8' } })],
+    ['404', () => new Response('nope', { status: 404 })],
+  ])('a host with no /version.json at all (%s) is a different build: it repairs once', async (_n, make) => {
+    const t = setup({ commit: B }, A);
+    t.deps.fetchImpl = (async () => make()) as unknown as typeof fetch;
+    expect(await checkStaleShell(t.deps)).toBe('repaired');
+    expect(t.store.get(REPAIR_KEY)).toBe(UNVERSIONED);
+    expect(t.reload).toHaveBeenCalledTimes(1);
+    expect(await checkStaleShell(t.deps)).toBe('already-attempted');
+    expect(t.reload).toHaveBeenCalledTimes(1);
+  });
+
+  it('a host with no /version.json still never repairs over a draft', async () => {
+    const t = setup({ commit: B }, A);
+    t.deps.fetchImpl = (async () => new Response('<html>', { headers: { 'content-type': 'text/html' } })) as unknown as typeof fetch;
+    const onBlocked = vi.fn();
+    t.deps.getBlockers = () => ({ drafts: 1, uncertainAttempts: 0, bleConnected: false });
+    t.deps.onBlocked = onBlocked;
+    expect(await checkStaleShell(t.deps)).toBe('needs-confirmation');
+    expect(onBlocked).toHaveBeenCalled();
+    expect(t.reload).not.toHaveBeenCalled();
+    expect(t.registration.unregister).not.toHaveBeenCalled();
+  });
+
+  it('a 500 or an offline failure is not a different build', async () => {
+    const t = setup({ commit: B }, A);
+    t.deps.fetchImpl = (async () => new Response('x', { status: 500 })) as unknown as typeof fetch;
+    expect(await checkStaleShell(t.deps)).toBe('skipped-unreadable');
+    t.deps.fetchImpl = (async () => { throw new TypeError('offline'); }) as unknown as typeof fetch;
     expect(await checkStaleShell(t.deps)).toBe('skipped-unreadable');
     expect(t.reload).not.toHaveBeenCalled();
   });

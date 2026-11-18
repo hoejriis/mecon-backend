@@ -5,6 +5,9 @@ import { resolve } from 'node:path';
 import { writeSw } from './src/sw/buildSw.ts';
 
 const commit = process.env.RENDER_GIT_COMMIT?.trim();
+// MECON_SW=off builds without the service worker (no /sw.js). Test-only: it
+// reproduces a pre-worker release (v0.1.0, v0.2.0) for the rollback e2e.
+const swEnabled = process.env.MECON_SW !== 'off';
 
 // Publishes the served build's commit at /version.json (the Reader compares it
 // with the commit compiled into the bundle to detect a stale installed shell).
@@ -48,7 +51,7 @@ const CSP =
   "default-src 'self'; img-src 'self' data:; connect-src 'self'; style-src 'self'; script-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'";
 
 export default defineConfig({
-  plugins: [react(), versionJson(), serviceWorker()],
+  plugins: [react(), versionJson(), ...(swEnabled ? [serviceWorker()] : [])],
   define: {
     __BUILD_COMMIT__: JSON.stringify(commit ? commit : null),
   },

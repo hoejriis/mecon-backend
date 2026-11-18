@@ -23,6 +23,12 @@ export type DevicesState =
 const DEFAULT_POLL_MS = 2000;
 const MIN_POLL_MS = 500;
 const MAX_BACKOFF_MS = 30_000;
+/** Session-load retry while the Backend is unreachable: 5 s, doubling, capped at 60 s. */
+export const SESSION_RETRY_FIRST_MS = 5000;
+export const SESSION_RETRY_MAX_MS = 60_000;
+export const sessionRetryDelay = (failures: number): number =>
+  Math.min(SESSION_RETRY_FIRST_MS * 2 ** Math.max(failures - 1, 0), SESSION_RETRY_MAX_MS);
+const UNREACHABLE_COPY = 'Could not reach the Backend. Check your connection and reload.';
 
 export interface AuthValue {
   status: AuthStatus;
@@ -84,26 +90,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoginMessage(null);
   }, []);
 
-  // App start: resume a stored pending login, else look for a session.
+  // App start: resume a stored pending login, else look for a session. While the
+  // Backend is unreachable (network error, or an answer that is not a session or a 401, as when
+  // the Backend is briefly without the Reader API) the read-only GET /session is retried with a
+  // bounded backoff, so the page recovers by itself. Only this read is retried; no write is.
   useEffect(() => {
-    let live = true;
+    const ctl = new AbortController();
+    const { signal } = ctl;
     (async () => {
-      try {
-        const s = await api.getSession();
-        if (!live) return;
-        clearPending();
-        finishSignedIn(s);
-        return;
-      } catch (e) {
-        if (!live) return;
-        if (!(e instanceof ApiError) || e.status !== 401) {
+      let failures = 0;
+      for (;;) {
+        try {
+          const s = await api.getSession();
+          if (signal.aborted) return;
+          clearPending();
+          finishSignedIn(s);
+          return;
+        } catch (e) {
+          if (signal.aborted) return;
+          if (e instanceof ApiError && e.status === 401) break;
+          failures += 1;
           setStatus('signedOut');
           setLoginPhase('error');
-          setLoginMessage('Could not reach the Backend. Check your connection and reload.');
-          return;
+          setLoginMessage(UNREACHABLE_COPY);
+          await sleep(sessionRetryDelay(failures), signal);
+          if (signal.aborted) return;
         }
       }
       setStatus('signedOut');
+      // The copy of an earlier failed attempt goes; a login the user started meanwhile stays.
+      setLoginMessage((m) => (m === UNREACHABLE_COPY ? null : m));
+      setLoginPhase((p) => (p === 'error' ? 'idle' : p));
       const stored = loadPending();
       if (stored) {
         setPending(stored);
@@ -111,9 +128,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setLoginPhase('waiting');
       }
     })();
-    return () => {
-      live = false;
-    };
+    return () => ctl.abort();
   }, [api, finishSignedIn]);
 
   // Poll the pending login until it is approved, delivered, expired or times out.

@@ -179,7 +179,7 @@ describe('rehydration after a reload', () => {
     await waitFor(() => expect(screen.getByTestId(A + 'ambiguous')).toBeInTheDocument());
     expect(posts()).toHaveLength(0);
     b.on('POST /send-attempts', () => new Response(JSON.stringify(attempt('queued', { client_attempt_id: 'x' })), { status: 201 }));
-    act(() => live.sendAgain(A + 'ambiguous'));
+    act(() => live.sendAgain(A + 'ambiguous', { path: 'backend' }));
     await waitFor(() => expect(posts()).toHaveLength(1));
     const body = JSON.parse(posts()[0]!.body!) as { client_attempt_id: string; client_draft_id: string };
     expect(body.client_attempt_id).not.toBe(A + 'ambiguous');
@@ -198,7 +198,7 @@ describe('drafts keep their id through a reload', () => {
     act(() => live.loadConversations()); // the write-through covers targets of listed conversations
     await waitFor(async () => expect((await cache.listDrafts()).map((x) => x.draftId)).toEqual(['draft-real-1']));
     b.on('POST /send-attempts', () => new Response(JSON.stringify(attempt('queued', { client_attempt_id: 'x' })), { status: 201 }));
-    act(() => live.send(TARGET, 'ident_demo_0001'));
+    act(() => live.send(TARGET, 'ident_demo_0001', { path: 'backend' }));
     await waitFor(() => expect(posts()).toHaveLength(1));
     expect((JSON.parse(posts()[0]!.body!) as { client_draft_id: string }).client_draft_id).toBe('draft-real-1');
     // The consumed draft's record goes away; it is not left behind to be restored again.

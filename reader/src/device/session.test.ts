@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { SYNTHETIC_KEYS } from '../ble/fixtures/frames';
-import { companionRig, repeaterRig, wait } from './rig.test-util';
+import { authFor, companionRig, repeaterRig, wait } from './rig.test-util';
 import type { DeviceSession } from './session';
 
 const S = 'SIMULATED — not hardware verified: USB device session';
@@ -16,7 +16,7 @@ async function ready(o: Parameters<typeof companionRig>[0] = {}) {
   return r;
 }
 const att = (r: { session: DeviceSession }, id: string) => r.session.getSnapshot().companion!.attempts.find((a) => a.clientAttemptId === id)!;
-const dm = (id: string, draft = 'd1') => ({ clientDraftId: draft, clientAttemptId: id, contactKey: alice, text: 'hello dm' });
+const dm = (id: string, draft = 'd1') => ({ clientDraftId: draft, clientAttemptId: id, contactKey: alice, text: 'hello dm', auth: authFor() });
 
 describe(`${S}: connect, hello, contacts, send`, () => {
   it('connects, identifies a MECON Companion, runs the Companion hello and reads contacts over USB', async () => {
@@ -46,7 +46,7 @@ describe(`${S}: connect, hello, contacts, send`, () => {
 
   it('a channel message gets accepted and never an ACK', async () => {
     const r = await ready();
-    const a = await r.session.sendChannel({ clientDraftId: 'd', clientAttemptId: 'c1', channelIndex: 0, text: 'hi all' });
+    const a = await r.session.sendChannel({ clientDraftId: 'd', clientAttemptId: 'c1', channelIndex: 0, text: 'hi all', auth: authFor('send.channel') });
     expect(a).toMatchObject({ path: 'usb', deviceAccepted: true, dmAck: false, rfTransmitted: false });
   });
 
@@ -219,7 +219,7 @@ describe(`${S}: capabilities, not roles, gate features`, () => {
     expect(r.session.can('message.send.direct')).toBe(false);
     expect(r.session.getSnapshot().companion).toBeNull();
     await expect(r.session.sendDirect(dm('r1'))).rejects.toMatchObject({ code: 'unsupported_capability' });
-    await expect(r.session.sendChannel({ clientDraftId: 'd', clientAttemptId: 'c', channelIndex: 0, text: 'x' })).rejects.toMatchObject({ code: 'unsupported_capability' });
+    await expect(r.session.sendChannel({ clientDraftId: 'd', clientAttemptId: 'c', channelIndex: 0, text: 'x', auth: authFor('send.channel') })).rejects.toMatchObject({ code: 'unsupported_capability' });
     expect(r.peer.lines.length).toBe(before);
     expect(r.peer.executed).toEqual([]);
   });

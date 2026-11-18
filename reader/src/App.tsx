@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from './auth/AuthContext';
+import { DeviceProvider } from './device/DeviceContext';
 import { BUILD_COMMIT } from './buildInfo';
 import { Header } from './components/Header';
 import { LoginScreen } from './components/LoginScreen';
@@ -101,7 +102,7 @@ export function App() {
 
   // The probe uses no Backend, so it is reachable before sign-in.
   return (
-    <>
+    <DeviceProvider>
     <UpdateBanner controller={updates} />
     <Routes>
       <Route
@@ -122,7 +123,7 @@ export function App() {
       />
       <Route path="*" element={<AuthGate />} />
     </Routes>
-    </>
+    </DeviceProvider>
   );
 }
 

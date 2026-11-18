@@ -32,7 +32,7 @@ const page = (items: unknown[], next: string | null = null) => ({ items, next_cu
  * finite text/event-stream per connection (Playwright cannot hold a response
  * open): the Reader reconnects with Last-Event-ID, which is what is asserted.
  */
-export async function mockMessagingBackend(page_: Page): Promise<MsgBackend> {
+export async function mockMessagingBackend(page_: Page, opts: { identityPrefix?: string } = {}): Promise<MsgBackend> {
   const session = fixture('session-device-user');
   session.capabilities = { devices: 'available', messaging: 'available', send: 'available', events: 'available', observations: 'unavailable' };
   const conversations = [
@@ -47,7 +47,7 @@ export async function mockMessagingBackend(page_: Page): Promise<MsgBackend> {
     },
   ];
   const identities = [
-    { id: 'ident_demo_0001', display_name: 'Demo Companion', public_key_prefix: 'a1b2c3', device_id: 'dev_demo_0001', can_send: true },
+    { id: 'ident_demo_0001', display_name: 'Demo Companion', public_key_prefix: opts.identityPrefix ?? 'a1b2c3', device_id: 'dev_demo_0001', can_send: true },
     { id: 'ident_demo_0003', display_name: 'Watch-only identity', public_key_prefix: '010203', device_id: null, can_send: false },
   ];
   const channelMsgs = fixture('messages-channel-null-identity').items.filter((m: Json) => m.conversation_id === 'conv_demo_0002');

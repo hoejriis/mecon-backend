@@ -3,7 +3,7 @@ import { MockCompanion, MockTransport, type MockCompanionOptions } from '../ble/
 import { SYNTHETIC_KEYS } from '../ble/fixtures/frames';
 import { CMD } from '../ble/protocol';
 import { detectBleDevice } from './detect';
-import { companionRig, wait } from './rig.test-util';
+import { authFor, companionRig, wait } from './rig.test-util';
 import { DeviceSession, type SessionOptions } from './session';
 
 const S = 'SIMULATED — not hardware verified: Bluetooth device session';
@@ -22,7 +22,7 @@ function bleRig(mockOpts: MockCompanionOptions = {}) {
   return { mock, transport, session, backend };
 }
 const MECON: MockCompanionOptions = { mecon: true };
-const dm = (id: string) => ({ clientDraftId: 'd1', clientAttemptId: id, contactKey: alice, text: 'hello dm' });
+const dm = (id: string) => ({ clientDraftId: 'd1', clientAttemptId: id, contactKey: alice, text: 'hello dm', auth: authFor() });
 const ifaceOps = (m: MockCompanion) => m.ifaceRequests.map((r) => r.op);
 
 describe(`${S}: detection`, () => {

@@ -13,7 +13,7 @@
  * drafts and send attempts (uncertain or in flight, and all others), the lease and
  * the clock mark. If the store is full, the cache says so (a warning) and keeps them.
  */
-import type { Conversation, Message, Target } from '../api/types';
+import type { Conversation, Identity, Message, Target } from '../api/types';
 import type { LocalAttempt } from '../messaging/attemptStatus';
 import { newDraftId } from '../messaging/sendFlow';
 import { runMigrations, type KvStore, type MigrationResult } from '../storage/migrations';
@@ -60,7 +60,7 @@ export class StorageFullError extends Error {
 
 export type CacheWarning = 'storage-pressure' | 'storage-full';
 
-type Kind = 'conv' | 'msgs' | 'draft' | 'attempt' | 'lease' | 'leasekeys' | 'meta' | 'held';
+type Kind = 'conv' | 'msgs' | 'draft' | 'attempt' | 'lease' | 'leasekeys' | 'meta' | 'held' | 'ident';
 const PURPOSE: Record<Kind, Purpose> = {
   conv: 'cache',
   msgs: 'cache',
@@ -70,6 +70,7 @@ const PURPOSE: Record<Kind, Purpose> = {
   leasekeys: 'cache',
   meta: 'cache',
   held: 'cache',
+  ident: 'cache',
 };
 /** The only kinds that storage pressure or the caps may remove. */
 const EVICTABLE: readonly Kind[] = ['conv', 'msgs'];
@@ -341,6 +342,20 @@ export class OfflineCache {
       }
     }
     return n;
+  }
+
+  /* ------------------------------------------------------------ identities */
+
+  /**
+   * The caller's messaging identities as the Backend last listed them. Offline, a local send needs
+   * the identity's assigned device and key prefix to ask the lease and to match the connected
+   * device. Replaced as a whole on each snapshot; never evicted (a lease can name them).
+   */
+  async putIdentities(list: Identity[]): Promise<void> {
+    await this.putRecord('ident', 'current', { identities: list });
+  }
+  async getIdentities(): Promise<Identity[]> {
+    return (await this.getRecord<{ identities: Identity[] }>('ident', 'current'))?.identities ?? [];
   }
 
   /* ----------------------------------------------------- lease and clock */

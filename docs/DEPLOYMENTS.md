@@ -20,7 +20,7 @@ Peer Backends reconcile authorized Deployment state via versioned events/snapsho
 
 ## Enrollment and continuity
 
-When an existing trusted Backend survives, a new instance joins through an approved, authenticated continuity flow using protected canonical continuity material from an eligible Normal-posture Companion via USB and an owner-approved peer/admin authorization; a pairing-code fallback exists. If no trusted Backend survives, use **separate cold Recovery**, not ordinary Join. Continuity material restores authority/rendezvous, **not** complete message history or SQLite database. Never publish secrets or private deployment exports.
+When an existing trusted Backend survives, a new instance joins through an approved, authenticated continuity flow using protected canonical continuity material from an eligible Normal-posture Companion via USB and an approved peer/admin authorization; a pairing-code fallback exists. If no trusted Backend survives, use **separate cold Recovery**, not ordinary Join. Continuity material restores authority/rendezvous, **not** complete message history or SQLite database. Never publish secrets or private deployment exports.
 
 ## Public installation acceptance (later)
 

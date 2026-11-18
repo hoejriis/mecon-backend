@@ -1,6 +1,6 @@
 # Reader MVP1 — approved implementation design and delivery gates
 
-**Status:** owner-approved target UX, architecture and restricted deployment (17 November 2026). This document is implementation-ready for the Reader shell and design system. It is **not** evidence of deployed functionality, BLE interoperability or completed Backend API. Hardware and external-contract verification remain explicit gates.
+**Status:** approved target UX, architecture and restricted deployment (17 November 2026). This document is implementation-ready for the Reader shell and design system. It is **not** evidence of deployed functionality, BLE interoperability or completed Backend API. Hardware and external-contract verification remain explicit gates.
 
 ## Objective and release stages
 

@@ -55,7 +55,10 @@ export interface paths {
          * Poll a pending login request
          * @description `approved` is returned exactly once, with `Set-Cookie` for the session;
          *     later polls return `delivered`. Over the per-source limit the response
-         *     reads `pending` (no oracle). Unknown or expired ids read `expired`.
+         *     reads `pending` (no oracle). An unknown but well-formed `request_id` reads
+         *     `pending` until the request lifetime would have ended, then `expired`,
+         *     so a decoy poll cannot reveal that no mail was sent. Malformed or old
+         *     ids, and expired requests, read `expired` at once.
          */
         get: operations["pollLogin"];
         put?: never;
@@ -144,7 +147,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** (M2 draft) Authorized conversation summaries */
+        /**
+         * (M2 draft) Authorized conversation summaries
+         * @description Cursors on this endpoint are stable history cursors and never expire;
+         *     there is no 410 here. A merged enrolled pair is one conversation (see
+         *     `Conversation`).
+         */
         get: operations["listConversations"];
         put?: never;
         post?: never;
@@ -161,7 +169,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** (M2 draft) Messages in one authorized conversation */
+        /**
+         * (M2 draft) Messages in one authorized conversation
+         * @description History cursors are stable and never expire; there is no 410 here.
+         *     Channel messages carry `identity_id: null` and only `sender_label` as
+         *     sender information.
+         */
         get: operations["listMessages"];
         put?: never;
         post?: never;
@@ -178,7 +191,14 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** (M2 draft) Authorized contacts */
+        /**
+         * (M2 draft) Authorized contacts
+         * @description **Draft, pending an owner scoping decision.** It is not yet settled
+         *     whether this is a mesh-global directory (every signed-in user sees
+         *     every heard node) or is scoped to the caller's fleet and assignments
+         *     plus favourites. Neither is promised until the decision is recorded
+         *     here. History cursors on this endpoint are stable and never expire.
+         */
         get: operations["listContacts"];
         put?: never;
         post?: never;
@@ -219,7 +239,10 @@ export interface paths {
          * @description One logical attempt. The Backend chooses transmitting origins; the
          *     Reader never selects gateways. Same `Idempotency-Key` with the same
          *     body returns the existing attempt; with a different body returns 409.
-         *     A BLE-path attempt is never posted here.
+         *     A BLE-path attempt is never posted here. Until the Backend ships
+         *     multi-origin coordination it sends only through the caller's own
+         *     assigned Companion (single origin), so `status_evidence.per_origin`
+         *     is absent.
          */
         post: operations["createSendAttempt"];
         delete?: never;
@@ -235,7 +258,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** (M2 draft) Send attempt and its evidenced state */
+        /**
+         * (M2 draft) Send attempt and its evidenced state
+         * @description Never show `unknown` as failed; see `SendStatus`.
+         */
         get: operations["getSendAttempt"];
         put?: never;
         post?: never;
@@ -256,8 +282,17 @@ export interface paths {
          * (M2 draft) Authorized incremental updates (SSE)
          * @description `text/event-stream`. Each `data:` line is one `EventEnvelope`. Resume
          *     with the standard `Last-Event-ID` header or `cursor`. An expired cursor
-         *     yields 410; the Reader then reloads snapshots. Heartbeats are SSE
-         *     comments. Private content is never replayed after revocation.
+         *     yields 410; the Reader then reloads snapshots. Private content is never
+         *     replayed after revocation.
+         *
+         *     **Cursor expiry is per endpoint.** Only `/events` cursors expire (410
+         *     `cursor_expired`). History cursors on `/conversations`, `/messages`,
+         *     `/contacts` and `/devices` are stable and never expire.
+         *
+         *     **Heartbeat.** While idle the Backend sends an SSE comment line
+         *     (`: heartbeat`) at least every 25 seconds, so a client can tell an idle
+         *     stream from a dead one. The Reader treats 2 missed intervals (no bytes
+         *     for 50 s) as dead and reconnects with `Last-Event-ID`.
          */
         get: operations["streamEvents"];
         put?: never;
@@ -380,6 +415,13 @@ export interface components {
             kind: "contact" | "channel";
             id: components["schemas"]["OpaqueId"];
         };
+        /**
+         * @description `id` is derived server-side and is opaque: clients never parse or
+         *     construct it, and it may change only through a resync. When the same
+         *     peer is reachable through an enrolled pair of identities that the
+         *     Backend has merged, the pair is exposed as one conversation (one
+         *     `id`, one entry in lists), not two.
+         */
         Conversation: {
             id: components["schemas"]["OpaqueId"];
             identity_id: components["schemas"]["OpaqueId"];
@@ -394,7 +436,12 @@ export interface components {
         Message: {
             message_id: components["schemas"]["OpaqueId"];
             conversation_id: components["schemas"]["OpaqueId"];
-            identity_id: components["schemas"]["OpaqueId"];
+            /**
+             * @description Required (non-null) for the caller's own direct messages. Null on
+             *     channel traffic, where `sender_label` is the only sender
+             *     information.
+             */
+            identity_id: components["schemas"]["OpaqueId"] | null;
             /** @enum {string} */
             direction: "inbound" | "outbound";
             sender_label?: string | null;
@@ -449,6 +496,12 @@ export interface components {
          * @description `acked` exists only for direct messages (native ACK; not a read
          *     receipt). `unknown` and `timed_out` do not prove non-transmission; the
          *     Reader never resends automatically.
+         *
+         *     `unknown` and `timed_out` are reported only when the device itself
+         *     reports them (`status_evidence.source: device`, public-firmware
+         *     Companions). Legacy gateways (`source: unsupported`) map only to
+         *     `queued`, `transmitted`, `acked` or `failed`. The Reader must never
+         *     show `unknown` as failed.
          * @enum {string}
          */
         SendStatus: "queued" | "duty_held" | "transmitted" | "acked" | "timed_out" | "failed" | "unknown";
@@ -468,6 +521,27 @@ export interface components {
                 /** Format: date-time */
                 acked_at?: string | null;
                 detail?: string | null;
+                /**
+                 * @description `device`: the status was reported by the transmitting device
+                 *     itself. `unsupported`: the origin cannot report device-level
+                 *     status (legacy gateway); only queued, transmitted, acked or
+                 *     failed can occur.
+                 * @enum {string}
+                 */
+                source: "device" | "unsupported";
+                /**
+                 * @description Optional, absent until the Backend's multi-origin coordination
+                 *     ships. Until then the Backend sends only through the caller's
+                 *     own assigned Companion and the top-level fields describe that
+                 *     single origin. Items never expose gateway identities.
+                 */
+                per_origin?: {
+                    /** @description Position within this attempt only; not a gateway identifier. */
+                    origin_ordinal: number;
+                    status: components["schemas"]["SendStatus"];
+                    /** Format: date-time */
+                    transmitted_at: string | null;
+                }[];
             };
             created_at: components["schemas"]["Timestamp"];
             updated_at: components["schemas"]["Timestamp"];
@@ -919,7 +993,15 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
-            410: components["responses"]["Gone"];
+            /** @description Cursor expired or outside retention; reload snapshots */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
 }

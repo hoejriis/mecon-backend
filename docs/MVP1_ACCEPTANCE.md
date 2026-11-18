@@ -1,6 +1,6 @@
 # MVP1 acceptance test matrix
 
-**Version:** v1, dated 2026-11-18. **Scope:** the M1 to M4 gates of [the implementation design](MVP1_IMPLEMENTATION_DESIGN.md#acceptance-criteria) and the MVP1 acceptance Issue (restricted shell, UX, Map, Messaging, Hardware, Security).
+**Version:** v1, dated 2026-11-18. **Scope:** the M1 to M4 gates of [the implementation design](MVP1_IMPLEMENTATION_DESIGN.md#acceptance-criteria) (restricted shell, UX, Map, Messaging, Hardware, Security).
 
 This matrix records what has and has not been checked. A row is **Passed** only when the check ran against the real target on the stated date. A pass against a mock Backend or a simulated Bluetooth device is **Simulated**, never Passed. Nothing here claims verified Android, iOS or live Backend behaviour unless the row says so.
 

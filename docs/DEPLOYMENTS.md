@@ -1,6 +1,6 @@
 # Deployment models and lifecycle — target
 
-**Post-MVP architecture.** MVP1 reuses an existing MECON Backend; these models describe the eventual public application, not a released installer.
+**Post-MVP architecture.** MVP1 reuses the existing MECON Backend; these models describe the eventual public application, not a released installer. The only current deployment is the restricted Reader described at the end of this document.
 
 ## Vocabulary
 
@@ -26,11 +26,20 @@ When an existing trusted Backend survives, a new instance joins through an appro
 
 Reproducible images, secrets separation, TLS, local CA/mDNS guidance, backup/restore, migrations, independent new-operator setup, health monitoring and no forced fleet migration. All remain target design until evidenced.
 
-## Approved first F2 Reader integration deployment — 17 November 2026
+## Restricted Reader deployment and availability
 
-- **URL:** `https://reader.mecon.cloud`, independently deployed on **F2**; public Reader code, private Backend unchanged as the system of record at `mecon.cloud` on F2.
-- **Access:** **same existing users as `mecon.cloud`**, using its established Backend login/session and per-user capability checks. No independent users, new sign-up, additional authorization grants, or bypass via API/live updates. Fleet management is role/capability-gated; admins do not gain other users' private messages.
-- **Integration:** versioned private Backend Reader API, HTTPS, secure cross-origin session/cookie/CORS/CSRF/WebSocket contract, sanitized test fixtures and auditable configuration. No private credentials or production endpoint assumptions embedded in public client code beyond explicitly approved deployment configuration.
-- **First milestone:** reachable restricted Reader shell, authentication/session, Chats/Channels/Map navigation, safe empty/loading states and authorized Backend connectivity; live packet map consumes only permitted observation projection as API is delivered. BLE and complete messaging journeys can follow after real-device feasibility.
-- **Coexistence:** existing `mecon.cloud` UI/Backend and MQTT/USB remain operational; no public Backend migration or cutover. This restricted integration deployment is **approved**, but is not an open public beta or proof of all MVP1 acceptance gates. Public beta/GA and production RF behavior require separate acceptance/approval.
-- **Status:** approved **target**, not deployed or verified. Infrastructure, DNS/TLS, auth behavior and security tests are implementation tasks.
+**Approved 17 November 2026; availability as of 18 November 2026.** The first Reader deployment is an access-restricted integration environment at `https://reader.mecon.cloud`, independently deployed from the public Reader code and connected to the existing Backend at `mecon.cloud`. It is **not** a public beta, a cutover or a public Backend replacement.
+
+- **Access:** exactly the existing `mecon.cloud` users, through the Backend's own login, session and per-user capability checks. No independent user store, self-signup, extra grants or bypass through the API or live updates. Administrators and Fleet Owners do not gain other users' private messages.
+- **Integration:** the versioned Reader API ([contract](READER_API_CONTRACT.md), [OpenAPI](../contracts/reader-api/v1/openapi.yaml)), HTTPS, a secure cross-origin session/CSRF/live-update arrangement, sanitized fixtures and auditable configuration. No private credentials in public client code.
+- **Coexistence:** the existing `mecon.cloud` UI, Backend, MQTT and USB agent stay in service.
+- **Separate gates:** public beta/GA and production RF writes each need their own acceptance and approval. Nothing in the restricted deployment waits for, or is blocked by, those gates or by real-hardware Bluefy results.
+
+| Status | What |
+|---|---|
+| **Deployed (restricted, existing `mecon.cloud` users only)** | The Reader shell with the five-tab navigation (Chats / Nodes / Map / Tools / Settings), the login client, the design system and a read-only Bluetooth diagnostics page. The Backend login API is still being connected, so working sign-in is not claimed. |
+| **Implemented, not verified live** | The Backend-path messaging client, written against a draft contract. |
+| **Simulated only** | The BLE Companion adapter, exercised through an Android Chrome profile simulation; not verified on hardware. Bluefy on iPhone/iPad still awaits real-hardware testing. |
+| **Planned** | Live observation Map, contacts, offline cache, safe updates, USB access and the public Backend replacement. |
+
+Evidence is recorded in the [acceptance matrix](MVP1_ACCEPTANCE.md); the normative design is [MVP1 implementation design](MVP1_IMPLEMENTATION_DESIGN.md). Nothing here implies public availability or verified full messaging.

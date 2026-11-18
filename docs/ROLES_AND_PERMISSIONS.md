@@ -20,8 +20,8 @@ A fleet has one or more co-owners. Each Companion belongs to exactly one fleet, 
 
 ## GUI
 
-- **Device User:** Chats, Channels, Contacts, Companion, Settings; sees messages, not observation stream.
-- **Fleet Owner:** Fleet overview, Devices, Assignments, Diagnostics/Map, Sharing, Fleet Settings, plus User features only for assigned identities.
+- **Device User:** Chats (with Channels inside), Nodes, Map, Tools, Settings; contacts and Companion selection within those; sees messages, not the raw observation stream.
+- **Fleet Owner** (separate, deferred, web-only GUI; not a Reader tab): Fleet overview, Devices, Assignments, Diagnostics/Map, Sharing, Fleet Settings, plus User features only for assigned identities.
 - **Admin:** Deployment, Accounts, Infrastructure, Public Sources, Health, Security/Audit, plus other features only when separately authorized.
 
 **Security boundary:** no Fleet Owner/Admin private-message bypass, even when they administer the radio or Backend. See [security](SECURITY_AND_PRIVACY.md) and persona documents.

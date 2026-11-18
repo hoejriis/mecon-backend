@@ -18,7 +18,7 @@ Device Users receive **messages**, not raw observations: messages to public chan
 
 ## Assignment
 
-- Every fleet has **at least one owner** and may have multiple co-owners with equal fleet-management authority. Co-ownership never grants another user's private messages. This supersedes the historical single-owner cardinality in private Backend #658.
+- Every fleet has **at least one owner** and may have multiple co-owners with equal fleet-management authority. Co-ownership never grants another user's private messages. This supersedes the earlier single-owner cardinality; see the [decision register](ARCHITECTURE_DECISIONS.md).
 - Each Companion belongs to exactly one fleet, is **not shared**, and has at most **one active Device User**. Default assignment is a fleet owner unless explicitly assigned to another user.
 - Each Device User may be assigned **up to five devices**.
 - A user's primary Companion may receive for **up to four additional delegated identities**, when supported. Delegation is receive/decrypt/native-ACK only, **not send-as**. Do not promise this until compatible firmware and the planned Backend delegated-receive integration have real-hardware acceptance.

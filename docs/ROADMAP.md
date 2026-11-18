@@ -4,7 +4,7 @@ MeshContinuum's application grows from a familiar messaging Reader into a self-h
 
 ## Reader for everyday messaging
 
-The first application experience focuses on Device Users: chats, channels, contacts, Companion selection and reliable explanations of what a message's status actually means.
+The first application experience focuses on Device Users: chats (with channels inside), nodes, map, tools, contacts, Companion selection and reliable explanations of what a message's status actually means.
 
 - Direct Web Bluetooth access to a compatible Companion where the browser and hardware support it.
 - Account-authorized online history and messaging through a versioned Backend API.
@@ -12,7 +12,7 @@ The first application experience focuses on Device Users: chats, channels, conta
 - MeshCore One-inspired GUI workflows with original React components, official MECON branding and existing Apache-2.0 license.
 - Privacy boundaries that prevent administrators and fleet owners from reading other users' private messages.
 
-The [Reader architecture](MVP1_ARCHITECTURE.md), [experience design](READER_UX.md) and [delivery and acceptance](MVP1_PLAN.md) describe this first increment. Hardware and browser compatibility must be demonstrated before it is advertised as available.
+The [Reader architecture](MVP1_ARCHITECTURE.md), [experience design](READER_UX.md) and [delivery and acceptance](MVP1_PLAN.md) describe this first increment. Hardware and browser compatibility must be demonstrated before it is advertised as available. A restricted shell is deployed for existing users; see the [availability table](MVP1_PLAN.md#restricted-reader-deployment-and-availability).
 
 ## Future native Apple Reader
 

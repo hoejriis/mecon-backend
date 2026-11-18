@@ -1,6 +1,6 @@
 # Standalone USB Connector — implementation design
 
-**Approved architecture, implementation design for public #21.** This is an independent headless bridge, **not** Reader Web Serial (#30), and **not** the private legacy Pi agent. Existing private Backend stays in service. Hardware, broker interoperability and protocol fixtures are verification gates, not claims of completion.
+**Approved architecture, implementation design for the public USB Connector.** This is an independent headless bridge, **not** Reader browser Web Serial, and **not** the private legacy Pi agent. Existing private Backend stays in service. Hardware, broker interoperability and protocol fixtures are verification gates, not claims of completion.
 
 ## Topology and ownership
 
@@ -34,8 +34,8 @@ Publish a versioned **USB↔MQTT interoperability contract** and synthetic seria
 - TLS peer verification and least-privilege broker credentials; secrets provisioned outside images/source; safe logging with no private keys, plaintext, secret credentials or full sensitive packet dumps.
 - Bounded queues with documented overflow/drop accounting and observability. Distinguish serial connected, broker connected, forwarded, transport accepted and end-to-end Backend processing; never manufacture ACKs.
 - Fail closed on invalid broker trust, unrecognized firmware framing or authorization. Explicit shutdown and recovery, no uncontrolled command replay.
-- MQTT broker choice/failover behavior must follow approved trusted LAN/public broker policy (#20) where implemented; **do not make #20 a blocker** for initial single configured trusted broker.
-- No direct Reader/browser serial access while this service owns the port. #30 is a separate alternative connection mode.
+- MQTT broker choice/failover behavior must follow approved trusted LAN/public broker policy where implemented; **broker policy is not a blocker** for initial single configured trusted broker.
+- No direct Reader/browser serial access while this service owns the port. Browser Web Serial is a separate alternative connection mode.
 
 ## Implementation stages
 
@@ -47,6 +47,6 @@ Publish a versioned **USB↔MQTT interoperability contract** and synthetic seria
 
 ## Dependencies and remaining technical verification
 
-Private Backend topic/ACL/envelope mapping and device-control-link arbitration; public firmware native USB framing and capability matrix; Pi Zero 2 W actual resource measurements; broker TLS credentials and test environment. These are **contract/verification dependencies**, not new product decisions. No public Backend rewrite, Reader UI or #19–#20 full broker deployment required to implement C0/C1.
+Private Backend topic/ACL/envelope mapping and device-control-link arbitration; public firmware native USB framing and capability matrix; Pi Zero 2 W actual resource measurements; broker TLS credentials and test environment. These are **contract/verification dependencies**, not new product decisions. No public Backend rewrite, Reader UI or full broker deployment required to implement C0/C1.
 
-Related: [#21](https://github.com/hoejriis/mecon-backend/issues/21), [#30](https://github.com/hoejriis/mecon-backend/issues/30), [components](COMPONENTS.md), [deployments](DEPLOYMENTS.md), [ADR](ARCHITECTURE_DECISIONS.md).
+Related: [Reader MVP2 design](READER_MVP2_DESIGN.md), [components](COMPONENTS.md), [deployments](DEPLOYMENTS.md), [ADR](ARCHITECTURE_DECISIONS.md).

@@ -21,12 +21,15 @@ The application combines a familiar MeshCore Reader, fleet operations, observati
 
 ## The Reader experience
 
-A Bluefy-first web Reader for iPhone/iPad Device Users, with familiar **Chats, Channels, Contacts, Companion and Settings**, MECON's original colors/mark, BLE connection to a supported Companion and authorized online history/messaging through an authorized MECON Backend. Familiar to users of the stock MeshCore app, but not a copy. Browser and hardware support vary; consult the [availability record](https://github.com/hoejriis/MeshContinuum/blob/main/docs/CAPABILITIES.md).
+A web Reader for Device Users, targeting Bluefy on iPhone/iPad, with MeshCore One-familiar **Chats / Nodes / Map / Tools / Settings** bottom navigation (Channels inside Chats), MECON's original colors/mark, BLE connection to a supported Companion and authorized online history/messaging through an authorized MECON Backend. The GUI is inspired by [MeshCore One](https://github.com/Avi0n/MeshCoreOne) but is original React/TypeScript work under Apache-2.0; no GPLv3 MC1 code or artwork is copied. Fleet Owner and Admin management is separate, deferred, web-only work and is not a Reader tab. Browser and hardware support vary; consult the [availability record](https://github.com/hoejriis/MeshContinuum/blob/main/docs/CAPABILITIES.md).
+
+**Current availability (2026-11-18, conservative).** Deployed, restricted to existing `mecon.cloud` users: the Reader shell at `https://reader.mecon.cloud` with five-tab navigation, login client, design system and a read-only Bluetooth diagnostics page; the Backend login API is still being connected, so working sign-in is not claimed. Implemented but not verified live: the Backend-path messaging client (against a draft contract). Simulated only: the BLE Companion adapter (Android Chrome profile; not hardware verified); Bluefy/iOS awaits real-hardware testing. Planned: live observation Map, contacts, offline cache, safe updates, USB and the public Backend replacement. This is not a public release. Details: [restricted deployment and availability](docs/MVP1_PLAN.md#restricted-reader-deployment-and-availability), [acceptance evidence](docs/MVP1_ACCEPTANCE.md).
 
 - [MVP product vision](docs/PRODUCT_VISION.md)
 - [Reader interaction specification](docs/READER_UX.md)
 - [Reader BLE and Backend integration](docs/MVP1_ARCHITECTURE.md)
-- [MVP delivery plan and acceptance](docs/MVP1_PLAN.md)
+- [MVP delivery plan](docs/MVP1_PLAN.md) and [acceptance matrix](docs/MVP1_ACCEPTANCE.md)
+- [Normative implementation design](docs/MVP1_IMPLEMENTATION_DESIGN.md), [Reader API contract](docs/READER_API_CONTRACT.md) and [OpenAPI](contracts/reader-api/v1/openapi.yaml)
 
 
 

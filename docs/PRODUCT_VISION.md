@@ -4,11 +4,11 @@ This document describes the intended Reader experience. See [availability](https
 
 ## The proposition
 
-MECON Reader is a familiar, communication-first MeshCore client with MECON's visual identity. Use [MeshCore One](https://github.com/Avi0n/MeshCoreOne) as the primary GUI inspiration for chats, channels, contacts, maps and Companion flows. Build original React/TypeScript components with official MECON branding and retain the existing Apache-2.0 license. Do not copy GPLv3 MC1 application source or protected artwork/assets without separate licensing clearance. Existing approved navigation, permissions and Backend contracts remain authoritative.
+MECON Reader is a familiar, communication-first MeshCore client with MECON's visual identity. Use [MeshCore One](https://github.com/Avi0n/MeshCoreOne) (MC1) as the primary GUI inspiration for chats, channels, nodes, maps, tools and Companion flows. Build original React/TypeScript components with official MECON branding and retain the existing Apache-2.0 license. Do not copy GPLv3 MC1 application source or protected artwork/assets without separate licensing clearance. Existing approved navigation, permissions and Backend contracts remain authoritative.
 
-The first deliverable is a **BLE-enabled web Reader for iPhone/iPad using Bluefy**, initially for **Device Users**, with an authorized MECON Backend supplying online history, account/authorization and gateway services. The Reader uses a versioned Backend interface and can evolve independently of the Backend implementation.
+The first deliverable is a **BLE-enabled web Reader targeting iPhone/iPad using Bluefy** (real-hardware testing still pending; Android Chrome simulation is not physical verification), initially for **Device Users**, with an authorized MECON Backend supplying online history, account/authorization and gateway services. The Reader uses a versioned Backend interface and can evolve independently of the Backend implementation.
 
-The Device User GUI follows MC1's **Chats / Nodes / Map / Tools / Settings** bottom navigation, with Channels within Chats. Fleet Owner and Admin management GUIs are later web-only work; there is no phone Fleet tab in the Device User Reader.
+The Device User GUI follows MC1's **Chats / Nodes / Map / Tools / Settings** bottom navigation, with Channels within Chats. Fleet Owner and Admin management GUIs are later web-only work; there is no Fleet tab on any viewport in the Device User Reader.
 
 ## Core experience
 
@@ -30,10 +30,10 @@ A Fleet Owner assigns each device to at most one Device User, including themselv
 
 ## What MVP1 is not
 
-Not a new firmware protocol, standalone fully offline Reader, Fleet Owner/Admin GUI, observation explorer, OTA manager, public Backend rewrite, or replacement for the stock MeshCore app. Direct BLE in Bluefy may work while Backend is unavailable, but **offline authorization, secure local private-history storage and Backend reconciliation are later product work**. Do not market this MVP as full offline operation.
+Not a new firmware protocol, standalone fully offline Reader, Fleet Owner/Admin GUI, observation explorer, OTA manager, public Backend rewrite, or replacement for the stock MeshCore app or for MeshCore One. Direct BLE in Bluefy may work while Backend is unavailable, but **offline authorization, secure local private-history storage and Backend reconciliation are later product work**. Do not market this MVP as full offline operation.
 
 ## Outcome
 
 A user can go from stock MeshCore to MECON Reader and perform the same everyday messaging tasks without relearning the concepts, with MECON's own branding and clear optional Backend advantages.
 
-[Interaction specification](READER_UX.md) · [Bluefy and Backend architecture](MVP1_ARCHITECTURE.md) · [delivery plan](MVP1_PLAN.md)
+[Interaction specification](READER_UX.md) · [Bluefy and Backend architecture](MVP1_ARCHITECTURE.md) · [delivery plan and availability](MVP1_PLAN.md) · [implementation design](MVP1_IMPLEMENTATION_DESIGN.md) · [Reader API contract](READER_API_CONTRACT.md)

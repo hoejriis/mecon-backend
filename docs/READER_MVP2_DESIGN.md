@@ -3,11 +3,11 @@
 **Status:** approved target design, 17 November 2026. **Sequence:** after P3 Reader MVP1 integration, no public Backend replacement. The existing private Backend remains account, capability and online messaging authority. This is a preparation/design programme; none of these functions is claimed implemented or hardware-verified.
 
 ## Scope and separation
-- #24: bounded, per-user encrypted local cache, drafts, trusted unlock, server-authorized time-limited offline lease, safe reconnect and reconciliation.
-- #25: independently deployed Reader at `reader.mecon.cloud` gets versioned assets, user-confirmed activation, compatible cache migration, preservation of unique drafts and uncertain RF attempts, rollback.
+- **Offline cache and lease:** bounded, per-user encrypted local cache, drafts, trusted unlock, server-authorized time-limited offline lease, safe reconnect and reconciliation.
+- **Safe updates:** the independently deployed Reader at `reader.mecon.cloud` gets versioned assets, user-confirmed activation, compatible cache migration, preservation of unique drafts and uncertain RF attempts, rollback.
 - Direct browser USB: laptop/desktop **Chromium Web Serial** where available, foreground user gesture and permission, direct USB-attached Companion. Share the BLE Companion protocol/operation abstraction and truthful send/receive status. No direct MQTT or private Backend USB-agent dependency.
-- #21 is a **different** standalone headless serial-to-MQTT Connector; no coupling to browser USB.
-- Fleet Owner/Admin desktop GUI (#17/#18), public Backend implementation (#9–#16), federation and broad public deployment remain deferred.
+- The [USB Connector](USB_CONNECTOR_IMPLEMENTATION_DESIGN.md) is a **different** standalone headless serial-to-MQTT Connector; no coupling to browser USB.
+- Fleet Owner/Admin web GUI, public Backend implementation, federation and broad public deployment remain deferred.
 
 ## Offline policy — owner accepted
 A previously authenticated, locally unlocked Device User with a **valid, Backend-issued bounded offline lease** may read authorized cached history and **send/receive through a locally connected BLE or USB Companion while the Backend is unreachable**, limited to identities and operations actually granted by the lease and verified device capabilities. No online gateway send or Backend history access while disconnected. The Reader is **not** a standalone authority; it cannot mint or extend leases or acquire new identity rights offline. When lease expires, locally cached private content becomes **read-only** where trusted unlock permits; block all outbound BLE/USB actions. If no trusted unlock, show only account-independent shell and quarantine protected content/drafts without silently erasing them.
@@ -28,10 +28,10 @@ A previously authenticated, locally unlocked Device User with a **valid, Backend
 
 ## Delivery gates
 1. **Contracts and fixtures:** private Backend lease issuance/revocation semantics, authorization projection, public firmware USB framing/capability matrix, encrypted cache and migration fixture sets. Missing interface details are implementation dependencies, not permission to invent security parameters.
-2. **#24:** online/offline/expired lease/unsupported unlock, lost network, reassignment, account switching, eviction and reconnect; prove no private-data leakage and no ambiguous duplicate send.
-3. **USB issue:** real laptop Chromium + supported Companion/firmware, permission, connect/receive/send/status, unplug/replug, busy port, lease-valid offline and lease-expired outbound denial.
-4. **#25:** interrupted update, schema incompatibility, rollback, draft/attempt preservation, offline upgrade, no loss or duplicate RF sends.
-5. **Integration:** same Reader and Backend API as P3, independent F2 rollback, no change to current private Backend UI or public Backend replacement.
+2. **Offline cache and lease:** online/offline/expired lease/unsupported unlock, lost network, reassignment, account switching, eviction and reconnect; prove no private-data leakage and no ambiguous duplicate send.
+3. **Browser USB:** real laptop Chromium + supported Companion/firmware, permission, connect/receive/send/status, unplug/replug, busy port, lease-valid offline and lease-expired outbound denial.
+4. **Safe updates:** interrupted update, schema incompatibility, rollback, draft/attempt preservation, offline upgrade, no loss or duplicate RF sends.
+5. **Integration:** same Reader and Backend API as P3, independent rollback, no change to current private Backend UI or public Backend replacement.
 
 ## Open technical parameters, not new owner product decisions
 Offline lease maximum duration and secure issuance/validation; exact trusted local unlock mechanism; firmware USB protocol mapping and board/browser matrix; cache quotas and retention defaults; update rollback retention. Validate and document these before claiming end-to-end acceptance.

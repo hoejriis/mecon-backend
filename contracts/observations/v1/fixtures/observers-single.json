@@ -1,0 +1,1 @@
+{"items":[{"observer_id":"obs_synthetic_0001","label":"Synthetic Observer One","location":{"lat":10.5,"lon":20.5,"precision_m":100},"freshness":{"last_heard_at":"2030-01-15T09:59:30Z","state":"live"}}],"next_cursor":null,"as_of":"2030-01-15T10:00:00Z"}

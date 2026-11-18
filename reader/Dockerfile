@@ -6,7 +6,7 @@ FROM node:22.23.5-bookworm-slim@sha256:e9f565d32859f0cbfb52125eafe8be39390f24dac
 WORKDIR /src/reader
 COPY reader/package.json reader/package-lock.json ./
 RUN npm ci
-COPY contracts/reader-api /src/contracts/reader-api
+COPY contracts /src/contracts
 COPY reader/ .
 ARG RENDER_GIT_COMMIT
 ENV RENDER_GIT_COMMIT=${RENDER_GIT_COMMIT}

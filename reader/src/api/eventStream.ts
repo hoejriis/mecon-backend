@@ -7,13 +7,31 @@ export const HEARTBEAT_DEAD_MS = 50_000;
 const BACKOFF_START_MS = 1000;
 const BACKOFF_MAX_MS = 30_000;
 
+/** The two fields every stream envelope has. */
+export interface EnvelopeLike {
+  event_id: string;
+  kind: string;
+}
+
 export type StreamStatus = 'connecting' | 'live' | 'reconnecting' | 'stopped';
 export type ResyncReason = 'cursor_expired' | 'authorization_changed' | 'resync_required';
 
-export interface EventStreamOptions {
+export interface EventStreamOptions<E = EventEnvelope> {
   /** Opens GET /events (gated by capabilities in the api client). */
   open(opts: { lastEventId: string | null; signal: AbortSignal }): Promise<Response>;
-  onEvent(e: EventEnvelope): void;
+  onEvent(e: E): void;
+  /** Parses one event's data; null drops it. Defaults to the Reader API envelope. */
+  parse?(data: string): (E & EnvelopeLike) | null;
+  /** Kinds that mean "reload snapshots"; defaults to the Reader API's two. */
+  resyncKinds?: readonly string[];
+  /**
+   * Kinds that end the stream for good (access withdrawn). The stream stops
+   * without reconnecting and `onRevoked` runs; nothing after it is delivered.
+   */
+  revokedKinds?: readonly string[];
+  onRevoked?(kind: string): void;
+  /** A 403 on (re)connect: access is gone. When given, the stream stops instead of retrying. */
+  onForbidden?(): void;
   /** Snapshots must be reloaded (410, authorization_changed, resync_required). */
   onResync(reason: ResyncReason): void;
   onStatus?(s: StreamStatus): void;
@@ -27,9 +45,12 @@ export interface EventStreamOptions {
  * with Last-Event-ID. 410 drops the cursor and asks for a resync; 401 stops.
  * Returns a stop function.
  */
-export function startEventStream(o: EventStreamOptions): () => void {
+export function startEventStream<E = EventEnvelope>(o: EventStreamOptions<E>): () => void {
   const ctl = new AbortController();
   const deadAfter = o.deadAfterMs ?? HEARTBEAT_DEAD_MS;
+  const parse = (o.parse ?? parseEnvelope) as (d: string) => (E & EnvelopeLike) | null;
+  const resyncKinds = o.resyncKinds ?? ['authorization_changed', 'resync_required'];
+  const revokedKinds = o.revokedKinds ?? [];
   let lastEventId: string | null = null;
   let stopped = false;
 
@@ -42,7 +63,7 @@ export function startEventStream(o: EventStreamOptions): () => void {
       });
     });
 
-  async function once(): Promise<'ended' | 'gone' | 'stop'> {
+  async function once(): Promise<'ended' | 'gone' | 'stop' | 'revoked'> {
     const conn = new AbortController();
     const abortConn = () => conn.abort();
     ctl.signal.addEventListener('abort', abortConn);
@@ -62,6 +83,10 @@ export function startEventStream(o: EventStreamOptions): () => void {
         o.onUnauthorized?.();
         return 'stop';
       }
+      if (res.status === 403 && o.onForbidden) {
+        o.onForbidden();
+        return 'revoked';
+      }
       if (res.status === 410) {
         lastEventId = null;
         return 'gone';
@@ -80,11 +105,15 @@ export function startEventStream(o: EventStreamOptions): () => void {
         for (const item of parser.push(decoder.decode(value, { stream: true }))) {
           if (item.type !== 'event') continue;
           if (item.id) lastEventId = item.id;
-          const env = parseEnvelope(item.data);
+          const env = parse(item.data);
           if (!env) continue;
           if (!item.id) lastEventId = env.event_id;
-          if (env.kind === 'authorization_changed' || env.kind === 'resync_required') {
-            o.onResync(env.kind);
+          if (revokedKinds.includes(env.kind)) {
+            o.onRevoked?.(env.kind);
+            return 'revoked';
+          }
+          if (resyncKinds.includes(env.kind)) {
+            o.onResync(env.kind as ResyncReason);
           } else {
             o.onEvent(env);
           }
@@ -105,7 +134,7 @@ export function startEventStream(o: EventStreamOptions): () => void {
     let backoff = BACKOFF_START_MS;
     o.onStatus?.('connecting');
     while (!stopped) {
-      let result: 'ended' | 'gone' | 'stop';
+      let result: 'ended' | 'gone' | 'stop' | 'revoked';
       try {
         result = await once();
         if (result === 'ended') backoff = BACKOFF_START_MS;
@@ -113,7 +142,7 @@ export function startEventStream(o: EventStreamOptions): () => void {
         result = 'ended';
         backoff = Math.min(backoff * 2, BACKOFF_MAX_MS);
       }
-      if (stopped || result === 'stop') break;
+      if (stopped || result === 'stop' || result === 'revoked') break;
       if (result === 'gone') {
         o.onResync('cursor_expired');
         o.onStatus?.('reconnecting');

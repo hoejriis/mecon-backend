@@ -1,0 +1,394 @@
+openapi: 3.1.0
+info:
+  title: MECON Live Observation API (authorized projection)
+  version: 1.0.0-draft.1
+  summary: Session-authenticated, capability-scoped view of observer locations and packet receptions.
+  description: |
+    Machine-readable form of the authorized projection described in
+    docs/LIVE_OBSERVATION_API_CONTRACT.md. Target specification, not a claim
+    that any Backend serves it today. This document is a draft and may change by
+    pull request until a Backend implements it.
+
+    The Reader reaches this API at its own origin, exactly like the Reader API
+    (`contracts/reader-api/v1`): the same host-only, `Secure`, `HttpOnly`
+    session cookie (`__Host-mecon_session`), no bearer tokens, no CORS. Every
+    operation is a `GET`, so no CSRF token is needed. Errors use the Reader
+    API's body: `{code, message, request_id, retryable}`.
+
+    The Reader offers these operations only while `GET /session` reports
+    `capabilities.observations` as `available`. The server re-checks the
+    caller's rights on **every** request and on every stream reconnect.
+
+    **Scope.** `scope=self` is the only scope in this version. It means
+    receptions by observers the caller may see under the server's rules: the
+    caller's own fleet, fleets that share observations with the caller's fleet
+    (opt-in, reciprocal, whole-fleet sharing, off by default), and approved
+    public sources. The server decides; a client cannot widen it, and an
+    observer it may not see is absent, never marked as hidden.
+
+    **What this API never carries.** No transmitter location of any kind. No
+    route, path, hop or relay field, and no field from which one could be
+    computed: receptions that share a `packet_correlation_id` were evidenced as
+    the same packet, and that says nothing about who relayed it or how. No
+    decrypted content and no message text. No raw packet bytes and no packet
+    hash. Authority over a fleet does not imply the right to read anyone's
+    private messages, and nothing here is a path to them.
+
+    This document defines the authorized projection only. The anonymous public
+    projection is a separate contract with separate authorization, retention
+    and schemas; the public map never calls these operations.
+  license:
+    name: Apache-2.0
+    identifier: Apache-2.0
+servers:
+  - url: /api/observations/v1/authorized
+    description: Same origin as the Reader
+security:
+  - sessionCookie: []
+tags:
+  - name: observers
+    description: Observer catalogue with optional locations and freshness.
+  - name: receptions
+    description: Recent receptions (snapshot) and live receptions (SSE).
+
+paths:
+  /observers:
+    get:
+      tags: [observers]
+      operationId: listObservers
+      summary: Observers the caller may see
+      description: |
+        One item per observer visible under `scope=self`. `location` is `null`
+        whenever the caller may not see the observer's location (the owner has
+        not shared it, or a sharing rule withholds it). A client draws a pin
+        only for a non-null `location` and never estimates one.
+
+        `freshness.state` is the server's judgement of how recently the observer
+        was heard: `live` (recent), `stale` (heard, but not recently) or
+        `offline` (not heard within the offline window, or never; then
+        `last_heard_at` may be `null`). The thresholds are the server's.
+      parameters:
+        - $ref: '#/components/parameters/Scope'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Visible observers
+          headers:
+            Cache-Control: { $ref: '#/components/headers/NoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ObserverList' }
+              examples:
+                empty: { externalValue: fixtures/observers-empty.json }
+                single: { externalValue: fixtures/observers-single.json }
+                multi: { externalValue: fixtures/observers-multi.json }
+                withheld: { externalValue: fixtures/observers-location-withheld.json }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '410': { $ref: '#/components/responses/CursorExpired' }
+        '429': { $ref: '#/components/responses/Throttled' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /snapshot:
+    get:
+      tags: [receptions]
+      operationId: getObservationSnapshot
+      summary: Bounded list of recent receptions
+      description: |
+        Recent receptions by visible observers, oldest first, bounded by the
+        server's retention and by `limit`. Each item is one reception: a
+        distinct `reception_id` and `event_id`. Receptions of one packet by
+        several observers share a `packet_correlation_id`, which implies
+        nothing about a route. A reception may be delayed (`received_at` long
+        after `observed_at`) and the same event may be delivered more than once
+        across snapshot and stream; clients deduplicate by `event_id`.
+
+        `cursor` is the position to hand to `GET /events` (as `?cursor=`) so the
+        stream continues without a gap. `since`, when given, is a `cursor` from
+        an earlier snapshot: only receptions after it are returned. An expired
+        `since` is a 410 `cursor_expired`; the client then asks again without
+        `since`. After `expires_at` the snapshot and its cursor must not be
+        treated as current.
+      parameters:
+        - $ref: '#/components/parameters/Scope'
+        - name: since
+          in: query
+          required: false
+          description: A `cursor` returned by an earlier snapshot.
+          schema: { type: string, maxLength: 512 }
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Recent receptions
+          headers:
+            Cache-Control: { $ref: '#/components/headers/NoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Snapshot' }
+              examples:
+                empty: { externalValue: fixtures/snapshot-empty.json }
+                single: { externalValue: fixtures/snapshot-single.json }
+                correlated: { externalValue: fixtures/snapshot-correlated.json }
+                delayedDuplicate: { externalValue: fixtures/snapshot-delayed-duplicate.json }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '410': { $ref: '#/components/responses/CursorExpired' }
+        '429': { $ref: '#/components/responses/Throttled' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /events:
+    get:
+      tags: [receptions]
+      operationId: streamObservationEvents
+      summary: Live receptions (SSE)
+      description: |
+        `text/event-stream`. Each `data:` line is one `ObservationEvent`, with
+        the SSE `id:` equal to its `event_id`. Resume with the standard
+        `Last-Event-ID` header or the `cursor` query parameter (a snapshot's
+        `cursor`); both are accepted, and the header wins when both are present.
+        An expired or out-of-retention cursor yields HTTP 410 `cursor_expired`
+        **before** the stream starts; there is no separate reset event for that
+        case. The client then reloads the snapshot and reconnects without a
+        cursor.
+
+        **Delivery.** At least once while a cursor is valid, with no global
+        ordering or completeness guarantee. Clients deduplicate by `event_id`.
+
+        **Heartbeat.** While idle the Backend sends an SSE comment line
+        (`: heartbeat`) at least every 25 seconds. A client treats 2 missed
+        intervals (no bytes for 50 s) as dead and reconnects with
+        `Last-Event-ID`.
+
+        **Control events.** `resync_required`: the server cannot continue the
+        stream faithfully; the client reloads the observer list and snapshot.
+        `access_revoked`: the caller's rights changed or ended; the server then
+        ends the stream, and the client discards what it holds from this API and
+        re-reads the session before asking again. Nothing observed after
+        revocation is sent.
+      parameters:
+        - $ref: '#/components/parameters/Scope'
+        - name: cursor
+          in: query
+          required: false
+          schema: { type: string, maxLength: 512 }
+        - name: Last-Event-ID
+          in: header
+          required: false
+          schema: { type: string }
+      responses:
+        '200':
+          description: Event stream
+          content:
+            text/event-stream:
+              schema: { $ref: '#/components/schemas/ObservationEvent' }
+              examples:
+                reception: { externalValue: fixtures/event-reception.json }
+                accessRevoked: { externalValue: fixtures/event-access-revoked.json }
+                resyncRequired: { externalValue: fixtures/event-resync-required.json }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '410': { $ref: '#/components/responses/CursorExpired' }
+        '429': { $ref: '#/components/responses/Throttled' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: __Host-mecon_session
+
+  headers:
+    NoStore:
+      schema: { type: string, const: no-store }
+
+  parameters:
+    Scope:
+      name: scope
+      in: query
+      required: true
+      description: |
+        `self`: receptions by observers the caller may see under the server's
+        rules (own fleet, fleets sharing with the caller's fleet, approved public
+        sources). The server decides what that includes.
+      schema: { type: string, enum: [self] }
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      schema: { type: string, maxLength: 512 }
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
+
+  responses:
+    Unauthenticated:
+      description: No valid session
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' }, examples: { e: { externalValue: fixtures/error-401.json } } } }
+    Forbidden:
+      description: Authenticated but not permitted to observe (code `forbidden`)
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' }, examples: { e: { externalValue: fixtures/error-403.json } } } }
+    CursorExpired:
+      description: Cursor expired or outside retention (code `cursor_expired`); reload the snapshot
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' }, examples: { e: { externalValue: fixtures/error-410-cursor-expired.json } } } }
+    Throttled:
+      description: Rate limited
+      headers:
+        Retry-After: { schema: { type: integer } }
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Unavailable:
+      description: Temporarily unavailable
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+
+  schemas:
+    OpaqueId:
+      type: string
+      minLength: 1
+      maxLength: 128
+      description: Opaque; clients never parse, compare across callers, or construct it.
+    Timestamp:
+      type: string
+      format: date-time
+      description: UTC, ISO-8601, with `Z`.
+
+    Error:
+      type: object
+      required: [code, message, request_id, retryable]
+      additionalProperties: false
+      properties:
+        code: { type: string, examples: [unauthenticated, forbidden, cursor_expired, throttled, unavailable] }
+        message: { type: string }
+        request_id: { type: string }
+        retryable: { type: boolean }
+
+    Location:
+      description: |
+        An observer's own position as the observer's owner chose to share it,
+        possibly coarsened by the server. It is never a transmitter position.
+      type: object
+      required: [lat, lon, precision_m]
+      additionalProperties: false
+      properties:
+        lat: { type: number, minimum: -90, maximum: 90 }
+        lon: { type: number, minimum: -180, maximum: 180 }
+        precision_m:
+          type: number
+          minimum: 0
+          description: Radius in metres within which the true position lies.
+
+    Freshness:
+      type: object
+      required: [last_heard_at, state]
+      additionalProperties: false
+      properties:
+        last_heard_at:
+          oneOf:
+            - $ref: '#/components/schemas/Timestamp'
+            - type: 'null'
+          description: Null when the observer has never been heard.
+        state: { type: string, enum: [live, stale, offline] }
+
+    Observer:
+      type: object
+      required: [observer_id, label, location, freshness]
+      additionalProperties: false
+      properties:
+        observer_id: { $ref: '#/components/schemas/OpaqueId' }
+        label: { type: string, description: A display name the observer's owner chose. }
+        location:
+          description: Null whenever the caller may not see the observer's location.
+          oneOf:
+            - $ref: '#/components/schemas/Location'
+            - type: 'null'
+        freshness: { $ref: '#/components/schemas/Freshness' }
+
+    ObserverList:
+      type: object
+      required: [items, next_cursor, as_of]
+      additionalProperties: false
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Observer' } }
+        next_cursor: { type: [string, 'null'] }
+        as_of: { $ref: '#/components/schemas/Timestamp' }
+
+    Reception:
+      description: |
+        One observer's reception of one packet. It carries no transmitter
+        location, no route, hop or relay information, no decrypted content, no
+        raw bytes and no packet hash. `packet_correlation_id` groups receptions
+        evidenced as the same packet; it does not imply that any observer heard
+        another, or how the packet travelled.
+      type: object
+      required: [event_id, packet_correlation_id, reception_id, observer_id, observed_at, received_at, clock_confidence, packet_kind, transport, rssi, snr, provenance]
+      additionalProperties: false
+      properties:
+        event_id: { $ref: '#/components/schemas/OpaqueId' }
+        packet_correlation_id: { $ref: '#/components/schemas/OpaqueId' }
+        reception_id: { $ref: '#/components/schemas/OpaqueId' }
+        observer_id:
+          allOf:
+            - $ref: '#/components/schemas/OpaqueId'
+          description: Matches an `observer_id` from `GET /observers`; it may be absent from a stale copy of that list.
+        observed_at:
+          allOf:
+            - $ref: '#/components/schemas/Timestamp'
+          description: When the observer says it heard the packet, by the observer's clock.
+        received_at:
+          allOf:
+            - $ref: '#/components/schemas/Timestamp'
+          description: When the Backend received the report, by the Backend's clock. May be long after `observed_at`.
+        clock_confidence:
+          type: string
+          enum: [high, low, unknown]
+          description: How far `observed_at` can be trusted. Under `low` or `unknown` a client relies on `received_at`.
+        packet_kind:
+          type: string
+          enum: [advert, direct_message, channel_message, acknowledgement, telemetry, control, unknown]
+          description: The packet's class only, never its content.
+        transport:
+          type: string
+          enum: [lora, mqtt, usb, ble, unknown]
+          description: How the observer heard it.
+        rssi: { type: [integer, 'null'], minimum: -200, maximum: 0 }
+        snr: { type: [number, 'null'], minimum: -60, maximum: 60 }
+        provenance:
+          type: string
+          enum: [own_fleet, shared_fleet, approved_public_source]
+          description: Which rule made the observer visible to the caller.
+
+    Snapshot:
+      type: object
+      required: [items, cursor, as_of, expires_at]
+      additionalProperties: false
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Reception' } }
+        cursor:
+          type: string
+          maxLength: 512
+          description: Opaque and scoped to the caller; hand it to `GET /events` or to a later `since`.
+        as_of: { $ref: '#/components/schemas/Timestamp' }
+        expires_at: { $ref: '#/components/schemas/Timestamp' }
+
+    ObservationEvent:
+      description: |
+        The SSE envelope. `reception` is present exactly when `kind` is
+        `reception`, and then `reception.event_id` equals `event_id`. The two
+        control kinds carry no observation data.
+      type: object
+      required: [event_id, kind, occurred_at, version]
+      additionalProperties: false
+      properties:
+        event_id: { $ref: '#/components/schemas/OpaqueId' }
+        kind: { type: string, enum: [reception, resync_required, access_revoked] }
+        occurred_at: { $ref: '#/components/schemas/Timestamp' }
+        version: { type: integer, minimum: 1 }
+        reception: { $ref: '#/components/schemas/Reception' }
+      if:
+        properties: { kind: { const: reception } }
+      then:
+        required: [reception]
+      else:
+        not: { required: [reception] }

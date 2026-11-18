@@ -12,6 +12,8 @@ import type {
   LoginStarted,
   LoginState,
   MessageList,
+  ObservationSnapshot,
+  ObserverList,
   LeaseIssued,
   LeaseKeyList,
   SendAttempt,
@@ -20,6 +22,8 @@ import type {
 } from './types';
 
 export const API_BASE = '/api/reader/v1';
+/** Live observation API, authorized projection (contracts/observations/v1). Same origin and session cookie. */
+export const OBSERVATIONS_BASE = '/api/observations/v1/authorized';
 
 /** A non-2xx answer (or an unreadable one) from the Backend. */
 export class ApiError extends Error {
@@ -125,6 +129,19 @@ export interface ApiClient {
   createLease(): Promise<LeaseIssued>;
   /** M3 (draft): the public keys that verify leases. */
   listLeaseKeys(): Promise<LeaseKeyList>;
+  /**
+   * Observation API (authorized projection). Each throws CapabilityError, with
+   * no request made, unless `capabilities.observations` is `available`.
+   */
+  listObservers(page?: PageOpts): Promise<ObserverList>;
+  getObservationSnapshot(opts?: { since?: string | null; limit?: number }): Promise<ObservationSnapshot>;
+  /** Open the observation SSE stream (raw Response; parse with api/sse). */
+  openObservationEvents(opts: {
+    lastEventId?: string | null;
+    /** A snapshot's cursor, used only when there is no `lastEventId` (the header wins). */
+    cursor?: string | null;
+    signal?: AbortSignal;
+  }): Promise<Response>;
   /** Open the SSE stream (raw Response; parse with api/sse). */
   openEvents(opts: { lastEventId?: string | null; signal?: AbortSignal }): Promise<Response>;
   /** Forget the held CSRF token (signed out). */
@@ -149,8 +166,8 @@ export function createApiClient(opts: ApiClientOptions = {}): ApiClient {
   // Learned from every GET /session; every M2 call is checked against it.
   let capabilities: Capabilities | null = opts.initialCapabilities ?? null;
 
-  async function send(path: string, init: RequestInit): Promise<Response> {
-    const res = await doFetch(`${API_BASE}${path}`, { credentials: 'same-origin', ...init });
+  async function send(path: string, init: RequestInit, base = API_BASE): Promise<Response> {
+    const res = await doFetch(`${base}${path}`, { credentials: 'same-origin', ...init });
     if (res.status === 401) {
       capabilities = null;
       opts.onUnauthorized?.();
@@ -311,6 +328,42 @@ export function createApiClient(opts: ApiClientOptions = {}): ApiClient {
     async getSendAttempt(id) {
       need('messaging', 'send');
       return json<SendAttempt>(`/send-attempts/${encodeURIComponent(id)}`, { cache: 'no-store' });
+    },
+    async listObservers(page) {
+      need('observations');
+      const q = new URLSearchParams({ scope: 'self' });
+      if (page?.cursor) q.set('cursor', page.cursor);
+      if (page?.limit) q.set('limit', String(page.limit));
+      const res = await send(`/observers?${q}`, { cache: 'no-store', headers: { Accept: 'application/json' } }, OBSERVATIONS_BASE);
+      if (!res.ok) throw await readError(res);
+      return (await res.json()) as ObserverList;
+    },
+    async getObservationSnapshot(o) {
+      need('observations');
+      const q = new URLSearchParams({ scope: 'self' });
+      if (o?.since) q.set('since', o.since);
+      if (o?.limit) q.set('limit', String(o.limit));
+      const res = await send(`/snapshot?${q}`, { cache: 'no-store', headers: { Accept: 'application/json' } }, OBSERVATIONS_BASE);
+      if (!res.ok) throw await readError(res);
+      return (await res.json()) as ObservationSnapshot;
+    },
+    async openObservationEvents({ lastEventId, cursor, signal }) {
+      need('observations');
+      const q = new URLSearchParams({ scope: 'self' });
+      if (cursor && !lastEventId) q.set('cursor', cursor);
+      return send(
+        `/events?${q}`,
+        {
+          method: 'GET',
+          headers: {
+            Accept: 'text/event-stream',
+            ...(lastEventId ? { 'Last-Event-ID': lastEventId } : {}),
+          },
+          cache: 'no-store',
+          signal,
+        },
+        OBSERVATIONS_BASE,
+      );
     },
     async openEvents({ lastEventId, signal }) {
       need('messaging', 'events');

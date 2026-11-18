@@ -47,8 +47,12 @@ export function Unavailable({ title = 'Not available', body = 'This Backend does
 }
 
 /** The capability exists, but this account may not use it. */
-export function Forbidden({ title = 'Not permitted', body = 'Your account does not have access to this.' }: Partial<StateProps>) {
-  return <StateBox kind="forbidden" title={title} body={body} />;
+export function Forbidden({ title = 'Not permitted', body = 'Your account does not have access to this.', children }: Partial<StateProps>) {
+  return (
+    <StateBox kind="forbidden" title={title} body={body}>
+      {children}
+    </StateBox>
+  );
 }
 
 /** The browser reports no network. */
@@ -57,10 +61,11 @@ export function Offline({ body = 'You are offline. This will load again when you
 }
 
 /** A request failed. request_id, when the Backend sent one, is shown small for support. */
-export function ErrorState({ title = 'Something went wrong', body, requestId }: { title?: string; body?: string; requestId?: string | null }) {
+export function ErrorState({ title = 'Something went wrong', body, requestId, children }: { title?: string; body?: string; requestId?: string | null; children?: ReactNode }) {
   return (
     <StateBox kind="error" title={title} body={body} role="alert">
       {requestId && <p className="state-meta">Request ID: {requestId}</p>}
+      {children}
     </StateBox>
   );
 }

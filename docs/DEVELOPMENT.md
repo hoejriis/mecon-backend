@@ -23,6 +23,7 @@ Run from `reader/`:
 | `npm run lint` | ESLint. |
 | `npm test` | Vitest unit tests (jsdom, Testing Library). |
 | `npm run build` | Typecheck and production build into `dist/`. |
+| `npm run gen:api` | Regenerate `reader/src/api/schema.gen.ts` from `contracts/reader-api/v1/openapi.yaml` (openapi-typescript, pinned exactly). The output is committed; a unit test fails when it is stale (`npm run gen:api:check` does the same check alone). |
 | `npm run e2e` | Builds, serves with `vite preview` under the production CSP, and runs headless Chromium at 390x844, 820x1180 and 1440x900. Screenshots go to `e2e-artifacts/` (gitignored). |
 
 Docker image, built from the repository root:
@@ -33,7 +34,10 @@ Docker image, built from the repository root:
 ## Layout
 
 - `reader/src/tabs.ts`: the five tabs (Chats, Nodes, Map, Tools, Settings) and their placeholder copy.
-- `reader/src/components/`: header and bottom tab bar.
+- `reader/src/api/`: typed API client and the generated schema types.
+- `reader/src/auth/`: auth state, login polling and pending-login storage.
+- `reader/src/staleShell.ts`: stale-shell repair.
+- `reader/src/components/`: header, bottom tab bar and login screen.
 - `reader/src/routes/`: one page component per tab; from 900px wide a list pane and a detail pane sit above the bottom bar.
 - `reader/src/styles/tokens.css`: design tokens (palette, light and dark via `prefers-color-scheme`).
 - `reader/public/brand/`: official brand SVGs.
@@ -41,7 +45,35 @@ Docker image, built from the repository root:
 - `.github/workflows/ci.yml`: checks and image smoke test.
 
 The build stamp `__BUILD_COMMIT__` is set from the `RENDER_GIT_COMMIT`
-environment variable at build time and is `null` when unset.
+environment variable at build time and is `null` when unset. The full value
+is exposed as `BUILD_COMMIT` in `reader/src/buildInfo.ts`; Settings shows the
+first 12 characters, and stale-shell repair compares the whole string.
+
+## Authentication client
+
+`reader/src/api/client.ts` is a same-origin `fetch` client (base
+`/api/reader/v1`, `credentials: 'same-origin'`) typed from the generated
+schema. State-changing calls send `X-CSRF-Token` from the latest
+`GET /session`; on 403 `csrf_failed` the client refetches the session and
+retries once, never more. Any 401 clears the in-memory session and cached data
+and shows the login screen. Login follows the contract: `POST /login`, then
+poll `GET /login/{request_id}` at `poll_after_ms`; only the polling app is
+signed in. The pending `{request_id, expires_at}` is kept in `localStorage`
+(failures to use storage are ignored) so a killed app resumes polling.
+
+### Stale installed shell
+
+An installed shell can run an old build for days, so on load the Reader
+fetches `/version.json` (emitted at build by `reader/vite.config.ts`, body
+`{"commit": <string|null>}`) and compares it with the commit compiled into the
+bundle. The Backend's `/health` is deliberately not used for this: it reports
+the Backend's commit, which differs from the Reader's. When both commits are
+non-null and differ, the Reader asks any registered service worker to update,
+waits about 3 s, then unregisters every worker, deletes every cache and
+reloads, at most once per served commit (`sessionStorage`). A null commit on
+either side does nothing. `/version.json` is served with `Cache-Control:
+no-cache` by `deploy/reader-headers.caddy` like everything outside
+`/assets/`.
 
 ## Content Security Policy rule
 

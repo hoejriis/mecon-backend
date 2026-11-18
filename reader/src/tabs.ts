@@ -6,27 +6,32 @@ export interface TabDef {
   listTitle: string;
   emptyTitle: string;
   emptyBody: string;
+  /** Session capability that gates this tab's content, when there is one. */
+  capability?: 'messaging' | 'devices' | 'observations';
 }
 
 export const TABS: readonly TabDef[] = [
   {
     id: 'chats',
+    capability: 'messaging',
     label: 'Chats',
     path: '/chats',
     listTitle: 'Conversations',
-    emptyTitle: 'Not connected to a Backend',
-    emptyBody: 'Conversations will appear here once the Reader is signed in to a MECON Backend.',
+    emptyTitle: 'No conversations yet',
+    emptyBody: 'Conversations will appear here once messaging is available for your account.',
   },
   {
     id: 'nodes',
+    capability: 'devices',
     label: 'Nodes',
     path: '/nodes',
     listTitle: 'Nodes',
-    emptyTitle: 'Not connected to a Backend',
-    emptyBody: 'Nodes you are authorized to see will appear here once connected.',
+    emptyTitle: 'No nodes',
+    emptyBody: 'Nodes you are authorized to see will appear here.',
   },
   {
     id: 'map',
+    capability: 'observations',
     label: 'Map',
     path: '/map',
     listTitle: 'Map',
@@ -46,7 +51,7 @@ export const TABS: readonly TabDef[] = [
     label: 'Settings',
     path: '/settings',
     listTitle: 'Settings',
-    emptyTitle: 'Not connected to a Backend',
-    emptyBody: 'Account and connection settings will appear here once a Backend is configured.',
+    emptyTitle: 'Account',
+    emptyBody: '',
   },
 ];

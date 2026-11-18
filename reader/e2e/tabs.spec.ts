@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { mockBackend } from './backend';
 
 const VIEWPORTS = [
   { name: 'phone', width: 390, height: 844 },
@@ -14,6 +15,8 @@ for (const vp of VIEWPORTS) {
       if (m.text().includes('Content Security Policy')) violations.push(m.text());
     });
     await page.setViewportSize({ width: vp.width, height: vp.height });
+    const state = await mockBackend(page);
+    state.signedIn = true;
     await page.goto('/');
     const nav = page.getByRole('navigation', { name: 'Main' });
     await expect(nav.getByRole('link')).toHaveText(TABS);

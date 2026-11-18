@@ -1,10 +1,15 @@
+import { useEffect } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
+import { useAuth } from './auth/AuthContext';
+import { BUILD_COMMIT } from './buildInfo';
 import { Header } from './components/Header';
+import { LoginScreen } from './components/LoginScreen';
 import { TabBar } from './components/TabBar';
 import { TabPage } from './routes/TabPage';
+import { runStaleShellCheck } from './staleShell';
 import { TABS } from './tabs';
 
-export function App() {
+export function Shell() {
   return (
     <div className="shell">
       <Header />
@@ -20,4 +25,25 @@ export function App() {
       <TabBar />
     </div>
   );
+}
+
+export function App() {
+  const { status } = useAuth();
+
+  useEffect(() => {
+    void runStaleShellCheck(BUILD_COMMIT);
+  }, []);
+
+  if (status === 'loading') {
+    return (
+      <div className="shell">
+        <Header />
+        <main className="content">
+          <p className="empty-body pane" role="status">Loading…</p>
+        </main>
+      </div>
+    );
+  }
+  if (status === 'signedOut') return <LoginScreen />;
+  return <Shell />;
 }

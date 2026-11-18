@@ -410,8 +410,17 @@ export interface paths {
          *     rights never come from the lease: while connected, every request is
          *     authorized by the server as usual.
          *
-         *     A Backend that does not issue leases answers 404 (`not_found`); the
-         *     Reader then treats offline sending as not permitted.
+         *     A Backend that does not issue leases at all answers 404 (`not_found`).
+         *     A Backend that issues leases but cannot sign right now (its signing key
+         *     is missing, unusable, or revoked and not yet replaced) answers **503
+         *     `lease_signing_unavailable`** with `retryable: false`. A request with a
+         *     body is refused (422 `invalid`). In every one of these cases the Reader
+         *     treats offline sending as not permitted and keeps any lease it holds
+         *     only until that lease's own expiry.
+         *
+         *     When the operator switches Reader sending off, a lease is still issued
+         *     but carries no send operations, so a switched-off Backend never
+         *     authorizes offline sending either.
          */
         post: operations["createLease"];
         delete?: never;
@@ -433,7 +442,12 @@ export interface paths {
          *     response carries no secret. The Reader fetches the set whenever it is
          *     online and keeps it, so it can verify a lease offline. A key that
          *     signs no more leases is listed as `retired` until every lease it signed
-         *     has expired, then dropped. The Reader accepts a lease only when its
+         *     has expired, then dropped; after the operator revokes keys, the
+         *     revoked ones are dropped at once and never served again, which voids
+         *     every lease they signed. The list is empty when no key has ever been
+         *     recorded (200, `keys: []`), and lists only keys that verify: whether
+         *     the Backend can sign new leases right now is reported by
+         *     `POST /leases`, not here. The Reader accepts a lease only when its
          *     `key_id` names a key in the set it holds.
          */
         get: operations["listLeaseKeys"];

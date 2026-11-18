@@ -8,7 +8,7 @@ Build a public TypeScript/React **Device User Reader** that uses the existing **
 
 1. **M0 design and contracts:** use this approved UX and brand; public [Reader API contract](READER_API_CONTRACT.md) and [OpenAPI](../contracts/reader-api/v1/openapi.yaml), the compatible private Backend API, the [live observation contract](LIVE_OBSERVATION_API_CONTRACT.md); sanitized fixtures. Do not block shell work on live hardware.
 2. **M1 restricted shell:** HTTPS/DNS, separate deployment/rollback, same Backend login/session and capability checks, responsive bottom navigation, MC1-like five-tab Device User navigation, map empty/loading/error and authorized feed integration when available. Existing `mecon.cloud` remains unchanged.
-3. **M2 Backend-connected messaging/map:** Chats/Channels, authorized messages/contacts/identities, safe send/status and live packet observation map from permitted projection; no BLE required to operate Backend-only.
+3. **M2 Backend-connected messaging/map:** Chats (Channels inside), authorized messages/contacts/identities, safe send/status and live packet observation map from permitted projection; no BLE required to operate Backend-only.
 4. **M3 BLE hardware and adapter:** prove Bluefy on real iPhone/iPad and supported Companion; implement only verified GATT/protocol capabilities, no assumptions of background support.
 5. **M4 MVP1 acceptance:** real-device E2E, privacy, duplicates, reconnection, usability, failure paths and release evidence. Public beta/GA remains separately approved.
 
@@ -40,7 +40,7 @@ Use actual `hoejriis/MeshContinuum/brand/` SVG assets (`lockup-dark.svg`, `locku
 
 **M1 deploy gate:** DNS/TLS and separate rollback; only existing mecon.cloud users can authenticate; authorized login/logout/session expiry/revocation tested; no cross-user data or unauthorized management access; MC1-like five-tab bottom navigation on phone/tablet/desktop; safe map unavailable state; smoke-tested Backend connectivity; no regression to existing UI/Backend; no production RF action required.
 
-**M2 feature gate:** authorized Chats/Channels and observation map use actual API evidence; no invented RF paths; packet feed privacy/source rights respected; no duplicate/ambiguous send; accurate errors and no cross-user history.
+**M2 feature gate:** authorized Chats (including Channels) and observation map use actual API evidence; no invented RF paths; packet feed privacy/source rights respected; no duplicate/ambiguous send; accurate errors and no cross-user history.
 
 **M3 BLE gate:** versioned evidence matrix for real iPhone/iPad Bluefy, firmware/board, BLE permission/PIN, send/receive, reconnect, screen lock/background limits and native outcomes; unsupported behavior clearly labeled, Backend-only remains usable.
 

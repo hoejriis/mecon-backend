@@ -94,6 +94,17 @@ def procs():
         p.stop()
 
 
+def kill_connection(live):
+    """Drops the TCP connection with no MQTT DISCONNECT. shutdown() first so the library's
+    network thread sees the end at once; a bare close() can leave it blocked until keepalive."""
+    sock = live.transport._client._sock
+    try:
+        sock.shutdown(socket.SHUT_RDWR)
+    except OSError:
+        pass
+    sock.close()
+
+
 def mk_tls(tmp, name="ca"):
     """Synthetic, test-only CA and server certificate for 127.0.0.1 / localhost."""
     if shutil.which("openssl") is None:
@@ -195,7 +206,7 @@ def test_roundtrip_and_retained_status(tmp, procs):
         # refuse it: the broker flags it retained exactly then.
         obs.publish(f"{ROOT}/down", cmd, retain=True)  # delivered live (not flagged), so it runs once
         assert until(lambda: len(live.dev.written) == 2)
-        live.transport._client._sock.close()
+        kill_connection(live)
         assert until(lambda: live.metrics.get("downlink_dropped_total", "retained") == 1, 20)
         time.sleep(0.5)
         assert len(live.dev.written) == 2  # the redelivered retained copy was not written
@@ -267,8 +278,9 @@ def test_abrupt_loss_leaves_will_then_reconnects(tmp, procs):
         assert until(lambda: live.bridge.snapshot()["ready"])
         assert until(lambda: obs.on(f"{ROOT}/connector/status"))
         n = len(obs.msgs)
-        live.transport._client._sock.close()  # drop the TCP connection with no MQTT DISCONNECT
+        kill_connection(live)
         assert until(lambda: any(json.loads(p)["connector"] == "offline" for _t, p, _q, _r in obs.msgs[n:]), 10)
+        assert until(lambda: live.metrics.get("broker_disconnects_total") == 1, 10)
         assert until(lambda: live.bridge.snapshot()["ready"], 15)
         assert until(lambda: json.loads(obs.msgs[-1][1])["connector"] == "online", 10)
     finally:

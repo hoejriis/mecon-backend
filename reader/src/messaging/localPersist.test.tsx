@@ -4,7 +4,6 @@ import { MemoryRouter } from 'react-router-dom';
 import { createApiClient } from '../api/client';
 import type { Target } from '../api/types';
 import { AuthContext, type AuthValue } from '../auth/AuthContext';
-import { SYNTHETIC_KEYS } from '../ble/fixtures/frames';
 import { DeviceContext } from '../device/DeviceContext';
 import { companionRig } from '../device/rig.test-util';
 import { OfflineGate, registerGate } from '../offline/gate';
@@ -15,7 +14,7 @@ import { OfflineSync } from '../offline/OfflineSync';
 import { fakePasskey as rawPasskey, freshStore, leasePayload } from '../offline/testkit';
 import { setupWithPasskey } from '../offline/unlock';
 import { createBackend, json, sessionWith, type Backend } from '../test/backend';
-import { dmConversation, page } from '../test/m2';
+import { contacts, dmConversation, page } from '../test/m2';
 import { describeAttempt } from './attemptStatus';
 import type { LocalDeviceHandle } from './localPath';
 import { MessagingProvider, useMessaging, type MessagingValue } from './MessagingContext';
@@ -24,7 +23,6 @@ import { MessagingProvider, useMessaging, type MessagingValue } from './Messagin
 const USER = 'usr_synthetic_alice';
 const TARGET: Target = dmConversation.target;
 const IDENT = 'ident_demo_0001';
-const alice = SYNTHETIC_KEYS.alice;
 const identities = [{ id: IDENT, display_name: 'Demo Companion', public_key_prefix: '111111', device_id: 'dev_demo_0001', can_send: true }];
 
 function fakePasskey() {
@@ -82,15 +80,18 @@ function mountTree(cache: OfflineCache | null, handle: LocalDeviceHandle | null)
 async function ready() {
   act(() => live.loadConversations());
   act(() => live.loadIdentities());
+  act(() => live.loadContacts());
   await waitFor(() => expect(live.identities.status).toBe('ready'));
+  await waitFor(() => expect(live.contacts.status).toBe('ready'));
 }
-const USB_TO = { path: 'usb' as const, to: { contactKey: alice } };
+const USB_TO = { path: 'usb' as const, to: {} };
 
 beforeEach(async () => {
   b = createBackend();
   b.on('GET /conversations?limit=50', json(page([dmConversation])));
   b.on('GET /identities', json(page(identities)));
   b.on('GET /channels', json(page([])));
+  b.on('GET /contacts?limit=200', json(page(contacts)));
   b.on('POST /send-attempts', () => {
     throw new Error('a local send must never POST');
   });
@@ -213,7 +214,7 @@ describe('SIMULATED: a local attempt is persisted with its path, and comes back 
       supersededBy: null,
       createdAt: 1,
       path: 'ble',
-      localTarget: { contactKey: alice },
+      localTarget: {},
       local: { writeIssued: true, notSent: false, deviceAccepted: true, rfTransmitted: false, dmAck: false, ackTimedOut: false, unknown: false, deviceError: null, reason: null },
     });
     mountTree(first.cache, null);

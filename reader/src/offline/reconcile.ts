@@ -12,13 +12,15 @@
  *   Nothing here sends and nothing here takes a client: an uncertain attempt is
  *   resolved only by the user, by re-checking the same attempt or sending anew.
  */
-import type { Channel, Conversation, Identity, Message } from '../api/types';
+import type { Channel, Contact, Conversation, Identity, Message } from '../api/types';
 import type { OfflineCache } from './cache';
 
 export interface Snapshot {
   identities: Identity[];
   conversations: Conversation[];
-  channels: Channel[];
+  /** Only a list that loaded; omitted lists leave the cached ones as they were. */
+  channels?: Channel[];
+  contacts?: Contact[];
   /** Messages by conversation id, for conversations the caller refreshed. */
   messages?: Record<string, Message[]>;
 }
@@ -33,6 +35,7 @@ export interface ReconcileResult {
 export async function reconcile(cache: OfflineCache, snap: Snapshot): Promise<ReconcileResult> {
   const provable = new Set(snap.identities.map((i) => i.id));
   await cache.putIdentities(snap.identities);
+  if (snap.contacts || snap.channels) await cache.putDirectory({ contacts: snap.contacts, channels: snap.channels });
   const fresh = new Map(snap.conversations.map((c) => [c.id, c]));
   const held: string[] = [];
 

@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from 'vitest';
-import type { Conversation, Identity, Message } from '../api/types';
+import type { Channel, Contact, Conversation, Identity, Message } from '../api/types';
 import type { LocalAttempt } from '../messaging/attemptStatus';
 import { OfflineCache } from './cache';
 import { reconcile } from './reconcile';
@@ -47,6 +47,34 @@ async function open(userId = 'usr_a', store?: Awaited<ReturnType<typeof freshSto
   return { cache: r.cache, store: s, keys };
 }
 const snap = (over: Partial<Parameters<typeof reconcile>[1]> = {}) => ({ identities: [ident('idn_a')], conversations: [], channels: [], ...over });
+
+describe('contacts and channels for matching a target on a device offline', () => {
+  const contact = (id: string, prefix: string): Contact => ({ id, display_name: id, public_key_prefix: prefix, last_heard_at: null });
+  const channel = (id: string, name: string): Channel => ({ id, name, visibility: 'private' });
+
+  it('are cached as the Backend listed them, stay readable after the cache is reopened, and are sealed', async () => {
+    const { cache, store, keys } = await open();
+    await reconcile(cache, snap({ contacts: [contact('ct_1', 'a1a1a1')], channels: [channel('ch_1', 'Crew')] }));
+    const again = await OfflineCache.open(store, keys);
+    if (!again.ok) throw new Error('q');
+    expect(await again.cache.getDirectory()).toEqual({ contacts: [contact('ct_1', 'a1a1a1')], channels: [channel('ch_1', 'Crew')] });
+    expect(JSON.stringify(await store.keys(''))).not.toContain('a1a1a1');
+  });
+
+  it('a list that did not load leaves the cached one alone (a failed load never empties it); a list that loaded replaces it', async () => {
+    const { cache } = await open();
+    await reconcile(cache, snap({ contacts: [contact('ct_1', 'a1a1a1')], channels: [channel('ch_1', 'Crew')] }));
+    await reconcile(cache, { identities: [ident('idn_a')], conversations: [] }); // neither list loaded
+    expect(await cache.getDirectory()).toEqual({ contacts: [contact('ct_1', 'a1a1a1')], channels: [channel('ch_1', 'Crew')] });
+    await reconcile(cache, { identities: [ident('idn_a')], conversations: [], contacts: [contact('ct_2', 'b2b2b2')] });
+    expect(await cache.getDirectory()).toEqual({ contacts: [contact('ct_2', 'b2b2b2')], channels: [channel('ch_1', 'Crew')] });
+  });
+
+  it('nothing cached reads as empty lists', async () => {
+    const { cache } = await open();
+    expect(await cache.getDirectory()).toEqual({ contacts: [], channels: [] });
+  });
+});
 
 describe('reconnect', () => {
   it('refreshes cached conversations and messages from the Backend snapshot', async () => {

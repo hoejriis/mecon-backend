@@ -2,6 +2,7 @@
 // Contract fixtures (contracts/reader-api/v1/fixtures) are reused where they exist.
 import type {
   Channel,
+  Contact,
   Conversation,
   Identity,
   Message,
@@ -56,6 +57,12 @@ export const olderConversation: Conversation = {
   unread_count: 0,
   last_activity_at: '2030-01-14T09:00:00Z',
 };
+
+/** Backend contacts: the DM peer is Alice (key prefix a1a1a1 on the synthetic device), the older peer is Bob. */
+export const contacts: Contact[] = [
+  { id: 'contact_demo_0001', display_name: 'Demo Peer', public_key_prefix: 'a1a1a1', kind: 'companion', last_heard_at: '2030-01-15T09:58:00Z' },
+  { id: 'contact_demo_0003', display_name: 'Older Peer', public_key_prefix: 'b2b2b2', kind: 'companion', last_heard_at: null },
+];
 
 export const channels: Channel[] = [
   { id: 'chan_demo_0001', name: 'Demo Channel', visibility: 'public' },

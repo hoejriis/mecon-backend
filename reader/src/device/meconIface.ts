@@ -47,8 +47,11 @@ export interface Envelope {
 const utf8 = new TextEncoder();
 const utf8d = new TextDecoder();
 
-export function buildRequest(id: string, op: 'hello' | 'status.get' | 'clock.get'): string {
-  return JSON.stringify({ v: 1, id, op });
+/** Args of the one paged read the Reader builds: the first slot to look at (channel.list `cursor`). */
+export type ReadArgs = { cursor: number };
+
+export function buildRequest(id: string, op: 'hello' | 'status.get' | 'clock.get' | 'channel.list', args?: ReadArgs): string {
+  return JSON.stringify(args ? { v: 1, id, op, args } : { v: 1, id, op });
 }
 
 /** `mecon> {json}` plus CR. One write. */

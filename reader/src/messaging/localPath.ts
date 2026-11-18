@@ -9,6 +9,10 @@
  *  - Bluetooth / USB: a DeviceSession is connected and ready, its detected capabilities include
  *    the send operation for the target kind, and the device is the sending identity's own
  *    (its public key starts with the identity's `public_key_prefix`).
+ * A local path is offered only when the device mapping (device/destinations.ts) finds this Backend
+ * target on the device: exactly one device contact for a DM (or several, when the user must pick
+ * among those and only those), exactly one device channel for a channel. A target that is not on the
+ * device, or not unambiguous, gets no local path and the reason is shown (`localUnavailable`).
  * Whether the offline rules permit a local send is a separate, later decision (the guard); a path
  * the guard blocks is still offered, with the reason, so the user is told why.
  *
@@ -17,6 +21,7 @@
 import type { Identity, Target } from '../api/types';
 import type { AttemptFacts } from '../ble/adapter';
 import type { Capability } from '../device/detect';
+import type { BackendDest, MapOutcome } from '../device/destinations';
 import type { DeviceSession, LocalSendAuth, SessionResult, SessionSnapshot } from '../device/session';
 import { PATH_LABEL, type LocalPath, type SendPath } from './attemptStatus';
 
@@ -24,11 +29,8 @@ export { PATH_LABEL };
 export type { LocalPath, SendPath };
 
 /** The slice of a DeviceSession the messaging layer uses. A DeviceSession satisfies it. */
-export type LocalDeviceHandle = Pick<DeviceSession, 'path' | 'subscribe' | 'getSnapshot' | 'can' | 'sendDirect' | 'sendChannel' | 'connect' | 'reconnect' | 'disconnect'>;
+export type LocalDeviceHandle = Pick<DeviceSession, 'path' | 'subscribe' | 'getSnapshot' | 'can' | 'mapDestination' | 'sendDirect' | 'sendChannel' | 'connect' | 'reconnect' | 'disconnect'>;
 export type { AttemptFacts, LocalSendAuth, SessionResult, SessionSnapshot };
-
-/** Why a channel target has no local path. Shown as is. */
-export const CHANNEL_LOCAL_UNAVAILABLE = "Sending to a channel through a device needs the device's channel list (coming soon)";
 
 export const sendCapability = (kind: Target['kind']): Capability => (kind === 'contact' ? 'message.send.direct' : 'message.send.channel');
 
@@ -41,14 +43,18 @@ export interface DeviceView {
   capabilities: readonly Capability[];
   /** The device's own public key (hex), from its self-info; null until known. */
   ownKey: string | null;
+  /** What the device mapping says about the Backend target of this send; null when no mapping was asked or the device is not ready. */
+  destination: MapOutcome | null;
 }
 
 const SEND_CAPS: readonly Capability[] = ['message.send.direct', 'message.send.channel'];
 
-export function deviceView(h: LocalDeviceHandle): DeviceView {
+export function deviceView(h: LocalDeviceHandle, dest: BackendDest | null = null, pick?: string): DeviceView {
   const s = h.getSnapshot();
   const connected = s.link === 'connected' && s.phase === 'ready';
+  const need: Capability | null = dest ? (dest.kind === 'contact' ? 'message.send.direct' : 'message.send.channel') : null;
   return {
+    destination: dest && need && connected && h.can(need) ? h.mapDestination(dest, pick) : null,
     path: h.path,
     connected,
     capabilities: connected ? [...(s.detected?.capabilities ?? []).filter((c) => !SEND_CAPS.includes(c)), ...SEND_CAPS.filter((c) => h.can(c))] : [],
@@ -74,12 +80,28 @@ export interface PathInput {
 export function availablePaths(i: PathInput): SendPath[] {
   const out: SendPath[] = [];
   if (i.sendState === 'available' && i.online) out.push('backend');
-  // A local channel send needs the device's channel slot, which the Reader cannot yet learn: not offered.
-  if (i.target.kind === 'channel') return out;
   const need = sendCapability(i.target.kind);
   for (const path of ['ble', 'usb'] as const) {
     const d = i.devices.find((x) => x.path === path);
-    if (d && d.connected && d.capabilities.includes(need) && ownsIdentity(d, i.identity)) out.push(path);
+    if (!d || !d.connected || !d.capabilities.includes(need) || !ownsIdentity(d, i.identity)) continue;
+    // Only a target the device mapping found is offered. For a contact, several matches are offered so
+    // the user can choose among exactly those; nothing else (zero, unknown, a channel that is not
+    // unique) has a local path.
+    const m = d.destination;
+    if (m && (m.ok || (i.target.kind === 'contact' && m.code === 'ambiguous'))) out.push(path);
+  }
+  return out;
+}
+
+/** For each local path that could carry this send but for the mapping: the truthful reason it is not offered. */
+export function localUnavailable(i: PathInput): Array<{ path: LocalPath; reason: string }> {
+  const need = sendCapability(i.target.kind);
+  const out: Array<{ path: LocalPath; reason: string }> = [];
+  for (const path of ['ble', 'usb'] as const) {
+    const d = i.devices.find((x) => x.path === path);
+    if (!d || !d.connected || !d.capabilities.includes(need) || !ownsIdentity(d, i.identity)) continue;
+    const m = d.destination;
+    if (m && !m.ok && !(i.target.kind === 'contact' && m.code === 'ambiguous')) out.push({ path, reason: m.reason });
   }
   return out;
 }

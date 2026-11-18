@@ -29,7 +29,9 @@ export type BleErrorCode =
   /** The link's trust does not allow this class of operation (a BLE link of unknown PIN: reads only). */
   | 'link_not_trusted'
   /** The connected device is not the one the sending identity belongs to (its own public key does not match). */
-  | 'wrong_device';
+  | 'wrong_device'
+  /** The destination (contact key or channel slot) was not chosen by the matcher for this exact Backend target, or no longer matches the device. Nothing was written. */
+  | 'unmapped_destination';
 
 export class BleError extends Error {
   constructor(

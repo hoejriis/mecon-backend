@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import type { Identity, Target } from '../api/types';
 import { useDevices } from '../device/DeviceContext';
+import type { BackendDest, MapOutcome } from '../device/destinations';
 import { PATH_LABEL, pathOf, type LocalAttempt, type LocalTarget, type SendPath } from '../messaging/attemptStatus';
-import { CHANNEL_LOCAL_UNAVAILABLE, availablePaths, defaultPath, deviceView, type LocalDeviceHandle } from '../messaging/localPath';
+import { destFor, type Directory } from '../messaging/directory';
+import { availablePaths, defaultPath, deviceView, localUnavailable, type LocalDeviceHandle } from '../messaging/localPath';
 import { preflightLocal } from '../messaging/localSend';
 import type { SendRoute } from '../messaging/MessagingContext';
 
@@ -15,8 +17,15 @@ export interface SendPathState {
   pickedGone: SendPath | null;
   setPath(p: SendPath): void;
   to: LocalTarget;
+  /** Chooses among device contacts that already match the Backend contact's key prefix. Never names a contact by itself. */
   setContactKey(k: string): void;
   handle: LocalDeviceHandle | null;
+  /** The Backend side of this send, for the device mapping (also passed to the send itself). */
+  dest: BackendDest;
+  /** What the device mapping says about the chosen local path's device; null when the path is the Backend or none. */
+  mapping: MapOutcome | null;
+  /** Connected, own devices that cannot carry this send because the target is not (uniquely) on them, with the reason. */
+  unavailable: Array<{ path: 'ble' | 'usb'; reason: string }>;
   /** The route to hand to send(); null while no usable path is chosen. */
   route: SendRoute | null;
   /** Why a local send cannot start now (the guard's or the device's truthful reason), or null. */
@@ -33,13 +42,17 @@ export function useSendPath(i: {
   target: Target;
   online: boolean;
   sendState: 'available' | 'unavailable' | 'forbidden';
+  /** What the Reader holds about Backend contacts, channels and conversations (live online, cached offline). */
+  directory: Directory;
   initial?: { path: SendPath; to?: LocalTarget };
 }): SendPathState {
   const devices = useDevices();
   const [picked, setPicked] = useState<SendPath | null>(i.initial?.path ?? null);
   const [contactKey, setContactKey] = useState(i.initial?.to?.contactKey ?? '');
-  const views = Object.values(devices.handles).map(deviceView);
-  const avail = availablePaths({ sendState: i.sendState, online: i.online, devices: views, target: i.target, identity: i.identity });
+  const dest = destFor(i.directory, i.target, i.identity);
+  const views = Object.values(devices.handles).map((h) => deviceView(h, dest, contactKey || undefined));
+  const input = { sendState: i.sendState, online: i.online, devices: views, target: i.target, identity: i.identity };
+  const avail = availablePaths(input);
   const wanted = picked ?? defaultPath(avail, i.online);
   const path = wanted && avail.includes(wanted) ? wanted : null;
   const handle = path && path !== 'backend' ? (devices.handles[path] ?? null) : null;
@@ -49,7 +62,7 @@ export function useSendPath(i: {
   if (path === 'backend') route = { path: 'backend' };
   else if (path) {
     route = { path, to };
-    const pre = preflightLocal(handle, i.identity, i.target, to);
+    const pre = preflightLocal(handle, i.identity, i.target, to, dest);
     if (!pre.ok) blocked = pre.reason;
   }
   return {
@@ -60,6 +73,9 @@ export function useSendPath(i: {
     to,
     setContactKey,
     handle,
+    dest,
+    mapping: path && path !== 'backend' ? (views.find((v) => v.path === path)?.destination ?? null) : null,
+    unavailable: localUnavailable(input),
     route,
     blocked,
   };
@@ -69,8 +85,8 @@ export function useSendPath(i: {
 export function SendPathControls({ s, target, idPrefix }: { s: SendPathState; target: Target; idPrefix: string }) {
   const devices = useDevices();
   const [connectMsg, setConnectMsg] = useState<string | null>(null);
-  const contacts = s.handle?.getSnapshot().companion?.contacts ?? [];
   const local = s.path && s.path !== 'backend';
+  const m = s.mapping;
   return (
     <div className="send-path" data-testid="send-path">
       {s.avail.length > 1 || (s.avail.length > 0 && s.pickedGone) ? (
@@ -97,24 +113,31 @@ export function SendPathControls({ s, target, idPrefix }: { s: SendPathState; ta
           {PATH_LABEL[s.pickedGone]} is no longer available. Choose a path to send; nothing is sent another way for you.
         </p>
       )}
-      {local && target.kind === 'contact' && (
+      {local && m?.ok && (
+        <p className="state-meta" data-testid="device-destination">
+          {m.destination.kind === 'direct'
+            ? `Device contact: ${m.destination.name} (${m.destination.contactKey.slice(0, 6)}), found by the contact's key prefix.`
+            : `Device channel: ${m.destination.name}, found on your device.`}
+        </p>
+      )}
+      {local && target.kind === 'contact' && m && !m.ok && m.code === 'ambiguous' && (
         <label className="composer-field">
           Device contact
           <select value={s.to.contactKey ?? ''} onChange={(e) => s.setContactKey(e.target.value)}>
-            <option value="">Choose a contact on the device</option>
-            {contacts.map((c) => (
+            <option value="">{m.reason}</option>
+            {m.candidates.map((c) => (
               <option key={c.publicKey} value={c.publicKey}>
-                {c.name} ({c.publicKey.slice(0, 6)})
+                {c.name} ({c.publicKey.slice(0, 12)})
               </option>
             ))}
           </select>
         </label>
       )}
-      {target.kind === 'channel' && (
-        <p className="state-meta" data-testid="channel-local-unavailable">
-          {CHANNEL_LOCAL_UNAVAILABLE}.
+      {s.unavailable.map((u) => (
+        <p key={u.path} className="state-meta" data-testid={`local-unavailable-${u.path}`}>
+          Not offered through {PATH_LABEL[u.path]}: {u.reason}
         </p>
-      )}
+      ))}
       {local && s.blocked && (
         <p className="state-meta" role="alert" data-testid="local-blocked">
           Not allowed: {s.blocked}

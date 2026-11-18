@@ -14,9 +14,10 @@
 import type { Identity, Target } from '../api/types';
 import { OfflineSendBlocked, offlineSendGuard } from '../offline/gate';
 import { isLocalPath, type LocalAttempt, type LocalFacts, type LocalPath, type LocalTarget } from './attemptStatus';
-import { CHANNEL_LOCAL_UNAVAILABLE, deviceView, leaseOp, ownsIdentity, sendCapability, type AttemptFacts, type LocalDeviceHandle, type LocalSendAuth } from './localPath';
+import type { BackendDest, DestinationToken } from '../device/destinations';
+import { deviceView, leaseOp, ownsIdentity, sendCapability, type AttemptFacts, type LocalDeviceHandle, type LocalSendAuth } from './localPath';
 
-export type Preflight = { ok: true; auth: LocalSendAuth } | { ok: false; reason: string };
+export type Preflight = { ok: true; auth: LocalSendAuth; mapping: DestinationToken } | { ok: false; reason: string };
 
 export function authFor(identity: Identity, target: Target): LocalSendAuth {
   return {
@@ -25,12 +26,12 @@ export function authFor(identity: Identity, target: Target): LocalSendAuth {
     deviceId: identity.device_id ?? '',
     ...(target.kind === 'channel' ? { channelId: target.id } : {}),
     identityKeyPrefix: identity.public_key_prefix,
+    targetId: target.id,
   };
 }
 
 /** Everything that can be decided without writing: device, capability, identity, destination, guard. */
-export function preflightLocal(handle: LocalDeviceHandle | null, identity: Identity | null, target: Target, to: LocalTarget): Preflight {
-  if (target.kind === 'channel') return { ok: false, reason: CHANNEL_LOCAL_UNAVAILABLE };
+export function preflightLocal(handle: LocalDeviceHandle | null, identity: Identity | null, target: Target, to: LocalTarget, dest: BackendDest): Preflight {
   if (!identity) return { ok: false, reason: 'No sending identity is selected.' };
   if (!handle) return { ok: false, reason: 'No device is connected.' };
   const view = deviceView(handle);
@@ -39,11 +40,13 @@ export function preflightLocal(handle: LocalDeviceHandle | null, identity: Ident
     return { ok: false, reason: `This device cannot send ${target.kind === 'contact' ? 'direct' : 'channel'} messages.` };
   }
   if (!ownsIdentity(view, identity)) return { ok: false, reason: 'The connected device is not the one this identity belongs to.' };
-  if (target.kind === 'contact' && !to.contactKey) return { ok: false, reason: 'Choose which device contact to send to.' };
+  // The destination comes only from the device mapping; there is no slot or key to type.
+  const m = handle.mapDestination(dest, to.contactKey);
+  if (!m.ok) return { ok: false, reason: m.code === 'ambiguous' ? 'Choose which of the matching device contacts to send to.' : m.reason };
   const auth = authFor(identity, target);
   const d = offlineSendGuard(auth);
   if (!d.allowed) return { ok: false, reason: d.reason };
-  return { ok: true, auth };
+  return { ok: true, auth, mapping: m.token };
 }
 
 const toFacts = (f: AttemptFacts): LocalFacts => ({
@@ -91,7 +94,7 @@ function refusal(e: unknown): Partial<LocalAttempt> {
  * fresh local attempt (phase `posting`). Resolves after the first outcome; the recipient ACK or
  * its timeout arrive later through `onUpdate`. Never retries and never falls back to anything.
  */
-export async function runLocalSend(handle: LocalDeviceHandle, a: LocalAttempt, identity: Identity, onUpdate: (patch: Partial<LocalAttempt>) => void): Promise<void> {
+export async function runLocalSend(handle: LocalDeviceHandle, a: LocalAttempt, identity: Identity, dest: BackendDest, onUpdate: (patch: Partial<LocalAttempt>) => void): Promise<void> {
   const path: LocalPath | undefined = isLocalPath(a.path) ? a.path : undefined;
   if (!path || handle.path !== path) return onUpdate({ phase: 'rejected', error: { status: 0, code: 'bad_argument', message: 'The device does not match the chosen path.', requestId: null, keyConflict: false } });
   const { target } = a.request;
@@ -106,10 +109,15 @@ export async function runLocalSend(handle: LocalDeviceHandle, a: LocalAttempt, i
     if (isFinal(f)) off?.();
   });
   try {
-    const to = a.localTarget ?? {};
-    // No UI feeds a channel slot: a channel target never reaches the device from here.
-    if (target.kind !== 'contact') return onUpdate({ phase: 'rejected', error: { status: 0, code: 'channel_unavailable', message: CHANNEL_LOCAL_UNAVAILABLE, requestId: null, keyConflict: false } });
-    const facts = await handle.sendDirect({ ...ids, contactKey: to.contactKey ?? '', text: a.request.content.text, auth });
+    // The destination is mapped again here, at the send, from the device's own current tables. It is
+    // never taken from the saved attempt, so an old record cannot name a key or slot.
+    const m = handle.mapDestination(dest, a.localTarget?.contactKey);
+    if (!m.ok) {
+      off();
+      return onUpdate({ phase: 'rejected', error: { status: 0, code: 'unmapped_destination', message: m.reason, requestId: null, keyConflict: false } });
+    }
+    const text = a.request.content.text;
+    const facts = await (target.kind === 'contact' ? handle.sendDirect({ ...ids, text, auth, mapping: m.token }) : handle.sendChannel({ ...ids, text, auth, mapping: m.token }));
     onUpdate(patchFromFacts(facts));
     // The adapter keeps updating its own copy (the ACK, its timeout); follow it until it is final.
     const latest = follow() ?? facts;

@@ -1,22 +1,20 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { SYNTHETIC_KEYS } from '../ble/fixtures/frames';
-import { authFor, companionRig, repeaterRig, wait } from './rig.test-util';
+import { authFor, companionRig, mapChannel, tryMapDirect, repeaterRig, wait } from './rig.test-util';
 import type { DeviceSession } from './session';
 
 const S = 'SIMULATED — not hardware verified: USB device session';
-const alice = SYNTHETIC_KEYS.alice;
 const sessions: DeviceSession[] = [];
 afterEach(() => sessions.splice(0).forEach((s) => s.dispose()));
 
 async function ready(o: Parameters<typeof companionRig>[0] = {}) {
-  const r = companionRig(o);
+  const r = companionRig({ ...o, mock: { channels: true, ...o.mock } });
   sessions.push(r.session);
   const res = await r.session.connect();
   expect(res).toEqual({ ok: true, error: null });
   return r;
 }
 const att = (r: { session: DeviceSession }, id: string) => r.session.getSnapshot().companion!.attempts.find((a) => a.clientAttemptId === id)!;
-const dm = (id: string, draft = 'd1') => ({ clientDraftId: draft, clientAttemptId: id, contactKey: alice, text: 'hello dm', auth: authFor() });
+const dm = (s: DeviceSession, id: string, draft = 'd1') => ({ clientDraftId: draft, clientAttemptId: id, mapping: tryMapDirect(s), text: 'hello dm', auth: authFor() });
 
 describe(`${S}: connect, hello, contacts, send`, () => {
   it('connects, identifies a MECON Companion, runs the Companion hello and reads contacts over USB', async () => {
@@ -33,7 +31,7 @@ describe(`${S}: connect, hello, contacts, send`, () => {
 
   it('a DM over USB: attempt records path usb; accepted, then ACK; RF transmit stays not observed', async () => {
     const r = await ready();
-    const a = await r.session.sendDirect(dm('a1'));
+    const a = await r.session.sendDirect(dm(r.session, 'a1'));
     expect(a.path).toBe('usb');
     expect(a.deviceAccepted).toBe(true);
     expect(a.rfTransmitted).toBe(false); // accepted is not transmitted
@@ -46,7 +44,7 @@ describe(`${S}: connect, hello, contacts, send`, () => {
 
   it('a channel message gets accepted and never an ACK', async () => {
     const r = await ready();
-    const a = await r.session.sendChannel({ clientDraftId: 'd', clientAttemptId: 'c1', channelIndex: 0, text: 'hi all', auth: authFor('send.channel') });
+    const a = await r.session.sendChannel({ clientDraftId: 'd', clientAttemptId: 'c1', mapping: mapChannel(r.session), text: 'hi all', auth: authFor('send.channel') });
     expect(a).toMatchObject({ path: 'usb', deviceAccepted: true, dmAck: false, rfTransmitted: false });
   });
 
@@ -60,7 +58,7 @@ describe(`${S}: connect, hello, contacts, send`, () => {
   it('duplicate replies do not double count and do not break the send', async () => {
     const r = await ready();
     r.mock.faults.duplicateNotifications = true;
-    const a = await r.session.sendDirect(dm('dup'));
+    const a = await r.session.sendDirect(dm(r.session, 'dup'));
     expect(a.deviceAccepted).toBe(true);
     await wait(30);
     expect(att(r, 'dup').dmAck).toBe(true);
@@ -72,7 +70,7 @@ describe(`${S}: connect, hello, contacts, send`, () => {
     sessions.push(r.session);
     r.peer.faults = { splitBytes: 1, coalesce: false, garbageBeforeFrame: [0x00, 0x41, 0xff], oversizeLengthNoise: true };
     expect(await r.session.connect()).toEqual({ ok: true, error: null });
-    const a = await r.session.sendDirect(dm('noisy'));
+    const a = await r.session.sendDirect(dm(r.session, 'noisy'));
     expect(a.deviceAccepted).toBe(true);
     await wait(60);
     expect(att(r, 'noisy').dmAck).toBe(true);
@@ -92,7 +90,7 @@ describe(`${S}: unplug and send safety`, () => {
     it(`unplug mid-send (${when}): unknown, one write, never resent, state unplugged, not rerouted`, async () => {
       const r = await ready();
       r.mock.faults.disconnectOnSend = when;
-      const a = await r.session.sendDirect(dm('u1'));
+      const a = await r.session.sendDirect(dm(r.session, 'u1'));
       expect(a.unknown).toBe(true);
       expect(a.writeIssued).toBe(true);
       expect(a.deviceAccepted).toBe(false);
@@ -109,7 +107,7 @@ describe(`${S}: unplug and send safety`, () => {
       expect(r.mock.rf).toHaveLength(when === 'after_device' ? 1 : 0);
       expect(r.backend.post).not.toHaveBeenCalled();
       // a new user action is a new attempt and writes once more
-      await r.session.sendDirect(dm('u2'));
+      await r.session.sendDirect(dm(r.session, 'u2'));
       expect(r.mock.sendWrites()).toHaveLength(2);
     });
   }
@@ -117,7 +115,7 @@ describe(`${S}: unplug and send safety`, () => {
   it('a send reply that never arrives is unknown, written once, link reset', async () => {
     const r = await ready();
     r.mock.faults.dropNextSendReply = true;
-    const a = await r.session.sendDirect(dm('lost'));
+    const a = await r.session.sendDirect(dm(r.session, 'lost'));
     expect(a).toMatchObject({ unknown: true, reason: 'response_timeout' });
     expect(r.mock.sendWrites()).toHaveLength(1);
   });
@@ -125,7 +123,7 @@ describe(`${S}: unplug and send safety`, () => {
   it('a port write that hangs is unknown after the bounded wait, not an endless await', async () => {
     const r = await ready();
     r.h.faults.hangNextWrite = true;
-    const a = await r.session.sendDirect(dm('hang'));
+    const a = await r.session.sendDirect(dm(r.session, 'hang'));
     expect(a.unknown).toBe(true);
     expect(r.mock.sendWrites()).toHaveLength(0); // the bytes never reached the device; the Reader still cannot tell, so it says unknown
   });
@@ -135,7 +133,7 @@ describe(`${S}: unplug and send safety`, () => {
     r.h.unplug();
     await wait(30);
     expect(r.session.getSnapshot().link).toBe('unplugged');
-    await expect(r.session.sendDirect(dm('x'))).rejects.toMatchObject({ code: 'unsupported_capability' });
+    await expect(r.session.sendDirect(dm(r.session, 'x'))).rejects.toMatchObject({ code: 'unsupported_capability' });
     expect(r.mock.sendWrites()).toHaveLength(0);
   });
 });
@@ -218,8 +216,8 @@ describe(`${S}: capabilities, not roles, gate features`, () => {
     expect(r.session.can('status.read')).toBe(true);
     expect(r.session.can('message.send.direct')).toBe(false);
     expect(r.session.getSnapshot().companion).toBeNull();
-    await expect(r.session.sendDirect(dm('r1'))).rejects.toMatchObject({ code: 'unsupported_capability' });
-    await expect(r.session.sendChannel({ clientDraftId: 'd', clientAttemptId: 'c', channelIndex: 0, text: 'x', auth: authFor('send.channel') })).rejects.toMatchObject({ code: 'unsupported_capability' });
+    await expect(r.session.sendDirect(dm(r.session, 'r1'))).rejects.toMatchObject({ code: 'unsupported_capability' });
+    await expect(r.session.sendChannel({ clientDraftId: 'd', clientAttemptId: 'c', mapping: {} as never, text: 'x', auth: authFor('send.channel') })).rejects.toMatchObject({ code: 'unsupported_capability' });
     expect(r.peer.lines.length).toBe(before);
     expect(r.peer.executed).toEqual([]);
   });

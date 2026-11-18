@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Identity, Message, Target } from '../api/types';
+import type { Channel, Contact, Identity, Message, Target } from '../api/types';
 import { Header } from '../components/Header';
 import { SkipLink } from '../components/SkipLink';
 import { describeAttempt, isUncertainAttempt, pathOf, type LocalAttempt, type LocalPath, type LocalTarget } from '../messaging/attemptStatus';
+import type { Directory } from '../messaging/directory';
 import { preflightLocal, runLocalSend } from '../messaging/localSend';
 import { newAttemptId, newDraftId } from '../messaging/sendFlow';
 import { SendPathControls, useSendPath, viaLabel } from '../routes/SendPathControls';
@@ -68,17 +69,19 @@ function Unlocked() {
   const [drafts, setDrafts] = useState<DraftRecord[]>([]);
   const [attempts, setAttempts] = useState<AttemptRecord[]>([]);
   const [identities, setIdentities] = useState<Identity[]>([]);
+  const [dir, setDir] = useState<{ contacts: Contact[]; channels: Channel[] }>({ contacts: [], channels: [] });
 
   useEffect(() => {
     if (!cache) return;
     let live = true;
     void (async () => {
-      const [c, d, a, ids] = await Promise.all([cache.listConversations(), cache.listDrafts(), cache.listAttempts(), cache.getIdentities()]);
+      const [c, d, a, ids, cached] = await Promise.all([cache.listConversations(), cache.listDrafts(), cache.listAttempts(), cache.getIdentities(), cache.getDirectory()]);
       if (live) {
         setConvs(c);
         setDrafts(d);
         setAttempts(a);
         setIdentities(ids);
+        setDir(cached);
       }
     })().catch(() => undefined);
     return () => {
@@ -152,6 +155,7 @@ function Unlocked() {
           conversationTarget={openConv.conversation.target}
           identity={identities.find((i) => i.id === openConv.conversation.identity_id) ?? null}
           writable={!readOnly}
+          directory={{ contacts: dir.contacts, channels: dir.channels, conversations: (convs ?? []).map((x) => x.conversation) }}
           attempts={attempts.filter((a) => targetKeyOf(a.request.target) === targetKeyOf(openConv.conversation.target))}
           onAttempt={(a) => {
             setAttempts((all) => (all.some((x) => x.clientAttemptId === a.clientAttemptId) ? all.map((x) => (x.clientAttemptId === a.clientAttemptId ? a : x)) : [...all, a]));
@@ -193,12 +197,14 @@ function LocalSection({
   conversationTarget,
   identity,
   writable,
+  directory,
   attempts,
   onAttempt,
 }: {
   conversationTarget: Target;
   identity: Identity | null;
   writable: boolean;
+  directory: Directory;
   attempts: LocalAttempt[];
   onAttempt: (a: LocalAttempt) => void;
 }) {
@@ -208,11 +214,11 @@ function LocalSection({
       {attempts.length > 0 && (
         <ul className="msg-list" aria-label="Device sends">
           {attempts.map((a) => (
-            <OfflineAttempt key={a.clientAttemptId} a={a} identity={identity} writable={writable} onAttempt={onAttempt} />
+            <OfflineAttempt key={a.clientAttemptId} a={a} identity={identity} directory={directory} writable={writable} onAttempt={onAttempt} />
           ))}
         </ul>
       )}
-      {writable && <OfflineComposer target={conversationTarget} identity={identity} onAttempt={onAttempt} />}
+      {writable && <OfflineComposer target={conversationTarget} identity={identity} directory={directory} onAttempt={onAttempt} />}
     </section>
   );
 }
@@ -234,11 +240,11 @@ function newLocalAttempt(identity: Identity, target: Target, text: string, draft
   };
 }
 
-function OfflineComposer({ target, identity, onAttempt }: { target: Target; identity: Identity | null; onAttempt: (a: LocalAttempt) => void }) {
+function OfflineComposer({ target, identity, directory, onAttempt }: { target: Target; identity: Identity | null; directory: Directory; onAttempt: (a: LocalAttempt) => void }) {
   const [text, setText] = useState('');
   const draftId = useRef(newDraftId());
   const [refusal, setRefusal] = useState<string | null>(null);
-  const path = useSendPath({ identity, target, online: false, sendState: 'unavailable' });
+  const path = useSendPath({ identity, target, online: false, sendState: 'unavailable', directory });
   return (
     <form
       className="composer"
@@ -246,7 +252,7 @@ function OfflineComposer({ target, identity, onAttempt }: { target: Target; iden
         e.preventDefault();
         const r = path.route;
         if (!r || r.path === 'backend' || !identity) return;
-        const pre = preflightLocal(path.handle, identity, target, r.to);
+        const pre = preflightLocal(path.handle, identity, target, r.to, path.dest);
         if (!pre.ok) return setRefusal(pre.reason);
         setRefusal(null);
         const a = newLocalAttempt(identity, target, text, draftId.current, r.path, r.to);
@@ -254,7 +260,7 @@ function OfflineComposer({ target, identity, onAttempt }: { target: Target; iden
         setText('');
         onAttempt(a);
         let cur = a;
-        void runLocalSend(path.handle!, a, identity, (patch) => {
+        void runLocalSend(path.handle!, a, identity, path.dest, (patch) => {
           cur = { ...cur, ...patch };
           onAttempt(cur);
         });
@@ -277,11 +283,11 @@ function OfflineComposer({ target, identity, onAttempt }: { target: Target; iden
   );
 }
 
-function OfflineAttempt({ a, identity, writable, onAttempt }: { a: LocalAttempt; identity: Identity | null; writable: boolean; onAttempt: (a: LocalAttempt) => void }) {
+function OfflineAttempt({ a, identity, directory, writable, onAttempt }: { a: LocalAttempt; identity: Identity | null; directory: Directory; writable: boolean; onAttempt: (a: LocalAttempt) => void }) {
   const v = describeAttempt(a, a.request.target.kind);
   const [confirming, setConfirming] = useState(false);
   const [blockedMsg, setBlockedMsg] = useState<string | null>(null);
-  const path = useSendPath({ identity, target: a.request.target, online: false, sendState: 'unavailable', initial: { path: pathOf(a), to: a.localTarget } });
+  const path = useSendPath({ identity, target: a.request.target, online: false, sendState: 'unavailable', directory, initial: { path: pathOf(a), to: a.localTarget } });
   const canAgain = writable && v.canSendAgain && !a.supersededBy && pathOf(a) !== 'backend';
   return (
     <li className="msg msg-out" data-path={pathOf(a)}>
@@ -320,14 +326,14 @@ function OfflineAttempt({ a, identity, writable, onAttempt }: { a: LocalAttempt;
               onClick={() => {
                 const r = path.route;
                 if (!r || r.path === 'backend' || !identity) return;
-                const pre = preflightLocal(path.handle, identity, a.request.target, r.to);
+                const pre = preflightLocal(path.handle, identity, a.request.target, r.to, path.dest);
                 if (!pre.ok) return setBlockedMsg(pre.reason);
                 // A new attempt id, the same draft id.
                 const next = newLocalAttempt(identity, a.request.target, a.request.content.text, a.draftId, r.path, r.to);
                 onAttempt({ ...a, supersededBy: next.clientAttemptId });
                 onAttempt(next);
                 let cur = next;
-                void runLocalSend(path.handle!, next, identity, (patch) => {
+                void runLocalSend(path.handle!, next, identity, path.dest, (patch) => {
                   cur = { ...cur, ...patch };
                   onAttempt(cur);
                 });

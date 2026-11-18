@@ -1,8 +1,9 @@
 import { BleError, type BleDeviceInfo, type BleTransport, type TransportSupport, type Unsubscribe } from './transport';
 import { CMD, ERR, PUSH, RESP, bytesOfHex, hexOf, KEY_PREFIX_SIZE } from './protocol';
-import { fixtureBytes, SYNTHETIC_KEYS } from './fixtures/frames';
+import { fixtureBytes } from './fixtures/frames';
 import { CMD_MECON, MeconReassembler, encodeMeconFrames, type Envelope } from '../device/meconIface';
 import { helloEnvelope } from '../device/sim/hello';
+import { DEFAULT_CONTACTS, answerList, defaultTables, type ListTables, type SimChannel, type SimContact } from '../device/sim/lists';
 
 /**
  * SIMULATED Companion (GATT peer) for the supported command subset. Everything
@@ -27,6 +28,8 @@ export interface MockFaults {
   dropNextAck: boolean;
   /** Deliver every notification twice. */
   duplicateNotifications: boolean;
+  /** The device has forgotten its contacts since the app read them: a direct send answers NOT_FOUND. */
+  forgetContacts: boolean;
 }
 
 export const NO_FAULTS = (): MockFaults => ({
@@ -36,6 +39,7 @@ export const NO_FAULTS = (): MockFaults => ({
   dropNextSendReply: false,
   dropNextAck: false,
   duplicateNotifications: false,
+  forgetContacts: false,
 });
 
 export interface RfRecord {
@@ -67,6 +71,28 @@ export interface MockCompanionOptions {
   deviceName?: string;
   /** A device that answers nothing at all, to anything: the "unknown device" case. */
   silent?: boolean;
+  /**
+   * The native contact table (what the Companion driver reads with GET_CONTACTS, and what
+   * `contact.list` answers). Default: the two fixture contacts.
+   */
+  contacts?: SimContact[];
+  /**
+   * Answer `channel.list` and `contact.list` over the interface (a MECON Companion; needs `mecon`) and
+   * list them in the hello capabilities. Give the channel table, or `true` for the default one. Absent:
+   * the device does not list them and answers `unknown-op`, like a build without them.
+   */
+  channels?: SimChannel[] | true;
+  /** Used slots per `channel.list` page (the firmware pages by 8). */
+  channelPageSize?: number;
+}
+
+/** A native contact frame (RESP_CODE_CONTACT) built from the fixture's Alice frame with another key and name. */
+function contactFrame(c: SimContact): Uint8Array {
+  const f = fixtureBytes('respContactAlice').slice();
+  f.set(bytesOfHex(c.key), 1);
+  f.fill(0, 100, 132);
+  f.set(new TextEncoder().encode(c.name).subarray(0, 31), 100);
+  return f;
 }
 
 const le32 = (n: number): Uint8Array => Uint8Array.of(n & 255, (n >>> 8) & 255, (n >>> 16) & 255, (n >>> 24) & 255);
@@ -85,6 +111,30 @@ export class MockCompanion {
   private readonly ifaceReasm = new MeconReassembler();
   /** Every 0x7F request envelope the device received (parsed). */
   readonly ifaceRequests: Envelope[] = [];
+
+  /** The tables the interface lists answer from, or null when this device does not offer them. */
+  lists(): ListTables | null {
+    if (!this.opts.channels) return null;
+    // One copy per device, so a test may change the device's tables after it connected.
+    this.tables ??= {
+      channels: (this.opts.channels === true ? defaultTables().channels : this.opts.channels).map((c) => ({ ...c })),
+      contacts: (this.opts.contacts ?? defaultTables().contacts).map((c) => ({ ...c })),
+      channelPageSize: this.opts.channelPageSize,
+    };
+    return this.tables;
+  }
+  private tables: ListTables | undefined;
+
+  /** Capabilities for hello: the configured ones plus the list operations this device answers. */
+  helloCapabilities(base?: string[]): string[] | undefined {
+    if (!this.lists()) return base;
+    const caps = base ?? ['hello', 'status.get', 'clock.get', 'config.get', 'sub.start', 'stream.health'];
+    return [...caps, ...['channel.list', 'contact.list'].filter((o) => !caps.includes(o))];
+  }
+
+  private nativeContacts(): SimContact[] {
+    return this.opts.contacts ?? DEFAULT_CONTACTS;
+  }
 
   get deviceName(): string {
     return this.opts.deviceName ?? 'MeshCore-Synthetic';
@@ -175,9 +225,15 @@ export class MockCompanion {
         this.emit(fixtureBytes('respDeviceInfo'));
         break;
       case CMD.GET_CONTACTS:
-        this.emit(fixtureBytes('respContactsStart'));
-        this.emit(fixtureBytes('respContactAlice'));
-        this.emit(fixtureBytes('respContactBob'));
+        if (!this.opts.contacts) {
+          this.emit(fixtureBytes('respContactsStart'));
+          this.emit(fixtureBytes('respContactAlice'));
+          this.emit(fixtureBytes('respContactBob'));
+          this.emit(fixtureBytes('respEndOfContacts'));
+          break;
+        }
+        this.emit(Uint8Array.of(RESP.CONTACTS_START, ...le32(this.nativeContacts().length)));
+        for (const c of this.nativeContacts()) this.emit(contactFrame(c));
         this.emit(fixtureBytes('respEndOfContacts'));
         break;
       case CMD.SYNC_NEXT_MESSAGE: {
@@ -206,16 +262,16 @@ export class MockCompanion {
     if (env.op === 'hello') {
       reply = this.opts.helloRefused
         ? { v: 1, id, status: 'refused', error: 'untrusted-transport' }
-        : helloEnvelope(id, this.opts.helloRole ?? 'companion', { capabilities: this.opts.capabilities, firmware: this.opts.firmware, hardware: this.opts.hardware });
+        : helloEnvelope(id, this.opts.helloRole ?? 'companion', { capabilities: this.helloCapabilities(this.opts.capabilities), firmware: this.opts.firmware, hardware: this.opts.hardware });
     } else if (env.op === 'status.get') reply = { v: 1, id, status: 'ok', result: { uptime_s: 12 } };
     else if (env.op === 'clock.get') reply = { v: 1, id, status: 'ok', result: { epoch: null } };
-    else reply = { v: 1, id, status: 'unknown-op' };
+    else reply = (this.lists() ? answerList(env, this.lists()!) : null) ?? { v: 1, id, status: 'unknown-op' };
     for (const fr of encodeMeconFrames(f[1]!, JSON.stringify(reply))) this.emit(fr);
   }
 
   private onSendDirect(f: Uint8Array): void {
     const prefix = hexOf(f.subarray(7, 13));
-    const known = [SYNTHETIC_KEYS.alice, SYNTHETIC_KEYS.bob].some((k) => k.startsWith(prefix));
+    const known = !this.faults.forgetContacts && this.nativeContacts().some((c) => c.key.startsWith(prefix));
     if (!known) {
       this.emit(Uint8Array.of(RESP.ERR, ERR.NOT_FOUND));
       return;

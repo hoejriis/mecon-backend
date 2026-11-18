@@ -2,12 +2,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { OfflineGate, OfflineSendBlocked, offlineSendGuard, registerGate } from '../offline/gate';
 import { expiredPayload, leaseSource } from '../offline/leaseSource.test-util';
 import { leasePayload } from '../offline/testkit';
-import { authFor, companionRig } from './rig.test-util';
+import { authFor, companionRig, mapChannel, mapDirect } from './rig.test-util';
 import type { DeviceSession } from './session';
-import { SYNTHETIC_KEYS } from '../ble/fixtures/frames';
 
 const S = 'SIMULATED — not hardware verified: offline gate on local sends';
-const alice = SYNTHETIC_KEYS.alice;
 const sessions: DeviceSession[] = [];
 afterEach(() => {
   sessions.splice(0).forEach((s) => s.dispose());
@@ -24,13 +22,13 @@ const lease = (over: Parameters<typeof leasePayload>[0] = {}) =>
   });
 
 async function ready() {
-  const r = companionRig();
+  const r = companionRig({ mock: { channels: true } });
   sessions.push(r.session);
   expect(await r.session.connect()).toEqual({ ok: true, error: null });
   return r;
 }
-const dm = (id: string, auth = authFor()) => ({ clientDraftId: 'd1', clientAttemptId: id, contactKey: alice, text: 'hello dm', auth });
-const ch = (id: string, auth = authFor('send.channel')) => ({ clientDraftId: 'd1', clientAttemptId: id, channelIndex: 0, text: 'hi all', auth });
+const dm = (s: DeviceSession, id: string, auth = authFor()) => ({ clientDraftId: 'd1', clientAttemptId: id, mapping: mapDirect(s), text: 'hello dm', auth });
+const ch = (s: DeviceSession, id: string, auth = authFor('send.channel')) => ({ clientDraftId: 'd1', clientAttemptId: id, mapping: mapChannel(s), text: 'hi all', auth });
 
 function offline(source: ReturnType<typeof leaseSource> | null): OfflineGate {
   const g = new OfflineGate(false);
@@ -64,21 +62,21 @@ describe(`${S}: every gate reason refuses before a single byte is written`, () =
     it(`a DM while offline is refused: ${name}`, async () => {
       const r = await ready();
       setup();
-      await expectRefusedWithoutWriting(r, () => r.session.sendDirect(dm('x')), reason);
+      await expectRefusedWithoutWriting(r, () => r.session.sendDirect(dm(r.session, 'x')), reason);
     });
   }
 
   it('a channel send while offline is refused when the channel is not on the lease', async () => {
     const r = await ready();
     offline(leaseSource('valid', lease({ channels: ['some_other_channel'] })));
-    await expectRefusedWithoutWriting(r, () => r.session.sendChannel(ch('c1')), /channel is not on your offline lease/);
+    await expectRefusedWithoutWriting(r, () => r.session.sendChannel(ch(r.session, 'c1')), /channel is not on your offline lease/);
   });
 
   it('a channel send must name its channel, or it is refused (an unnamed channel cannot be checked)', async () => {
     const r = await ready();
     offline(leaseSource('valid', lease()));
     const before = r.mock.writes.length;
-    await expect(r.session.sendChannel(ch('c2', authFor('send.channel', { channelId: undefined })))).rejects.toMatchObject({ code: 'bad_argument' });
+    await expect(r.session.sendChannel(ch(r.session, 'c2', authFor('send.channel', { channelId: undefined })))).rejects.toMatchObject({ code: 'bad_argument' });
     expect(r.mock.writes.length).toBe(before);
   });
 
@@ -86,7 +84,7 @@ describe(`${S}: every gate reason refuses before a single byte is written`, () =
     const r = await ready();
     offline(leaseSource('valid', lease()));
     const before = r.mock.writes.length;
-    await expect(r.session.sendDirect(dm('x', authFor('send.channel')))).rejects.toMatchObject({ code: 'bad_argument' });
+    await expect(r.session.sendDirect(dm(r.session, 'x', authFor('send.channel')))).rejects.toMatchObject({ code: 'bad_argument' });
     expect(r.mock.writes.length).toBe(before);
   });
 });
@@ -95,7 +93,7 @@ describe(`${S}: a caller that skips the UI is refused the same way`, () => {
   it('calling the session directly, offline with no lease, writes nothing (no UI involved)', async () => {
     const r = await ready();
     offline(leaseSource('missing'));
-    await expectRefusedWithoutWriting(r, () => r.session.sendDirect(dm('bypass')), /No offline lease/);
+    await expectRefusedWithoutWriting(r, () => r.session.sendDirect(dm(r.session, 'bypass')), /No offline lease/);
   });
 
   it('with no gate registered at all, an offline browser is blocked (the default is closed, not open)', async () => {
@@ -104,7 +102,7 @@ describe(`${S}: a caller that skips the UI is refused the same way`, () => {
     const spy = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
     try {
       expect(offlineSendGuard(authFor()).allowed).toBe(false);
-      await expectRefusedWithoutWriting(r, () => r.session.sendDirect(dm('nogate')), /locked/i);
+      await expectRefusedWithoutWriting(r, () => r.session.sendDirect(dm(r.session, 'nogate')), /locked/i);
     } finally {
       spy.mockRestore();
     }
@@ -115,9 +113,9 @@ describe(`${S}: what is permitted`, () => {
   it('offline with a valid lease that names this operation, identity, device and channel: the DM and the channel send are written once each', async () => {
     const r = await ready();
     offline(leaseSource('valid', lease()));
-    const a = await r.session.sendDirect(dm('ok1'));
+    const a = await r.session.sendDirect(dm(r.session, 'ok1'));
     expect(a).toMatchObject({ path: 'usb', deviceAccepted: true, writeIssued: true });
-    const c = await r.session.sendChannel(ch('okc'));
+    const c = await r.session.sendChannel(ch(r.session, 'okc'));
     expect(c).toMatchObject({ deviceAccepted: true });
     expect(r.mock.sendWrites()).toHaveLength(2);
     expect(r.backend.post).not.toHaveBeenCalled();
@@ -128,7 +126,7 @@ describe(`${S}: what is permitted`, () => {
     const g = new OfflineGate(true);
     g.setLeases(null);
     registerGate(g);
-    expect((await r.session.sendDirect(dm('online1'))).deviceAccepted).toBe(true);
+    expect((await r.session.sendDirect(dm(r.session, 'online1'))).deviceAccepted).toBe(true);
     expect(r.mock.sendWrites()).toHaveLength(1);
   });
 
@@ -136,8 +134,8 @@ describe(`${S}: what is permitted`, () => {
     const r = await ready();
     registerGate(new OfflineGate(true));
     const before = r.mock.writes.length;
-    await expect(r.session.sendDirect(dm('wrong', authFor('send.direct', { identityKeyPrefix: 'ffffff' })))).rejects.toMatchObject({ code: 'wrong_device' });
-    await expect(r.session.sendDirect(dm('empty', authFor('send.direct', { identityKeyPrefix: '' })))).rejects.toMatchObject({ code: 'wrong_device' });
+    await expect(r.session.sendDirect(dm(r.session, 'wrong', authFor('send.direct', { identityKeyPrefix: 'ffffff' })))).rejects.toMatchObject({ code: 'wrong_device' });
+    await expect(r.session.sendDirect(dm(r.session, 'empty', authFor('send.direct', { identityKeyPrefix: '' })))).rejects.toMatchObject({ code: 'wrong_device' });
     expect(r.mock.writes.length).toBe(before);
     expect(r.session.getSnapshot().companion!.attempts).toHaveLength(0);
   });
@@ -151,10 +149,10 @@ describe(`${S}: what is permitted`, () => {
     const g = new OfflineGate(false);
     g.setLeases({ status, permits: (q) => permits(status, q, { now: clock.t }) });
     registerGate(g);
-    await r.session.sendDirect(dm('before'));
+    await r.session.sendDirect(dm(r.session, 'before'));
     clock.t = Date.parse(p.expires_at) + 1;
     const writesBefore = r.mock.writes.length;
-    await expect(r.session.sendDirect(dm('after'))).rejects.toSatisfy((e: unknown) => e instanceof OfflineSendBlocked && /expired/.test(e.decision.reason));
+    await expect(r.session.sendDirect(dm(r.session, 'after'))).rejects.toSatisfy((e: unknown) => e instanceof OfflineSendBlocked && /expired/.test(e.decision.reason));
     expect(r.mock.writes.length).toBe(writesBefore);
     expect(r.mock.sendWrites()).toHaveLength(1);
   });

@@ -6,10 +6,11 @@ import { AuthProvider } from '../auth/AuthContext';
 import type { SendRequest } from '../api/types';
 import { DeviceContext, type DevicesValue } from '../device/DeviceContext';
 import { companionRig } from '../device/rig.test-util';
+import { COLLISION_CONTACTS } from '../device/sim/lists';
 import type { DeviceSession } from '../device/session';
 import { OfflineGate, registerGate } from '../offline/gate';
 import { createBackend, json, sessionWith, type Backend } from './backend';
-import { attemptFor, channelConversation, channelMsgs, channels, dmConversation, dmMessages, olderConversation, page } from './m2';
+import { attemptFor, channelConversation, channelMsgs, channels, contacts, dmConversation, dmMessages, olderConversation, page } from './m2';
 import type { LocalDeviceHandle } from '../messaging/localPath';
 
 // SIMULATED: a fake Backend (fetch mock) and a simulated Companion over a fake Web Serial port. No hardware, no RF.
@@ -40,19 +41,20 @@ function mount(handle: LocalDeviceHandle | null) {
   );
 }
 
-function routes(send: 'available' | 'unavailable' = 'available') {
+function routes(send: 'available' | 'unavailable' = 'available', channelName: string | null = null) {
   b.on('GET /session', json(sessionWith({ messaging: 'available', send, events: 'unavailable' })));
   b.on('GET /conversations?limit=50', json(page([dmConversation, channelConversation], 'cur_2')));
   b.on('GET /conversations?cursor=cur_2&limit=50', json(page([olderConversation])));
   b.on('GET /identities', json(page(identities)));
-  b.on('GET /channels', json(page(channels)));
+  b.on('GET /channels', json(page(channelName ? [{ ...channels[0]!, name: channelName }, ...channels.slice(1)] : channels)));
+  b.on('GET /contacts?limit=200', json(page(contacts)));
   b.on(`GET /conversations/${dmConversation.id}/messages?limit=50`, json(page(dmMessages, 'old_1')));
   b.on(`GET /conversations/${channelConversation.id}/messages?limit=50`, json(page(channelMsgs.filter((m) => m.conversation_id === channelConversation.id))));
   b.on(`POST /conversations/${dmConversation.id}/read`, () => new Response(null, { status: 204 }));
 }
 
-async function connectedRig() {
-  rig = companionRig();
+async function connectedRig(mock: Parameters<typeof companionRig>[0] extends infer O ? (O extends { mock?: infer M } ? M : never) : never = {}) {
+  rig = companionRig({ mock: { channels: true, ...mock } });
   expect(await rig.session.connect()).toEqual({ ok: true, error: null });
   return rig;
 }
@@ -61,8 +63,11 @@ async function openDm(user: ReturnType<typeof userEvent.setup>) {
   await user.click(await screen.findByRole('link', { name: /Demo Peer \(merged pair\)/ }));
   await screen.findByText('Hello from the peer');
 }
+/** There is nothing to choose: Alice is found on the device by her key prefix. This waits for that to be shown. */
 async function chooseContact(user: ReturnType<typeof userEvent.setup>) {
-  await user.selectOptions(await screen.findByLabelText('Device contact'), screen.getByRole('option', { name: /Alice Synthetic/ }));
+  void user;
+  expect(await screen.findByTestId('device-destination')).toHaveTextContent('Device contact: Alice Synthetic (a1a1a1)');
+  expect(screen.queryByLabelText('Device contact')).not.toBeInTheDocument();
 }
 const pathNames = () => within(screen.getByTestId('send-path')).queryAllByRole('radio').map((r) => (r as HTMLInputElement).parentElement!.textContent);
 
@@ -137,18 +142,70 @@ describe('SIMULATED: the composer offers only the paths that can carry the send'
     expect(screen.queryByRole('radio', { name: 'USB' })).not.toBeInTheDocument();
   });
 
-  it('a channel target gets no local path and no slot entry, even with a capable own device connected; the reason is stated', async () => {
+  it('a channel the device does not have gets no local path, no slot entry, and the reason is stated', async () => {
     routes();
     const r = await connectedRig();
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     mount(r.session);
     await user.click(await screen.findByRole('link', { name: /Demo Channel/ }));
     await screen.findByText('Synthetic channel message');
-    expect(await screen.findByTestId('channel-local-unavailable')).toHaveTextContent("Sending to a channel through a device needs the device's channel list (coming soon)");
+    expect(await screen.findByTestId('local-unavailable-usb')).toHaveTextContent('No channel named "Demo Channel" is on your device.');
     expect(screen.queryByRole('radio', { name: 'USB' })).not.toBeInTheDocument();
     expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/slot/i)).not.toBeInTheDocument();
     expect(screen.getByText(/Sent through the Backend\./)).toBeInTheDocument();
+  });
+
+  it('a channel that is the caller’s own and has exactly one namesake on the device is offered, with no slot to type', async () => {
+    routes('available', 'Crew');
+    const r = await connectedRig();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    mount(r.session);
+    await user.click(await screen.findByRole('link', { name: /Demo Channel/ }));
+    await screen.findByText('Synthetic channel message');
+    await screen.findByRole('radio', { name: 'USB' });
+    await user.click(screen.getByRole('radio', { name: 'USB' }));
+    expect(await screen.findByTestId('device-destination')).toHaveTextContent('Device channel: Crew');
+    expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument();
+    await user.type(screen.getByLabelText('Message'), 'hello crew');
+    await user.click(screen.getByRole('button', { name: 'Send' }));
+    await waitFor(() => expect(r.mock.sendWrites()).toHaveLength(1));
+    expect(r.mock.rf).toEqual([expect.objectContaining({ kind: 'channel', target: '1' })]); // Crew is slot 1 on the device
+    expect(posted()).toHaveLength(0);
+  });
+
+  it('a DM contact that is not on the device gets no local path, with the reason, and no contact list to pick from', async () => {
+    routes();
+    const r = await connectedRig({ contacts: [{ key: 'b2'.repeat(32), name: 'Bob Synthetic' }] });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    mount(r.session);
+    await openDm(user);
+    expect(await screen.findByTestId('local-unavailable-usb')).toHaveTextContent("This contact isn't on your device.");
+    expect(screen.queryByRole('radio', { name: 'USB' })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Device contact')).not.toBeInTheDocument();
+  });
+
+  it('an ambiguous DM contact: the picker offers only the matching candidates (not Bob), and nothing is written until one is chosen', async () => {
+    routes();
+    const r = await connectedRig({ contacts: COLLISION_CONTACTS });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    mount(r.session);
+    await openDm(user);
+    await screen.findByRole('radio', { name: 'USB' });
+    await user.click(screen.getByRole('radio', { name: 'USB' }));
+    const picker = await screen.findByLabelText('Device contact');
+    const names = within(picker).getAllByRole('option').map((o) => o.textContent);
+    expect(names).toEqual([expect.stringContaining('match'), expect.stringContaining('Alice Synthetic'), expect.stringContaining('Alice Clone')]);
+    expect(names.join('|')).not.toContain('Bob');
+    await user.type(screen.getByLabelText('Message'), 'which alice');
+    expect(screen.getByTestId('local-blocked')).toHaveTextContent('Choose which of the matching device contacts');
+    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
+    expect(r.mock.sendWrites()).toHaveLength(0);
+    await user.selectOptions(picker, screen.getByRole('option', { name: /Alice Clone/ }));
+    await user.click(screen.getByRole('button', { name: 'Send' }));
+    await waitFor(() => expect(r.mock.sendWrites()).toHaveLength(1));
+    expect(r.mock.rf).toEqual([expect.objectContaining({ kind: 'direct', target: 'a1a1a1a1e0e0' })]);
+    expect(posted()).toHaveLength(0);
   });
 
   it('with sending switched off on the Backend, a connected device is the only path, and says so', async () => {

@@ -6,6 +6,7 @@ import { Empty, ErrorState, Forbidden, Loading, Offline, Unavailable, useOnline 
 import { describeAttempt, pathOf, type LocalAttempt } from '../messaging/attemptStatus';
 import { useMessaging } from '../messaging/MessagingContext';
 import { useDevices } from '../device/DeviceContext';
+import { directoryOf } from '../messaging/directory';
 import { SendPathControls, useSendPath, viaLabel } from './SendPathControls';
 
 /*
@@ -46,7 +47,7 @@ export function ChatsList({ state }: { state: CapabilityState }) {
   const current = FILTERS.find((f) => f.id === filter)!;
   const m = useMessaging();
   const { conversations, channels } = m;
-  const { loadConversations, loadChannels, loadIdentities } = m;
+  const { loadConversations, loadChannels, loadIdentities, loadContacts } = m;
   const available = state === 'available';
 
   useEffect(() => {
@@ -54,7 +55,8 @@ export function ChatsList({ state }: { state: CapabilityState }) {
     loadConversations();
     loadChannels();
     loadIdentities();
-  }, [available, loadConversations, loadChannels, loadIdentities]);
+    loadContacts();
+  }, [available, loadConversations, loadChannels, loadIdentities, loadContacts]);
 
   const shown = useMemo(() => filterConversations(conversations.items, filter), [conversations.items, filter]);
   // Channels the caller may read but that have no conversation yet.
@@ -186,6 +188,7 @@ function AttemptLine({ a, targetKind }: { a: LocalAttempt; targetKind: Target['k
     target: a.request.target,
     online,
     sendState: m.sendState,
+    directory: directoryOf(m),
     initial: { path: pathOf(a), to: a.localTarget },
   });
   const canAgain = v.canSendAgain && !a.supersededBy && (m.sendState === 'available' || path.avail.length > 0);
@@ -385,7 +388,7 @@ function Composer({ target, defaultIdentityId }: { target: Target; defaultIdenti
     sendable[0] ??
     null;
   const text = m.draftText(target);
-  const path = useSendPath({ identity: chosen, target, online, sendState: m.sendState, initial: undefined });
+  const path = useSendPath({ identity: chosen, target, online, sendState: m.sendState, directory: directoryOf(m), initial: undefined });
   const anyDevice = Object.keys(devices.handles).length > 0;
 
   if (m.sendState === 'forbidden') return <Forbidden title="Sending is not permitted" />;

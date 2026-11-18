@@ -12,6 +12,7 @@ import { ApiError, CapabilityError } from '../api/client';
 import { startEventStream, type StreamStatus } from '../api/eventStream';
 import type {
   Channel,
+  Contact,
   Conversation,
   EventEnvelope,
   Identity,
@@ -24,6 +25,7 @@ import { useAuth } from '../auth/AuthContext';
 import { useDevices } from '../device/DeviceContext';
 import { registerUpdateGuard } from '../update/guards';
 import { describeAttempt, isUncertainAttempt, pathOf, type LocalAttempt, type LocalPath, type LocalTarget } from './attemptStatus';
+import { destFor, type Directory } from './directory';
 import { preflightLocal, runLocalSend } from './localSend';
 import {
   DEFAULT_RETRY_DELAYS_MS,
@@ -52,6 +54,8 @@ const idle = <T,>(): Paged<T> => ({
 });
 
 export const PAGE_SIZE = 50;
+/** Most contact pages the Reader loads (200 each). */
+const MAX_CONTACT_PAGES = 10;
 
 export const targetKey = (t: Target) => `${t.kind}:${t.id}`;
 
@@ -100,6 +104,8 @@ export interface MessagingValue {
   conversations: Paged<Conversation>;
   identities: Paged<Identity>;
   channels: Paged<Channel>;
+  /** Backend contacts, loaded for their `public_key_prefix` (device mapping). */
+  contacts: Paged<Contact>;
   messagesFor(conversationId: string): Paged<Message>;
   /** State of a by-id fetch (deep link); idle until loadConversation(id). */
   deepLinkFor(conversationId: string): DeepLink | null;
@@ -114,6 +120,7 @@ export interface MessagingValue {
   loadConversations(): void;
   loadMoreConversations(): void;
   loadChannels(): void;
+  loadContacts(): void;
   loadIdentities(): void;
   openConversation(id: string | null): void;
   loadMessages(conversationId: string): void;
@@ -179,6 +186,7 @@ export function MessagingProvider({
   const [conversations, setConversations] = useState<Paged<Conversation>>(idle);
   const [identities, setIdentities] = useState<Paged<Identity>>(idle);
   const [channels, setChannels] = useState<Paged<Channel>>(idle);
+  const [contacts, setContacts] = useState<Paged<Contact>>(idle);
   const [messages, setMessages] = useState<Record<string, Paged<Message>>>({});
   const [deepLinks, setDeepLinks] = useState<Record<string, DeepLink>>({});
   const deepLinksRef = useRef(deepLinks);
@@ -192,7 +200,7 @@ export function MessagingProvider({
   // Drafts live in memory only; message text never goes to web storage.
   const drafts = useRef(new Map<string, { draftId: string; text: string }>());
   const active = useRef<string | null>(null);
-  const seq = useRef({ conv: 0, ident: 0, chan: 0 });
+  const seq = useRef({ conv: 0, ident: 0, chan: 0, contact: 0 });
   const msgSeq = useRef(new Map<string, number>());
   const attemptsRef = useRef<LocalAttempt[]>([]);
   attemptsRef.current = attempts;
@@ -283,6 +291,28 @@ export function MessagingProvider({
     } catch (e) {
       if (n !== seq.current.chan) return;
       setChannels((c) => ({ ...c, status: 'error', ...failure(e) }));
+    }
+  }, [api, messaging]);
+
+  const fetchContacts = useCallback(async () => {
+    if (!messaging) return;
+    const n = ++seq.current.contact;
+    setContacts((c) => (c.status === 'idle' ? { ...c, status: 'loading' } : c));
+    try {
+      // Every page, bounded: a contact the Reader did not load has no known key prefix and is refused, never guessed.
+      const items: Contact[] = [];
+      let cursor: string | null = null;
+      for (let i = 0; i < MAX_CONTACT_PAGES; i++) {
+        const page = await api.listContacts({ cursor, limit: 200 });
+        if (n !== seq.current.contact) return;
+        items.push(...page.items);
+        cursor = page.next_cursor;
+        if (!cursor) break;
+      }
+      setContacts({ ...idle<Contact>(), status: 'ready', items, nextCursor: cursor });
+    } catch (e) {
+      if (n !== seq.current.contact) return;
+      setContacts((c) => ({ ...c, status: 'error', ...failure(e) }));
     }
   }, [api, messaging]);
 
@@ -443,8 +473,9 @@ export function MessagingProvider({
     void fetchConversations('reset');
     void fetchIdentities();
     void fetchChannels();
+    void fetchContacts();
     if (active.current) void fetchMessages(active.current, 'reset');
-  }, [fetchConversations, fetchIdentities, fetchChannels, fetchMessages]);
+  }, [fetchConversations, fetchIdentities, fetchChannels, fetchContacts, fetchMessages]);
 
   /* ---------------- live updates ---------------- */
 
@@ -519,6 +550,7 @@ export function MessagingProvider({
     setConversations(idle());
     setIdentities(idle());
     setChannels(idle());
+    setContacts(idle());
     setMessages({});
     deepLinksRef.current = {};
     setDeepLinks({});
@@ -556,6 +588,8 @@ export function MessagingProvider({
 
   const identitiesRef = useRef(identities);
   identitiesRef.current = identities;
+  const directoryRef = useRef<Directory>({ contacts: [], channels: [], conversations: [] });
+  directoryRef.current = { contacts: contacts.items, channels: channels.items, conversations: conversations.items };
 
   /**
    * Starts a local attempt, or refuses without consuming anything. `beforeStart` runs only once the
@@ -570,7 +604,8 @@ export function MessagingProvider({
     ): { result: SendResult; attemptId: string | null } => {
       const identity = identitiesRef.current.items.find((i) => i.id === base.identity_id) ?? null;
       const handle = devicesRef.current.handles[route.path] ?? null;
-      const pre = preflightLocal(handle, identity, base.target, route.to);
+      const dest = destFor(directoryRef.current, base.target, identity);
+      const pre = preflightLocal(handle, identity, base.target, route.to, dest);
       if (!pre.ok) return { result: pre, attemptId: null };
       beforeStart?.();
       const clientAttemptId = newAttemptId();
@@ -589,7 +624,7 @@ export function MessagingProvider({
       };
       attemptsRef.current = [...attemptsRef.current, a];
       setAttempts(attemptsRef.current);
-      void runLocalSend(handle!, a, identity!, (patch) => patchAttempt(clientAttemptId, patch));
+      void runLocalSend(handle!, a, identity!, dest, (patch) => patchAttempt(clientAttemptId, patch));
       return { result: { ok: true }, attemptId: clientAttemptId };
     },
     [patchAttempt],
@@ -678,6 +713,7 @@ export function MessagingProvider({
       loadConversations: () => void fetchConversations('first'),
       loadMoreConversations: () => void fetchConversations('more'),
       loadChannels: () => void fetchChannels(),
+      loadContacts: () => void fetchContacts(),
       loadIdentities: () => void fetchIdentities(),
       openConversation: (id: string | null) => {
         active.current = id;
@@ -705,7 +741,7 @@ export function MessagingProvider({
       sendAgain,
       recheck,
     }),
-    [rehydrate, fetchConversations, fetchChannels, fetchIdentities, fetchMessages, fetchConversation, markRead, send, sendAgain, recheck],
+    [rehydrate, fetchConversations, fetchChannels, fetchContacts, fetchIdentities, fetchMessages, fetchConversation, markRead, send, sendAgain, recheck],
   );
 
   const value = useMemo<MessagingValue>(
@@ -716,6 +752,7 @@ export function MessagingProvider({
       conversations,
       identities,
       channels,
+      contacts,
       messagesFor: (id) => messages[id] ?? idle<Message>(),
       deepLinkFor: (id) => deepLinks[id] ?? null,
       attemptsFor: (t) => attempts.filter((a) => targetKey(a.request.target) === targetKey(t)),
@@ -723,7 +760,7 @@ export function MessagingProvider({
     }),
     // draftVersion re-renders consumers when a draft (kept in a ref) changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [messaging, sendState, streamStatus, conversations, identities, channels, messages, deepLinks, attempts, actions, draftVersion],
+    [messaging, sendState, streamStatus, conversations, identities, channels, contacts, messages, deepLinks, attempts, actions, draftVersion],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

@@ -11,6 +11,8 @@ import type {
   LoginStarted,
   LoginState,
   MessageList,
+  LeaseIssued,
+  LeaseKeyList,
   SendAttempt,
   SendRequest,
   Session,
@@ -116,6 +118,10 @@ export interface ApiClient {
    */
   createSendAttempt(req: SendRequest): Promise<SendResult>;
   getSendAttempt(attemptId: string): Promise<SendAttempt>;
+  /** M3 (draft): issue or renew the offline lease. A 404 means this Backend issues none. */
+  createLease(): Promise<LeaseIssued>;
+  /** M3 (draft): the public keys that verify leases. */
+  listLeaseKeys(): Promise<LeaseKeyList>;
   /** Open the SSE stream (raw Response; parse with api/sse). */
   openEvents(opts: { lastEventId?: string | null; signal?: AbortSignal }): Promise<Response>;
   /** Forget the held CSRF token (signed out). */
@@ -251,6 +257,12 @@ export function createApiClient(opts: ApiClientOptions = {}): ApiClient {
       need('messaging');
       return json<ChannelList>('/channels', { cache: 'no-store' });
     },
+    async createLease() {
+      const res = await write('/leases', { headers: { Accept: 'application/json' } });
+      if (!res.ok) throw await readError(res);
+      return (await res.json()) as LeaseIssued;
+    },
+    listLeaseKeys: () => json<LeaseKeyList>('/leases/keys', { cache: 'no-store' }),
     async createSendAttempt(req) {
       need('messaging', 'send');
       // One serialized body, reused as-is by the CSRF retry inside write().

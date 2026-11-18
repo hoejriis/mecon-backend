@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { App } from './App';
 import { AuthProvider } from './auth/AuthContext';
+import { OfflineProvider } from './offline/OfflineContext';
 import './styles/tokens.css';
 import './styles/app.css';
 
@@ -13,7 +14,9 @@ createRoot(root).render(
   <StrictMode>
     <BrowserRouter>
       <AuthProvider>
-        <App />
+        <OfflineProvider>
+          <App />
+        </OfflineProvider>
       </AuthProvider>
     </BrowserRouter>
   </StrictMode>,

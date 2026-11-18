@@ -24,3 +24,9 @@ export type SendRequest = S['SendRequest'];
 export type SendAttempt = S['SendAttempt'];
 export type SendStatus = S['SendStatus'];
 export type EventEnvelope = S['EventEnvelope'];
+
+export type LeasePayload = S['LeasePayload'];
+export type LeaseOperation = S['LeaseOperation'];
+export type LeaseIssued = S['LeaseIssued'];
+export type LeaseKey = S['LeaseKey'];
+export type LeaseKeyList = S['LeaseKeyList'];

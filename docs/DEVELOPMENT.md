@@ -39,7 +39,8 @@ Docker image, built from the repository root:
 - `reader/src/staleShell.ts`: stale-shell repair.
 - `reader/src/sw/`: the service worker source (`sw.js`) and the build helper that stamps and lists the precache (`buildSw.ts`).
 - `reader/src/update/`: the update lifecycle (`updateController.ts`), the guards that say what an update would interrupt (`guards.ts`), registration (`register.ts`) and the banner.
-- `reader/src/storage/`: the versioned migration runner for the future encrypted cache.
+- `reader/src/storage/`: the versioned migration runner (schema v1 is the encrypted offline cache).
+- `reader/src/offline/`: the encrypted offline cache and lease. `unlock.ts` (passkey through WebAuthn PRF only, with no PIN and no fallback; random data key wrapped by the KEK; idle lock; a browser without PRF gets no offline cache), `crypto.ts` (AES-GCM records with the user in the AAD, HKDF per-user and per-purpose keys), `cache.ts` (IndexedDB, bounded LRU, drafts and send attempts never evicted), `lease.ts` and `leaseManager.ts` (Ed25519 verification, `permits()`), `gate.ts` (the mode rules and `offlineSendGuard`, the guard the BLE and USB send paths call), `reconcile.ts` (reconnect), `session.ts` (lock rules), and the React provider and screens. Tests use `fake-indexeddb` and WebCrypto in Node; `testkit.ts` is test-only.
 - `reader/src/components/`: header, skip link, bottom tab bar with icons, state components and login screen.
 - `reader/src/routes/`: one page component per tab; from 900px wide a list pane and a detail pane sit above the bottom bar.
 - `reader/src/styles/tokens.css`: design tokens (palette, light and dark via `prefers-color-scheme`).

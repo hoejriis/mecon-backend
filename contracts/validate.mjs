@@ -51,6 +51,21 @@ for (const docPath of docs) {
       for (const r of Object.values(op.responses ?? {})) visit(r);
     }
   }
+  // The lease token's payload is not a response body, so decode and check it separately.
+  const issuedPath = join(base, 'fixtures/lease-issued.json');
+  if (doc.components.schemas.LeasePayload) {
+    const token = JSON.parse(readFileSync(issuedPath, 'utf8')).lease;
+    const payload = JSON.parse(Buffer.from(token.split('.')[0], 'base64url').toString('utf8'));
+    const validate = ajv.compile(fixRef({ $ref: '#/components/schemas/LeasePayload' }));
+    checked++;
+    const days = (Date.parse(payload.expires_at) - Date.parse(payload.issued_at)) / 86_400_000;
+    if (!validate(payload) || days > 7 || days <= 0) {
+      failures++;
+      console.error('FAIL lease payload:', JSON.stringify(validate.errors), `lifetime ${days} days`);
+    } else {
+      console.log('ok   lease payload decoded from fixtures/lease-issued.json');
+    }
+  }
   const fixturesDir = join(base, 'fixtures');
   for (const f of readdirSync(fixturesDir).filter((f) => f.endsWith('.json'))) {
     if (!used.has(resolve(join(fixturesDir, f)))) {

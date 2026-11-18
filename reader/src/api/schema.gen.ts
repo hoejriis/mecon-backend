@@ -380,6 +380,64 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/leases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * (M3 draft) Issue or renew the caller's offline lease
+         * @description Issues a new lease for the authenticated caller, or renews the current
+         *     one (a renewal is simply a new lease with a later `expires_at`; the
+         *     previous one stays valid until its own expiry, since a disconnected
+         *     Reader cannot be told otherwise). The request has no body: the Backend
+         *     decides every field from its own records, so the Reader can neither ask
+         *     for broader rights nor a longer lifetime.
+         *
+         *     The Reader calls this whenever it is online with messaging available
+         *     and the stored lease is missing or past half its lifetime. Online
+         *     rights never come from the lease: while connected, every request is
+         *     authorized by the server as usual.
+         *
+         *     A Backend that does not issue leases answers 404 (`not_found`); the
+         *     Reader then treats offline sending as not permitted.
+         */
+        post: operations["createLease"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/leases/keys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * (M3 draft) Public keys that verify leases
+         * @description The Backend's lease verification public keys. They are public: the
+         *     response carries no secret. The Reader fetches the set whenever it is
+         *     online and keeps it, so it can verify a lease offline. A key that
+         *     signs no more leases is listed as `retired` until every lease it signed
+         *     has expired, then dropped. The Reader accepts a lease only when its
+         *     `key_id` names a key in the set it holds.
+         */
+        get: operations["listLeaseKeys"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -667,6 +725,75 @@ export interface components {
             occurred_at: components["schemas"]["Timestamp"];
             resource_id?: string | null;
             version: number;
+        };
+        /**
+         * @description `receive`: show incoming traffic a locally connected device exposes.
+         *     `send.direct`: send a direct message through a local device.
+         *     `send.channel`: send a channel message through a local device.
+         * @enum {string}
+         */
+        LeaseOperation: "receive" | "send.direct" | "send.channel";
+        /**
+         * @description The signed content of a lease. It carries no secret and no key
+         *     material: only opaque ids, scopes and times. Everything in it is also
+         *     visible to the Backend and, by design, to the person it was issued to.
+         *
+         *     Offline revocation cannot be faster than expiry: a Reader that cannot
+         *     reach the Backend learns of a disabled user, a reassigned device or a
+         *     removed channel only when its lease runs out (`expires_at`, at most 7
+         *     days after `issued_at`).
+         */
+        LeasePayload: {
+            lease_id: components["schemas"]["OpaqueId"];
+            /** @description The `user.id` of the session this lease was issued to. A Reader refuses a lease for any other user. */
+            user_id: components["schemas"]["OpaqueId"];
+            issued_at: components["schemas"]["Timestamp"];
+            /** @description At most 7 days (604800 s) after `issued_at`. A verifier refuses a longer lease even when the signature is good. */
+            expires_at: components["schemas"]["Timestamp"];
+            /** @description Names the entry of `GET /leases/keys` that verifies the signature. */
+            key_id: components["schemas"]["OpaqueId"];
+            contract_version: string;
+            /** @description Identities the user may use offline, and the operations granted per identity. */
+            identities: {
+                identity_id: components["schemas"]["OpaqueId"];
+                operations: components["schemas"]["LeaseOperation"][];
+            }[];
+            /** @description Ids of the devices assigned to the user (as in `GET /devices`). A local operation is permitted only on a listed device. */
+            devices: components["schemas"]["OpaqueId"][];
+            /** @description Ids of the channels the user may use offline (as in `GET /channels`). */
+            channels: components["schemas"]["OpaqueId"][];
+        };
+        /**
+         * @description Compact `payload.signature`, both base64url without padding.
+         *     `payload` is the UTF-8 canonical JSON of a `LeasePayload`: object keys
+         *     sorted by code point at every level, no insignificant whitespace.
+         *     `signature` is an Ed25519 signature over the ASCII bytes
+         *     `MECON-LEASE-1` followed by one 0x00 byte, then the decoded payload
+         *     bytes exactly as they appear in the token. The prefix keeps a lease
+         *     signature from being valid for anything else. A verifier checks the
+         *     signature over the bytes it received, and only then parses them.
+         */
+        LeaseToken: string;
+        LeaseIssued: {
+            lease: components["schemas"]["LeaseToken"];
+            /** @description A convenience copy of the payload `expires_at`. Never trusted: only the signed payload counts. */
+            expires_at: components["schemas"]["Timestamp"];
+        };
+        LeaseKey: {
+            key_id: components["schemas"]["OpaqueId"];
+            /** @enum {string} */
+            algorithm: "Ed25519";
+            /** @description The raw 32-byte Ed25519 public key, base64url without padding. */
+            public_key: string;
+            /** @enum {string} */
+            status: "active" | "retired";
+            not_before: components["schemas"]["Timestamp"];
+            /** @description Null while the key still signs leases. */
+            not_after: components["schemas"]["Timestamp"] | null;
+        };
+        LeaseKeyList: {
+            keys: components["schemas"]["LeaseKey"][];
+            as_of: components["schemas"]["Timestamp"];
         };
     };
     responses: {
@@ -1195,6 +1322,56 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+        };
+    };
+    createLease: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Value of `csrf_token` from `GET /session`. */
+                "X-CSRF-Token": components["parameters"]["Csrf"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A signed lease */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeaseIssued"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["Throttled"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    listLeaseKeys: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Verification keys */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeaseKeyList"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
         };
     };
 }

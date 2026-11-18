@@ -38,6 +38,8 @@ export interface FakeSerialHandle {
   revoke(): void;
   /** Writes the host made to the port, as the port saw them. */
   hostWrites: Uint8Array[];
+  /** Every setSignals() call the transport made, in order. */
+  signalCalls(): Array<{ dataTerminalReady?: boolean; requestToSend?: boolean }>;
 }
 
 export function installFakeSerial(target: object, peer: SerialPeer, info: { usbVendorId?: number; usbProductId?: number } = { usbVendorId: 0x303a, usbProductId: 0x1001 }): FakeSerialHandle {
@@ -87,6 +89,11 @@ export function installFakeSerial(target: object, peer: SerialPeer, info: { usbV
   });
 
   port.getInfo = () => ({ ...info });
+  const signalCalls: Array<{ dataTerminalReady?: boolean; requestToSend?: boolean }> = [];
+  port.setSignals = async (sig: { dataTerminalReady?: boolean; requestToSend?: boolean }) => {
+    if (!isOpen) throw err('InvalidStateError', 'The port is closed.');
+    signalCalls.push({ ...sig });
+  };
   port.open = async () => {
     opens++;
     if (isOpen) throw err('InvalidStateError', 'The port is already open.');
@@ -176,5 +183,6 @@ export function installFakeSerial(target: object, peer: SerialPeer, info: { usbV
     replug: () => serial.dispatchEvent(new Event('connect')),
     revoke: () => unplugNow('revoked'),
     hostWrites,
+    signalCalls: () => signalCalls,
   };
 }

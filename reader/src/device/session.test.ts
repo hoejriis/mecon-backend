@@ -68,7 +68,7 @@ describe(`${S}: connect, hello, contacts, send`, () => {
   });
 
   it('works with every frame split into single bytes, and with garbage and oversize-length noise between frames', async () => {
-    const r = companionRig({ session: { detect: { stepTimeoutMs: 400 }, companion: { responseTimeoutMs: 500, connectTimeoutMs: 500, nowSec: () => 1700000000 } } });
+    const r = companionRig({ session: { detect: { stepTimeoutMs: 400, consoleWindowMs: 400 }, companion: { responseTimeoutMs: 500, connectTimeoutMs: 500, nowSec: () => 1700000000 } } });
     sessions.push(r.session);
     r.peer.faults = { splitBytes: 1, coalesce: false, garbageBeforeFrame: [0x00, 0x41, 0xff], oversizeLengthNoise: true };
     expect(await r.session.connect()).toEqual({ ok: true, error: null });
@@ -237,7 +237,7 @@ describe(`${S}: capabilities, not roles, gate features`, () => {
     const { silentRig } = await import('./rig.test-util');
     const { DeviceSession } = await import('./session');
     const r = silentRig();
-    const s = new DeviceSession(r.bytes, { detect: { stepTimeoutMs: 40 } });
+    const s = new DeviceSession(r.bytes, { detect: { stepTimeoutMs: 40, consoleWindowMs: 40 } });
     sessions.push(s);
     expect((await s.connect()).ok).toBe(true);
     expect(s.getSnapshot().detected!.summary).toMatch(/^Unknown device/);

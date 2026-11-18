@@ -7,7 +7,7 @@ import { collectUsbEnvironment, runUsbProbe, sanitizeUsbReport } from './usbProb
 
 const S = 'SIMULATED — not hardware verified: USB probe';
 const run = (r: { bytes: Parameters<typeof runUsbProbe>[0]['transport']; nav: unknown }, ms = 80) =>
-  runUsbProbe({ transport: r.bytes, env: collectUsbEnvironment(r.nav), stepTimeoutMs: ms, disconnectWaitMs: 200, now: () => 0 });
+  runUsbProbe({ transport: r.bytes, env: collectUsbEnvironment(r.nav), stepTimeoutMs: ms, consoleWindowMs: ms, disconnectWaitMs: 200, now: () => 0 });
 const status = (raw: { steps: Array<{ id: string; status: string }> }, id: string) => raw.steps.find((s) => s.id === id)!.status;
 const SENSITIVE = ['ab'.repeat(16), 'cd'.repeat(32), 'Synthetic Node', '1111111111111111', 'serial-port'];
 

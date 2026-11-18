@@ -63,6 +63,14 @@ export interface DetectedDevice {
 export interface DetectOptions {
   /** Per-step wait. Default 1500 ms. */
   stepTimeoutMs?: number;
+  /**
+   * The console-line hello is repeated every `consoleRetryMs` (default 2000) until
+   * `consoleWindowMs` (default 30000) has passed. Opening a port resets many boards and
+   * they answer only 13-26 s later; binary frames must not be sent before then, as they
+   * can garble a Repeater console's next line (public firmware owner, Issue #30).
+   */
+  consoleRetryMs?: number;
+  consoleWindowMs?: number;
   onStep?: (label: string) => void;
 }
 
@@ -124,7 +132,7 @@ export async function detectDevice(raw: ByteTransport, opts: DetectOptions = {})
   let seq = 0;
 
   /** Writes one unit, then waits for the first later event that `pick` accepts. */
-  async function ask<T>(label: string, unit: Uint8Array | Uint8Array[], pick: (e: Ev) => T | null): Promise<T | null> {
+  async function ask<T>(label: string, unit: Uint8Array | Uint8Array[], pick: (e: Ev) => T | null, waitMs: number = timeout): Promise<T | null> {
     if (lost) return null;
     opts.onStep?.(label);
     const mark = events.length;
@@ -135,7 +143,7 @@ export async function detectDevice(raw: ByteTransport, opts: DetectOptions = {})
       d.evidence.push(`${label}: write failed (${e instanceof BleError ? e.code : 'error'})`);
       return null;
     }
-    const deadline = Date.now() + timeout;
+    const deadline = Date.now() + waitMs;
     let i = mark;
     for (;;) {
       for (; i < events.length; i++) {
@@ -155,14 +163,33 @@ export async function detectDevice(raw: ByteTransport, opts: DetectOptions = {})
     }
   }
 
-  const ifaceLineHello = async (): Promise<{ env: Envelope | null; consoleSeen: boolean } | null> => {
+  const lineHelloIds = new Set<string>();
+  const ifaceLineHello = async (waitMs: number): Promise<{ env: Envelope | null; consoleSeen: boolean } | null> => {
     const id = `rd-${++seq}`;
-    return ask('interface hello (console line)', encodeMeconLine(buildRequest(id, 'hello')), (e) => {
-      if (e.kind !== 'line') return null;
-      const env = parseMeconLine(e.line);
-      if (env && env.id === id && typeof env.status === 'string') return { env, consoleSeen: true }; // our own echoed request has no status
-      return cliReplyText(e.line) !== null ? { env: null, consoleSeen: true } : null;
-    });
+    lineHelloIds.add(id);
+    return ask(
+      'interface hello (console line)',
+      encodeMeconLine(buildRequest(id, 'hello')),
+      (e) => {
+        if (e.kind !== 'line') return null;
+        const env = parseMeconLine(e.line);
+        // A late answer to an earlier attempt counts; our own echoed request has no status.
+        if (env && typeof env.id === 'string' && lineHelloIds.has(env.id) && typeof env.status === 'string') return { env, consoleSeen: true };
+        return cliReplyText(e.line) !== null ? { env: null, consoleSeen: true } : null;
+      },
+      waitMs,
+    );
+  };
+  const consoleRetryMs = opts.consoleRetryMs ?? 2000;
+  const consoleWindowMs = opts.consoleWindowMs ?? 30000;
+  /** Repeats the console-line hello until something answers or the window ends. */
+  const ifaceLineHelloWithRetry = async () => {
+    const until = Date.now() + consoleWindowMs;
+    for (;;) {
+      const left = until - Date.now();
+      const r = await ifaceLineHello(Math.max(1, Math.min(consoleRetryMs, left)));
+      if (r || lost || Date.now() >= until) return r;
+    }
   };
   const ifaceFrameHello = async (): Promise<Envelope | null> => {
     const id = `rd-${++seq}`;
@@ -228,7 +255,7 @@ export async function detectDevice(raw: ByteTransport, opts: DetectOptions = {})
   };
 
   try {
-    const first = await ifaceLineHello();
+    const first = await ifaceLineHelloWithRetry();
     if (first?.env && takeHello(first.env, 'console-line')) {
       /* interface over the console: Repeater or Room server */
     } else if (first?.consoleSeen) {

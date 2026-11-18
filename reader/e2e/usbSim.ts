@@ -42,7 +42,7 @@ export async function installUsbSim(page: Page, opts: { device?: Device; options
       w.__SERIAL_SIM = { device: o.device, options: o.options };
       w.__USB_DEV_OPTS = o.dev;
     },
-    { device: opts.device ?? 'companion', options: opts.options ?? {}, dev: { detect: { stepTimeoutMs: 400 }, companion: { responseTimeoutMs: 400, connectTimeoutMs: 400 }, ...(opts.dev ?? {}) } },
+    { device: opts.device ?? 'companion', options: opts.options ?? {}, dev: { detect: { stepTimeoutMs: 400, consoleWindowMs: 400 }, companion: { responseTimeoutMs: 400, connectTimeoutMs: 400 }, ...(opts.dev ?? {}) } },
   );
   await page.addInitScript({ content: await fakeSerialScript() });
   type W = { __serial: { hostWrites: unknown[]; openCalls(): number }; __mock?: { sendWrites(): unknown[]; rf: unknown[] }; __peer: { lines?: string[]; executed?: string[] } };

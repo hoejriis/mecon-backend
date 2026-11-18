@@ -64,6 +64,8 @@ export interface UsbRunOptions {
   env: UsbEnvironment;
   now?: () => number;
   stepTimeoutMs?: number;
+  /** Console-line hello retry window; default 30 s (boards reset on open). */
+  consoleWindowMs?: number;
   disconnectWaitMs?: number;
   onUpdate?: (raw: RawUsbProbe) => void;
 }
@@ -123,7 +125,7 @@ export function runUsbProbe(opts: UsbRunOptions): Promise<RawUsbProbe> {
       const t2 = now();
       set('identify', { status: 'running' });
       try {
-        const d = await detectDevice(t, { stepTimeoutMs: opts.stepTimeoutMs ?? 2000 });
+        const d = await detectDevice(t, { stepTimeoutMs: opts.stepTimeoutMs ?? 2000, consoleWindowMs: opts.consoleWindowMs ?? 30000 });
         raw.detected = d;
         const known = d.role !== 'unknown' || d.firmware === 'mecon';
         set('identify', { status: d.linkLost ? 'fail' : known ? 'pass' : 'unknown', ms: Math.round(now() - t2), note: d.linkLost ? 'The link was lost during identification' : known ? null : 'Nothing answered the read-only requests: the device speaks neither protocol, is not ready, or is not a MeshCore device' });

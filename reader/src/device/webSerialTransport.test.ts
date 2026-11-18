@@ -149,4 +149,12 @@ describe(S, () => {
     expect(new TextDecoder().decode(Uint8Array.from(got))).toContain('Synthetic Board');
     expect((peer as MockRepeater).lines).toEqual(['ver', 'board']);
   });
+
+  it('asserts DTR and RTS together, both true, in one call right after open (boards auto-reset on unequal lines)', async () => {
+    const { t, h } = rig();
+    await t.requestDevice();
+    await t.connect();
+    expect(h.signalCalls()).toEqual([{ dataTerminalReady: true, requestToSend: true }]);
+  });
 });
+

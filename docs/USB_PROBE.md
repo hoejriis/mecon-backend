@@ -45,7 +45,7 @@ server. Run it once per device you have.
    Serial`, `usbmodem...` or `ttyACM...`) and click **Connect**. If the list is
    empty see below.
 5. Wait until every step shows a result and the button says **Run again**
-   (up to about 10 s).
+   (up to about 45 s: boards often restart when the port opens and answer 13 to 26 s later).
 6. Click **Copy report**. If copying is blocked, select the text in the report
    box and copy it by hand.
 7. Post the report on the tracking Issue (hoejriis/mecon-backend #30) with the

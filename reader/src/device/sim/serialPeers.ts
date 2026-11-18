@@ -212,6 +212,8 @@ export interface RepeaterOptions {
   capabilities?: string[];
   /** Answer the hello with this role string instead (to test unknown roles). */
   helloRole?: string;
+  /** Drop the first N complete lines unanswered, like a board still booting after the port open reset it. */
+  ignoreFirstLines?: number;
 }
 
 /** SIMULATED Repeater / Room server console: upstream's line editor plus the `mecon> ` interface. */
@@ -222,7 +224,8 @@ export class MockRepeater extends BasePeer {
   /** Lines that would have changed something on a real device (anything but the read-only set). The probe must never cause one. */
   readonly executed: string[] = [];
   readonly ifaceRequests: Envelope[] = [];
-  private readonly o: Required<Omit<RepeaterOptions, 'helloRole'>> & { helloRole?: string };
+  private readonly o: Required<Omit<RepeaterOptions, 'helloRole' | 'ignoreFirstLines'>> & { helloRole?: string };
+  private ignoreLeft: number;
 
   constructor(opts: RepeaterOptions = {}) {
     super();
@@ -235,6 +238,7 @@ export class MockRepeater extends BasePeer {
       capabilities: opts.capabilities ?? ['hello', 'status.get', 'clock.get', 'config.get'],
       helloRole: opts.helloRole,
     };
+    this.ignoreLeft = opts.ignoreFirstLines ?? 0;
   }
 
   receiveBytes(bytes: Uint8Array): void {
@@ -245,6 +249,10 @@ export class MockRepeater extends BasePeer {
         this.emitBytes(new TextEncoder().encode('\r\n'));
         const l = this.line;
         this.line = '';
+        if (this.ignoreLeft > 0) {
+          this.ignoreLeft -= 1; // still booting: the line is lost
+          continue;
+        }
         this.run(l);
         continue;
       }

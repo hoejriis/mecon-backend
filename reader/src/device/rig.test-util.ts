@@ -20,7 +20,7 @@ export function companionRig(o: { mock?: MockCompanionOptions; peer?: CompanionP
   const r = serialRig(peer);
   const backend = { post: vi.fn(async () => undefined) };
   const session = new DeviceSession(r.bytes, {
-    detect: { stepTimeoutMs: 150 },
+    detect: { stepTimeoutMs: 150, consoleWindowMs: 150 },
     companion: { responseTimeoutMs: 150, connectTimeoutMs: 150, nowSec: () => 1700000000, backendPath: backend },
     ...o.session,
   });
@@ -30,7 +30,7 @@ export function companionRig(o: { mock?: MockCompanionOptions; peer?: CompanionP
 export function repeaterRig(opts: ConstructorParameters<typeof MockRepeater>[0] = {}) {
   const peer = new MockRepeater(opts);
   const r = serialRig(peer);
-  const session = new DeviceSession(r.bytes, { detect: { stepTimeoutMs: 80 } });
+  const session = new DeviceSession(r.bytes, { detect: { stepTimeoutMs: 80, consoleWindowMs: 80 } });
   return { ...r, peer, session };
 }
 

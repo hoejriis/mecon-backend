@@ -21,7 +21,7 @@ async function probe(page: Page, device: Device) {
   await page.goto('/probe/usb');
   await expect(page.getByRole('heading', { level: 1, name: 'USB diagnostics' })).toBeVisible();
   await page.getByRole('button', { name: 'Connect and run probe' }).click();
-  await expect(page.getByRole('button', { name: 'Run again' })).toBeVisible({ timeout: 20_000 }); // an unknown device waits out every identification step
+  await expect(page.getByRole('button', { name: 'Run again' })).toBeVisible({ timeout: 60_000 }); // a Companion or an unknown device waits out the 30 s console-hello window, then every remaining step
   const text = await page.getByLabel('Sanitized report (JSON)').inputValue();
   return { sim, text, json: JSON.parse(text) };
 }
@@ -48,7 +48,12 @@ test(T('Repeater: signed-out probe passes, only the interface hello is written, 
 test(T('Companion: only allowlisted codes reach the device (device query), nothing transmitted'), async ({ page }) => {
   const { sim, json } = await probe(page, 'companion');
   expect(json.detected).toMatchObject({ role: 'companion', companionBinary: true, carriage: 'companion-frames' });
-  expect(json.commandsSent).toEqual(['iface:hello', 'frame-iface:hello', 'frame:22']);
+  // The console hello repeats every 2 s through the 30 s window (boards reset on open), then the frames.
+  const sent = json.commandsSent as string[];
+  const firstFrame = sent.findIndex((c) => c.startsWith('frame'));
+  expect(firstFrame).toBeGreaterThanOrEqual(10);
+  expect(sent.slice(0, firstFrame).every((c) => c === 'iface:hello')).toBe(true);
+  expect(sent.slice(firstFrame)).toEqual(['frame-iface:hello', 'frame:22']);
   expect(await sim.sendWrites()).toBe(0);
   expect(await sim.rfCount()).toBe(0);
 });

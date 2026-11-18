@@ -7,7 +7,7 @@ const S = 'SIMULATED — not hardware verified: device detection';
 async function detect(r: { bytes: { requestDevice(): Promise<unknown>; connect(): Promise<void> } }, ms = 80) {
   await r.bytes.requestDevice();
   await r.bytes.connect();
-  return detectDevice(r.bytes as never, { stepTimeoutMs: ms });
+  return detectDevice(r.bytes as never, { stepTimeoutMs: ms, consoleWindowMs: ms });
 }
 
 describe(S, () => {
@@ -97,7 +97,7 @@ describe(S, () => {
     const r = silentRig();
     await r.bytes.requestDevice();
     await r.bytes.connect();
-    const p = detectDevice(r.bytes, { stepTimeoutMs: 400 });
+    const p = detectDevice(r.bytes, { stepTimeoutMs: 400, consoleWindowMs: 400 });
     setTimeout(() => r.h.unplug(), 30);
     const d = await p;
     expect(d.linkLost).toBe(true);
@@ -121,4 +121,29 @@ describe(S, () => {
     expect(d.firmware).toBe('unknown');
     expect(d.evidence.join(' ')).toMatch(/refused/);
   });
+
+  it('a board that answers only after a reset: the console hello is retried until it answers, then detected', async () => {
+    const r = repeaterRig({ role: 'repeater', ignoreFirstLines: 2 });
+    await r.bytes.requestDevice();
+    await r.bytes.connect();
+    const d = await detectDevice(r.bytes as never, { stepTimeoutMs: 40, consoleRetryMs: 40, consoleWindowMs: 2000 });
+    expect(d).toMatchObject({ firmware: 'mecon', role: 'repeater', roleSource: 'hello', carriage: 'console-line' });
+    expect(d.commandsSent).toEqual(['iface:hello', 'iface:hello', 'iface:hello']);
+    expect(r.peer.executed).toEqual([]);
+  });
+
+  it('a Companion: no binary frame is written until the console window has passed', async () => {
+    const r = companionRig({});
+    await r.bytes.requestDevice();
+    await r.bytes.connect();
+    const started = Date.now();
+    const d = await detectDevice(r.bytes as never, { stepTimeoutMs: 80, consoleRetryMs: 50, consoleWindowMs: 300 });
+    expect(Date.now() - started).toBeGreaterThanOrEqual(300);
+    const firstFrame = d.commandsSent.findIndex((c) => c.startsWith('frame'));
+    expect(firstFrame).toBeGreaterThan(0);
+    expect(d.commandsSent.slice(0, firstFrame).every((c) => c === 'iface:hello')).toBe(true);
+    expect(firstFrame).toBeGreaterThanOrEqual(5); // ~300 ms window / 50 ms retries
+    expect(d.firmware).toBe('mecon');
+  });
 });
+

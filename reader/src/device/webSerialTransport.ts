@@ -17,6 +17,7 @@ export interface WsPort extends EventTarget {
   readable: { getReader(): WsReader } | null;
   writable: { getWriter(): WsWriter } | null;
   open(options: { baudRate: number; bufferSize?: number; flowControl?: 'none' | 'hardware' }): Promise<void>;
+  setSignals?(signals: { dataTerminalReady?: boolean; requestToSend?: boolean }): Promise<void>;
   close(): Promise<void>;
   getInfo(): { usbVendorId?: number; usbProductId?: number };
 }
@@ -137,6 +138,10 @@ export class WebSerialTransport implements ByteTransport {
       await port.close().catch(() => undefined);
       throw new BleError('connect_failed', 'port has no streams');
     }
+    // DTR and RTS always together, both asserted (public firmware owner, Issue #30): unequal
+    // lines trigger the auto-reset circuit on boards such as the Heltec V3, and nRF52 boards
+    // stay silent without DTR. Best effort: a failure here does not fail the connection.
+    await port.setSignals?.({ dataTerminalReady: true, requestToSend: true }).catch(() => undefined);
     this.opened = true;
     const epoch = ++this.epoch;
     this.writer = port.writable.getWriter();

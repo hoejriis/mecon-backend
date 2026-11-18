@@ -119,7 +119,7 @@ test.describe('Desktop Chromium, fake Web Serial', () => {
   }
 
   test(T('garbage on the line, byte-at-a-time delivery and duplicate replies'), async ({ page }) => {
-    const sim = await open(page, 'companion', { dev: { detect: { stepTimeoutMs: 1500 }, companion: { responseTimeoutMs: 1500, connectTimeoutMs: 1500 } } });
+    const sim = await open(page, 'companion', { dev: { detect: { stepTimeoutMs: 1500, consoleWindowMs: 1500 }, companion: { responseTimeoutMs: 1500, connectTimeoutMs: 1500 } } });
     await page.evaluate(() => {
       (window as unknown as W).__peer.faults = { splitBytes: 1, coalesce: false, garbageBeforeFrame: [0, 65, 255], oversizeLengthNoise: true };
     });
@@ -166,7 +166,7 @@ test.describe('Desktop Chromium, fake Web Serial', () => {
   });
 
   test(T('unknown device (boot noise, no answers) is reported unknown with no capabilities'), async ({ page }) => {
-    await open(page, 'silent', { dev: { detect: { stepTimeoutMs: 150 } } });
+    await open(page, 'silent', { dev: { detect: { stepTimeoutMs: 150, consoleWindowMs: 150 } } });
     await connect(page);
     await expect(page.getByTestId('usb-summary')).toContainText('Unknown device');
     await expect(page.getByTestId('usb-role')).toHaveText('unknown');

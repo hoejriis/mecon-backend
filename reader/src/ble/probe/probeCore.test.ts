@@ -32,7 +32,7 @@ describe('read-only allowlist', () => {
     await g.requestDevice();
     await g.connect();
     const frames = [
-      encodeSendChannel(0, 'x', 1),
+      encodeSendChannel(0, 'x', 1, 'Synth'),
       encodeSendDirect(SYNTHETIC_KEYS.alice, 'x', 1),
       encodeGetContacts(),
       encodeSyncNextMessage(),

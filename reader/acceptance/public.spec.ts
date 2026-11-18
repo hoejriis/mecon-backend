@@ -84,12 +84,13 @@ test.describe('browser behaviour', () => {
     expect(violations).toEqual([]);
   });
 
-  test('five tabs exist on the login screen', async ({ page, request }) => {
+  test('signed out shows only the login form: no tab navigation is exposed', async ({ page, request }) => {
     test.skip(!(await apiRouted(request)), `${NOT_ROUTED}; the shell shows a Backend-unreachable state, not the login screen`);
     await page.goto('/');
     await expect(page.getByLabel('Email address')).toBeVisible();
-    const nav = page.getByRole('navigation', { name: 'Main' });
-    await expect(nav.getByRole('link')).toHaveText(['Chats', 'Nodes', 'Map', 'Tools', 'Settings']);
+    // Access is restricted to existing accounts: the five tabs appear only once signed in
+    // (checked in authenticated.spec.ts).
+    await expect(page.getByRole('navigation', { name: 'Main' })).toHaveCount(0);
   });
 
   test('/probe/ble renders without sign-in', async ({ page }) => {

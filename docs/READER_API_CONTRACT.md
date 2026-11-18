@@ -29,6 +29,38 @@ This public contract defines the interface between the MECON Reader and an autho
 
 All list responses carry `items`, `next_cursor` (nullable) and `as_of`. IDs are opaque strings; timestamps UTC ISO-8601. `/session` advertises capability flags and contract minor version. Contract major version changes require a new prefix.
 
+## Offline lease (M3 draft)
+
+Additive to M1 and M2: `POST /leases` (issue or renew) and `GET /leases/keys` (public verification keys). Nothing in M1 or M2 changes. A Backend that issues no leases answers 404; the Reader then treats offline sending as not permitted.
+
+A **lease** is a Backend-signed token, compact `payload.signature`, both base64url without padding. `payload` is the UTF-8 canonical JSON (keys sorted by code point at every level, no insignificant whitespace) of:
+
+| Field | Meaning |
+| --- | --- |
+| `lease_id`, `user_id` | Opaque ids. A Reader refuses a lease whose `user_id` is not the account it is unlocked for. |
+| `issued_at`, `expires_at` | UTC. `expires_at` is **at most 7 days** after `issued_at`; a verifier refuses a longer lease even when the signature is good. |
+| `key_id` | Names the entry of `GET /leases/keys` that verifies it. |
+| `contract_version` | `1.x`. |
+| `identities[]` | `{identity_id, operations[]}` with operations from `receive`, `send.direct`, `send.channel`. |
+| `devices[]` | Ids of devices assigned to the user. A local operation is permitted only on a listed device. |
+| `channels[]` | Ids of channels the user may use offline. |
+
+`signature` is Ed25519 over the ASCII bytes `MECON-LEASE-1`, one `0x00` byte, then the decoded payload bytes exactly as received. The verifier checks the signature over those bytes and only then trusts the JSON; it never re-serializes. Ed25519 was chosen for small keys and signatures and deterministic signing, and because WebCrypto can verify it in the browser. A browser without Ed25519 in WebCrypto cannot verify a lease, so the Reader says so and does not permit offline sends there.
+
+What a lease is and is not:
+
+- **The Reader can never mint or extend a lease.** It holds only public keys. A lease changes only when the Backend issues a new one, and the Reader stores a new lease only if it verifies.
+- **Offline revocation cannot be faster than expiry.** A disabled user, a reassigned device or a removed channel is learned by a disconnected Reader only when its lease runs out, at most 7 days after the last renewal. The Reader renews silently whenever it is online with messaging available (once half the lifetime has passed). Online, a disabled user loses access at once, as before.
+- **Online rights always come from the server.** While connected, every request is authorized by the Backend; the lease is not consulted.
+- **A lease carries no secret and no key material:** only ids, scopes and times.
+
+Clock rule. A lease is expired when the effective time reaches `expires_at`, with no grace. The effective time is the latest of the local clock, the newest time the device saw while unlocked, and the lease's own `issued_at`, so setting the clock back does not revive a lease the device has already seen expire. A clock that simply runs slow, with nothing observed to show it, can extend a lease by that much (inside the 7-day maximum); that cannot be detected offline.
+
+Lease states in the Reader: `valid`, `expired`, `missing`, `invalid-signature` (bad signature, unknown or out-of-validity `key_id`, a lifetime over 7 days, another user's lease, a malformed payload) and `unsupported` (no Ed25519). Only `valid` permits anything, and only the identities, operations and devices it lists.
+
+Fixtures: `lease-issued.json` and `lease-keys.json` are synthetic and signed with a **test-only** keypair (`contracts/reader-api/v1/test-only/lease-test-keypair.json`, regenerate with `contracts/scripts/gen-lease-fixtures.mjs`). That key protects nothing and no Reader or Backend may trust it.
+
+
 ## Message and attempt semantics
 
 - A client creates a stable `client_draft_id`, chooses exactly one path (`ble` or `backend`), and creates a distinct `client_attempt_id` for an actual send. Backend POST requires an `Idempotency-Key` matching the attempt; identical repeats return the same attempt, differing payloads with the same key return 409.

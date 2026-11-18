@@ -4,6 +4,7 @@ import { useAuth } from '../auth/AuthContext';
 import type { CapabilityState, Device } from '../api/types';
 import { BUILD_COMMIT } from '../buildInfo';
 import type { TabDef } from '../tabs';
+import { OfflineSettings } from '../offline/OfflineSettings';
 import { Empty, ErrorState, Forbidden, Loading, Offline, Unavailable, useOnline } from '../components/States';
 
 function CapState({ state }: { state: Exclude<CapabilityState, 'available'> }) {
@@ -64,6 +65,7 @@ function SettingsBody() {
           {signOutError}
         </p>
       )}
+      <OfflineSettings />
       <button type="button" className="btn" onClick={() => void signOut()}>
         Sign out
       </button>

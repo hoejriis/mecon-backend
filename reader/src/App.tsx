@@ -5,6 +5,9 @@ import { BUILD_COMMIT } from './buildInfo';
 import { Header } from './components/Header';
 import { LoginScreen } from './components/LoginScreen';
 import { TabBar } from './components/TabBar';
+import { OfflineScreen } from './offline/OfflineScreen';
+import { OfflineSync } from './offline/OfflineSync';
+import { useOffline } from './offline/OfflineContext';
 import { MessagingProvider } from './messaging/MessagingContext';
 import { ChatsRoutes, ContactsPage } from './routes/ChatsPage';
 import { Loading } from './components/States';
@@ -35,6 +38,7 @@ export function Shell() {
       <Header />
       <main className="content" id="main" tabIndex={-1}>
         <MessagingProvider>
+        <OfflineSync />
         <Routes>
           <Route path="/chats/contacts" element={<ContactsPage />} />
           <Route path="/chats/*" element={<ChatsRoutes />} />
@@ -123,7 +127,12 @@ export function App() {
 }
 
 function AuthGate() {
-  const { status } = useAuth();
+  const { status, loginPhase } = useAuth();
+  const off = useOffline();
+  // The Backend cannot be reached and no session could be loaded: if this device has an offline
+  // cache, offer it (locked: unlock form only). A reachable Backend that says "signed out" gets the login screen.
+  const unreachable = status === 'signedOut' && (loginPhase === 'error' || !navigator.onLine);
+  if (unreachable && off.profiles.length > 0) return <OfflineScreen />;
   if (status === 'loading') {
     return (
       <div className="shell">

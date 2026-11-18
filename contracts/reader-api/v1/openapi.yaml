@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: MECON Reader API
-  version: 1.0.0-draft.4
+  version: 1.0.0-draft.5
   summary: Interface between the MECON Reader and an authorized MECON Backend.
   description: |
     Machine-readable form of docs/READER_API_CONTRACT.md. Target specification,
@@ -11,6 +11,9 @@ info:
       login, login poll, session, logout, health, devices (may be empty).
     * **M2** (messaging) operations are drafts and may change by pull request
       until the Backend implements them.
+    * **M3** (offline lease) operations are drafts and additive: `POST /leases`
+      and `GET /leases/keys`. They change no M1 or M2 schema. See the
+      "Offline lease" section of docs/READER_API_CONTRACT.md.
 
     The Reader is served at the same origin as this API (the API is reached
     through the Reader host's reverse proxy). The Backend authenticates with a
@@ -34,6 +37,8 @@ tags:
     description: M2 draft. Identities, conversations, contacts, channels, sends.
   - name: events
     description: M2 draft. Server-sent events.
+  - name: leases
+    description: M3 draft. Backend-signed offline lease and its verification keys.
 
 paths:
   /health:
@@ -470,6 +475,65 @@ paths:
               examples:
                 expired: { externalValue: fixtures/error-410-events.json }
 
+  /leases:
+    post:
+      tags: [leases]
+      operationId: createLease
+      summary: (M3 draft) Issue or renew the caller's offline lease
+      description: |
+        Issues a new lease for the authenticated caller, or renews the current
+        one (a renewal is simply a new lease with a later `expires_at`; the
+        previous one stays valid until its own expiry, since a disconnected
+        Reader cannot be told otherwise). The request has no body: the Backend
+        decides every field from its own records, so the Reader can neither ask
+        for broader rights nor a longer lifetime.
+
+        The Reader calls this whenever it is online with messaging available
+        and the stored lease is missing or past half its lifetime. Online
+        rights never come from the lease: while connected, every request is
+        authorized by the server as usual.
+
+        A Backend that does not issue leases answers 404 (`not_found`); the
+        Reader then treats offline sending as not permitted.
+      parameters:
+        - $ref: '#/components/parameters/Csrf'
+      responses:
+        '200':
+          description: A signed lease
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LeaseIssued' }
+              examples:
+                issued: { externalValue: fixtures/lease-issued.json }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/Throttled' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /leases/keys:
+    get:
+      tags: [leases]
+      operationId: listLeaseKeys
+      summary: (M3 draft) Public keys that verify leases
+      description: |
+        The Backend's lease verification public keys. They are public: the
+        response carries no secret. The Reader fetches the set whenever it is
+        online and keeps it, so it can verify a lease offline. A key that
+        signs no more leases is listed as `retired` until every lease it signed
+        has expired, then dropped. The Reader accepts a lease only when its
+        `key_id` names a key in the set it holds.
+      responses:
+        '200':
+          description: Verification keys
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LeaseKeyList' }
+              examples:
+                keys: { externalValue: fixtures/lease-keys.json }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
 components:
   securitySchemes:
     sessionCookie:
@@ -888,3 +952,112 @@ components:
         occurred_at: { $ref: '#/components/schemas/Timestamp' }
         resource_id: { type: [string, 'null'] }
         version: { type: integer, minimum: 1 }
+
+    LeaseOperation:
+      type: string
+      enum: [receive, send.direct, send.channel]
+      description: |
+        `receive`: show incoming traffic a locally connected device exposes.
+        `send.direct`: send a direct message through a local device.
+        `send.channel`: send a channel message through a local device.
+
+    LeasePayload:
+      description: |
+        The signed content of a lease. It carries no secret and no key
+        material: only opaque ids, scopes and times. Everything in it is also
+        visible to the Backend and, by design, to the person it was issued to.
+
+        Offline revocation cannot be faster than expiry: a Reader that cannot
+        reach the Backend learns of a disabled user, a reassigned device or a
+        removed channel only when its lease runs out (`expires_at`, at most 7
+        days after `issued_at`).
+      type: object
+      required: [lease_id, user_id, issued_at, expires_at, key_id, contract_version, identities, devices, channels]
+      properties:
+        lease_id: { $ref: '#/components/schemas/OpaqueId' }
+        user_id:
+          allOf:
+            - $ref: '#/components/schemas/OpaqueId'
+          description: The `user.id` of the session this lease was issued to. A Reader refuses a lease for any other user.
+        issued_at: { $ref: '#/components/schemas/Timestamp' }
+        expires_at:
+          allOf:
+            - $ref: '#/components/schemas/Timestamp'
+          description: At most 7 days (604800 s) after `issued_at`. A verifier refuses a longer lease even when the signature is good.
+        key_id:
+          allOf:
+            - $ref: '#/components/schemas/OpaqueId'
+          description: Names the entry of `GET /leases/keys` that verifies the signature.
+        contract_version:
+          type: string
+          pattern: '^1\.[0-9]+$'
+        identities:
+          type: array
+          description: Identities the user may use offline, and the operations granted per identity.
+          items:
+            type: object
+            required: [identity_id, operations]
+            properties:
+              identity_id: { $ref: '#/components/schemas/OpaqueId' }
+              operations:
+                type: array
+                uniqueItems: true
+                items: { $ref: '#/components/schemas/LeaseOperation' }
+        devices:
+          type: array
+          description: Ids of the devices assigned to the user (as in `GET /devices`). A local operation is permitted only on a listed device.
+          items: { $ref: '#/components/schemas/OpaqueId' }
+        channels:
+          type: array
+          description: Ids of the channels the user may use offline (as in `GET /channels`).
+          items: { $ref: '#/components/schemas/OpaqueId' }
+
+    LeaseToken:
+      type: string
+      maxLength: 16384
+      pattern: '^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$'
+      description: |
+        Compact `payload.signature`, both base64url without padding.
+        `payload` is the UTF-8 canonical JSON of a `LeasePayload`: object keys
+        sorted by code point at every level, no insignificant whitespace.
+        `signature` is an Ed25519 signature over the ASCII bytes
+        `MECON-LEASE-1` followed by one 0x00 byte, then the decoded payload
+        bytes exactly as they appear in the token. The prefix keeps a lease
+        signature from being valid for anything else. A verifier checks the
+        signature over the bytes it received, and only then parses them.
+
+    LeaseIssued:
+      type: object
+      required: [lease, expires_at]
+      properties:
+        lease: { $ref: '#/components/schemas/LeaseToken' }
+        expires_at:
+          allOf:
+            - $ref: '#/components/schemas/Timestamp'
+          description: "A convenience copy of the payload `expires_at`. Never trusted: only the signed payload counts."
+
+    LeaseKey:
+      type: object
+      required: [key_id, algorithm, public_key, status, not_before, not_after]
+      properties:
+        key_id: { $ref: '#/components/schemas/OpaqueId' }
+        algorithm: { type: string, enum: [Ed25519] }
+        public_key:
+          type: string
+          pattern: '^[A-Za-z0-9_-]{43}$'
+          description: The raw 32-byte Ed25519 public key, base64url without padding.
+        status: { type: string, enum: [active, retired] }
+        not_before: { $ref: '#/components/schemas/Timestamp' }
+        not_after:
+          oneOf:
+            - $ref: '#/components/schemas/Timestamp'
+            - type: 'null'
+          description: Null while the key still signs leases.
+    LeaseKeyList:
+      type: object
+      required: [keys, as_of]
+      properties:
+        keys:
+          type: array
+          items: { $ref: '#/components/schemas/LeaseKey' }
+        as_of: { $ref: '#/components/schemas/Timestamp' }

@@ -1,0 +1,7 @@
+{
+  "WARNING": "TEST FIXTURE ONLY. This Ed25519 keypair was generated for contract and unit tests. It protects nothing, it is not and never was a Backend key, and it must never be deployed or trusted by any real Reader or Backend.",
+  "key_id": "key_synthetic_test_only_1",
+  "algorithm": "Ed25519",
+  "private_key_seed_hex": "182e421c4939f32ce7682bb2ec92c1167f5dd8f8a07014fc6e2af07d8302b98a",
+  "public_key_base64url": "UJIttPpl9yZFe1oPjduEEtYqNhUvFQ7Gwpv_4nqJHYM"
+}

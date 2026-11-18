@@ -51,7 +51,8 @@ export interface paths {
          *     an earlier snapshot: only receptions after it are returned. An expired
          *     `since` is a 410 `cursor_expired`; the client then asks again without
          *     `since`. After `expires_at` the snapshot and its cursor must not be
-         *     treated as current.
+         *     treated as current; `expires_at` is when the snapshot's cursor stops
+         *     being accepted (the server keeps a bounded window, about a day).
          */
         get: operations["getObservationSnapshot"];
         put?: never;
@@ -135,7 +136,12 @@ export interface components {
         Location: {
             lat: number;
             lon: number;
-            /** @description Radius in metres within which the true position lies. */
+            /**
+             * @description Radius in metres within which the true position lies. The server
+             *     coarsens by observer class (for example, finer for the caller's own
+             *     fleet than for an approved public source); a client must not assume
+             *     a finer position than this.
+             */
             precision_m: number;
         };
         Freshness: {
@@ -189,10 +195,13 @@ export interface components {
              * @enum {string}
              */
             transport: "lora" | "mqtt" | "usb" | "ble" | "unknown";
+            /** @description Rounded to an integer; null when unknown or outside this range. */
             rssi: number | null;
             snr: number | null;
             /**
              * @description Which rule made the observer visible to the caller.
+             *     `shared_fleet` appears only where the Backend implements cross-fleet
+             *     observation sharing (opt-in, off by default).
              * @enum {string}
              */
             provenance: "own_fleet" | "shared_fleet" | "approved_public_source";
@@ -207,7 +216,9 @@ export interface components {
         /**
          * @description The SSE envelope. `reception` is present exactly when `kind` is
          *     `reception`, and then `reception.event_id` equals `event_id`. The two
-         *     control kinds carry no observation data.
+         *     control kinds carry no observation data, and their `event_id` is not a
+         *     resume point: resuming from it answers 410, and the client starts again
+         *     from a fresh snapshot.
          */
         ObservationEvent: {
             event_id: components["schemas"]["OpaqueId"];

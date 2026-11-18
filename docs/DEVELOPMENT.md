@@ -37,6 +37,9 @@ Docker image, built from the repository root:
 - `reader/src/api/`: typed API client and the generated schema types.
 - `reader/src/auth/`: auth state, login polling and pending-login storage.
 - `reader/src/staleShell.ts`: stale-shell repair.
+- `reader/src/sw/`: the service worker source (`sw.js`) and the build helper that stamps and lists the precache (`buildSw.ts`).
+- `reader/src/update/`: the update lifecycle (`updateController.ts`), the guards that say what an update would interrupt (`guards.ts`), registration (`register.ts`) and the banner.
+- `reader/src/storage/`: the versioned migration runner for the future encrypted cache.
 - `reader/src/components/`: header, skip link, bottom tab bar with icons, state components and login screen.
 - `reader/src/routes/`: one page component per tab; from 900px wide a list pane and a detail pane sit above the bottom bar.
 - `reader/src/styles/tokens.css`: design tokens (palette, light and dark via `prefers-color-scheme`).
@@ -67,13 +70,101 @@ An installed shell can run an old build for days, so on load the Reader
 fetches `/version.json` (emitted at build by `reader/vite.config.ts`, body
 `{"commit": <string|null>}`) and compares it with the commit compiled into the
 bundle. The Backend's `/health` is deliberately not used for this: it reports
-the Backend's commit, which differs from the Reader's. When both commits are
-non-null and differ, the Reader asks any registered service worker to update,
-waits about 3 s, then unregisters every worker, deletes every cache and
-reloads, at most once per served commit (`sessionStorage`). A null commit on
-either side does nothing. `/version.json` is served with `Cache-Control:
-no-cache` by `deploy/reader-headers.caddy` like everything outside
-`/assets/`.
+the Backend's commit, which differs from the Reader's. A null commit on either
+side does nothing, and a matching commit does nothing. `/version.json` is
+served with `Cache-Control: no-cache` by `deploy/reader-headers.caddy` like
+everything outside `/assets/`, and the service worker never answers it.
+
+When both commits are non-null and differ, the repair runs **only when nothing
+can be lost**, that is when no draft is non-empty, no send attempt is in an
+uncertain state and no BLE link is open (see "Safe updates"). That is checked
+before the repair and again after the roughly 3 s wait, because a draft can be
+typed meanwhile. The repair asks the registered worker to update and waits;
+if a new version has downloaded it is activated the normal way (rollback cache
+kept), otherwise every worker is unregistered, every cache deleted and the page
+reloaded, at most once per served commit (`sessionStorage`). When something
+could be lost, nothing is repaired or reloaded: the same confirmed-update
+banner as for a waiting version is shown and the user decides.
+
+## Safe updates
+
+The Reader ships a service worker (`/sw.js`, a same-origin static file written
+at build by the `mecon-service-worker` plugin in `reader/vite.config.ts`; no
+inline script, so the strict CSP is unchanged). Source: `reader/src/sw/sw.js`.
+It is registered in production builds only.
+
+**Worker.** Install downloads `index.html` and every built file (hashed assets
+and `public/` files, never `sw.js` or `version.json`) into a cache named
+`mecon-reader-shell-<commit>` (`local-<hash>` for a build with no commit), and
+writes a completion marker last. It never calls `skipWaiting`: a new version
+waits. A failed or interrupted install deletes only its own incomplete cache
+and rejects, so the running version and its cache are untouched. Navigations
+are answered with the cached `index.html` (offline included); precached files
+are served cache-first. `/api/*` is never handled by the worker: no cache, no
+offline fallback, the browser goes to the network. Non-GET, cross-origin,
+`/version.json`, `/sw.js` and unknown paths also go to the network. The worker
+holds no message text, drafts or other private data.
+
+**Activation and retention.** The page sends `SKIP_WAITING` only after a user
+tap (and confirmation, below). On activation the worker records
+`{current, previous}` in the `mecon-reader-meta` cache (cache names only),
+keeps the previous version's cache, and deletes caches older than the previous
+one. The previous cache is deleted only when a page running the new version
+sends `BOOT_OK` with its own commit (so an old tab cannot vouch for the new
+version) and no other tab is open (an old tab may still need that version's
+lazy chunks; with two tabs the cache is kept until one new page is the only
+tab). Until then an asset missing from the new cache is served from the
+previous one.
+
+**Banner and confirmation.** With a waiting version the Reader shows a
+non-blocking "Update available" banner. Activation needs a tap. Before it
+activates, the Reader asks every registered guard (`update/guards.ts`):
+non-empty drafts (`MessagingContext`), send attempts with no final outcome
+(`isUncertainAttempt`: in flight, ambiguous, unknown, timed out, or awaiting a
+DM acknowledgement) and an open BLE link (`bleAdapterGuard`, to be registered
+by whichever component mounts a `BleAdapter`; no production view mounts one
+yet, so it is not wired). If any guard reports something, a confirmation lists
+it: drafts are in memory and would be lost; attempts keep their identity on
+the Backend and are not resent; the BLE link would be closed. If something new
+appears between the prompt and the confirm, the prompt is shown again instead
+of acting. After confirmation the page posts `SKIP_WAITING` and reloads once on
+`controllerchange`. The update never sends anything.
+
+**Several tabs.** Activation announces itself on a `BroadcastChannel`
+(`mecon-reader-update`) and through the browser's own `controllerchange`. Other
+tabs show "Updated in another tab - reload when ready" and never reload by
+themselves; their Reload button asks for the same confirmation when they hold
+drafts or uncertain attempts.
+
+## Version compatibility and rollback policy
+
+- **Assets.** Hashed files are immutable; `index.html`, `sw.js` and
+  `version.json` always revalidate. A deploy publishes a whole build; the
+  Reader talks to the Backend through the versioned `/api/reader/v1` contract,
+  and a Reader build must work with the Backend versions its contract covers.
+- **Host rollback.** The static host keeps previous release directories (the
+  release tarball per tag is also kept on GitHub); rolling back is pointing the
+  host at an earlier directory. The host-side tooling is outside this
+  repository. Installed clients treat that as a newer-commit-differs case: the
+  worker of the older build is a different `sw.js`, so it installs, waits and
+  is offered through the same banner. A rollback therefore needs no special
+  client step, and never clears caches or data.
+- **Client rollback.** The previous version's cache is retained until the new
+  version has booted and is the only tab (above); a failed install never
+  replaces the running version.
+- **Local data.** The future encrypted cache is migrated by
+  `storage/migrations.ts`: a schema version marker, ordered one-step
+  migrations, run on a copy of the live generation, verified, then switched by
+  one write. On failure, or when the stored schema is newer than this build
+  knows, the live data is left untouched, a quarantine marker is written and the
+  UI shows "This version can't read your local data; nothing was deleted."
+  with guidance to go back to the version used before or reload the latest.
+  The generation kept before a switch is freed only by
+  `discardPreviousGeneration`. Today there is one registered migration (0 to 1,
+  no data) and nothing stores content; the runner is exercised only by tests
+  against an in-memory fake, and is not yet wired to IndexedDB.
+- **Never lost by an update:** nothing in web storage holds message text. Drafts
+  are in memory and are lost by a reload, which is why a reload asks first.
 
 ## Design tokens
 

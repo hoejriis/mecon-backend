@@ -21,7 +21,8 @@ import type {
   Target,
 } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
-import { describeAttempt, type LocalAttempt } from './attemptStatus';
+import { registerUpdateGuard } from '../update/guards';
+import { describeAttempt, isUncertainAttempt, type LocalAttempt } from './attemptStatus';
 import {
   DEFAULT_RETRY_DELAYS_MS,
   newAttemptId,
@@ -164,6 +165,17 @@ export function MessagingProvider({
   const msgSeq = useRef(new Map<string, number>());
   const attemptsRef = useRef<LocalAttempt[]>([]);
   attemptsRef.current = attempts;
+
+  // An update or reload would lose the in-memory drafts and the local view of
+  // uncertain attempts; tell the update flow so it asks first.
+  useEffect(
+    () =>
+      registerUpdateGuard(() => ({
+        drafts: [...drafts.current.values()].filter((d) => d.text.trim() !== '').length,
+        uncertainAttempts: attemptsRef.current.filter(isUncertainAttempt).length,
+      })),
+    [],
+  );
   const live = useRef(false);
 
   const patchAttempt = useCallback((clientAttemptId: string, patch: Partial<LocalAttempt>) => {

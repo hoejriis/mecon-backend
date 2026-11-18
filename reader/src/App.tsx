@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from './auth/AuthContext';
 import { BUILD_COMMIT } from './buildInfo';
@@ -11,6 +11,10 @@ import { Loading } from './components/States';
 import { SkipLink } from './components/SkipLink';
 import { TabPage } from './routes/TabPage';
 import { runStaleShellCheck } from './staleShell';
+import { collectBlockers } from './update/guards';
+import { startUpdates } from './update/register';
+import { UpdateBanner } from './update/UpdateBanner';
+import type { UpdateController } from './update/updateController';
 import { TABS } from './tabs';
 
 // Dev-only BLE harness. `import.meta.env.DEV` is a build-time constant, so a
@@ -54,12 +58,23 @@ export function Shell() {
 }
 
 export function App() {
+  const [updates, setUpdates] = useState<UpdateController | null>(null);
   useEffect(() => {
-    void runStaleShellCheck(BUILD_COMMIT);
+    void startUpdates(BUILD_COMMIT).then((c) => {
+      setUpdates(c);
+      // A stale shell repairs itself only when nothing can be lost; otherwise the update banner asks.
+      return runStaleShellCheck(BUILD_COMMIT, {
+        getBlockers: collectBlockers,
+        onBlocked: () => c?.noteStaleBlocked(),
+        activateWaiting: () => c?.activateWaiting() ?? false,
+      });
+    });
   }, []);
 
   // The probe uses no Backend, so it is reachable before sign-in.
   return (
+    <>
+    <UpdateBanner controller={updates} />
     <Routes>
       <Route
         path="/probe/ble"
@@ -71,6 +86,7 @@ export function App() {
       />
       <Route path="*" element={<AuthGate />} />
     </Routes>
+    </>
   );
 }
 

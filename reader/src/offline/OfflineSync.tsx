@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import type { Message, Target } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { useMessaging, targetKey } from '../messaging/MessagingContext';
+import type { DraftRecord } from './cache';
 import { useOffline } from './OfflineContext';
 import { reconcile } from './reconcile';
 
@@ -43,30 +44,57 @@ export function OfflineSync() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cache, sig, convs.status, idents.status]);
 
-  // Drafts and send attempts: write through; restore saved drafts once per unlock.
+  // Drafts and send attempts: write through; restore saved drafts and attempts once per unlock.
   const targets: Target[] = convs.items.map((c) => c.target);
   const dsig = targets
-    .map((t) => `${targetKey(t)}=${m.draftText(t).length}/${m.attemptsFor(t).map((a) => `${a.clientAttemptId}${a.phase}${a.attempt?.status ?? ''}${a.supersededBy ?? ''}`).join(',')}`)
+    .map((t) => `${targetKey(t)}=${m.draftText(t).length}/${m.draftIdFor(t) ?? ''}/${m.attemptsFor(t).map((a) => `${a.clientAttemptId}${a.phase}${a.attempt?.status ?? ''}${a.supersededBy ?? ''}`).join(',')}`)
     .join('|');
+  // The draft id last written per target, so a consumed or replaced draft's record is removed.
+  const savedDraftIds = useRef(new Map<string, string>());
 
   useEffect(() => {
     if (!cache) {
       restored.current = null;
+      savedDraftIds.current.clear();
       return;
     }
+    if (!m.messaging) return; // nothing to restore into yet; retried when messaging is available
+    let stale = false;
     void (async () => {
       if (restored.current !== cache.userId) {
         restored.current = cache.userId;
-        for (const d of await cache.listDrafts()) if (m.draftText(d.target) === '') m.setDraftText(d.target, d.text);
+        // Newest draft per target wins; it keeps its original draft id.
+        const newest = new Map<string, DraftRecord>();
+        for (const d of await cache.listDrafts()) {
+          const k = targetKey(d.target);
+          if (!newest.has(k) || newest.get(k)!.updatedAt < d.updatedAt) newest.set(k, d);
+        }
+        // Attempts first, so a draft's conversation shows them as soon as it opens. Read-only: never sends.
+        m.rehydrate(await cache.listAttempts());
+        for (const d of newest.values()) m.restoreDraft(d.target, d.draftId, d.text);
       }
+      if (stale) return;
       for (const t of targets) {
+        const k = targetKey(t);
         const text = m.draftText(t);
-        await cache.saveDraft({ draftId: `draft:${targetKey(t)}`, target: t, identityId: null, text, updatedAt: Date.now() });
+        const id = m.draftIdFor(t);
+        const prev = savedDraftIds.current.get(k);
+        if (prev && prev !== id) {
+          await cache.deleteDraft(prev);
+          savedDraftIds.current.delete(k);
+        }
+        if (id) {
+          await cache.saveDraft({ draftId: id, target: t, identityId: null, text, updatedAt: Date.now() });
+          if (text.trim() !== '') savedDraftIds.current.set(k, id);
+        }
         for (const a of m.attemptsFor(t)) await cache.saveAttempt(a);
       }
     })().catch(() => undefined);
+    return () => {
+      stale = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cache, dsig]);
+  }, [cache, dsig, m.messaging]);
 
   return null;
 }

@@ -47,6 +47,8 @@ const INERT: OfflineValue = {
 };
 
 const Ctx = createContext<OfflineValue>(INERT);
+/** Exported for tests, which supply a value with a real cache. */
+export const OfflineContext = Ctx;
 
 export function useOffline(): OfflineValue {
   return useContext(Ctx);

@@ -44,6 +44,13 @@ describe('describeAttempt', () => {
     expect(v.terminal).toBe(true);
   });
 
+  it('an acked that arrives for a channel anyway is shown as transmitted, not delivered', () => {
+    const v = describeAttempt(server('acked'), 'channel');
+    expect(v.label).toBe('Transmitted');
+    expect(v.label).not.toMatch(/deliver|ack/i);
+    expect(v.terminal).toBe(true);
+  });
+
   it('transmitted on a channel is final and claims no delivery; on a DM it still awaits an ack', () => {
     expect(describeAttempt(server('transmitted'), 'channel')).toMatchObject({ terminal: true, label: 'Transmitted' });
     expect(describeAttempt(server('transmitted'), 'channel').detail).toMatch(/no delivery confirmation/);

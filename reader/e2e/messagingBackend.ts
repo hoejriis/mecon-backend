@@ -11,6 +11,10 @@ export interface PostRecord {
 
 export interface MsgBackend {
   posts: PostRecord[];
+  /** POST /conversations/{id}/read calls. */
+  reads: Array<{ conversationId: string; csrf: string; body: Json }>;
+  /** GET /conversations/{id} calls (deep links). */
+  conversationGets: string[];
   /** ok: answer 201 queued. abort: the connection fails (ambiguous). */
   postMode: 'ok' | 'abort';
   attempts: Map<string, Json>;
@@ -56,8 +60,19 @@ export async function mockMessagingBackend(page_: Page): Promise<MsgBackend> {
   ];
   const channels = [{ id: 'chan_demo_0001', name: 'Demo Channel', visibility: 'public' }];
 
+  // Not in the list page, so reachable only by GET /conversations/{id}.
+  const deepConversation = {
+    id: 'conv_demo_0009',
+    identity_id: 'ident_demo_0001',
+    target: { kind: 'contact', id: 'contact_demo_0009' },
+    title: 'Deep Link Peer',
+    unread_count: 0,
+    last_activity_at: '2030-01-14T09:00:00Z',
+  };
   const st: MsgBackend = {
     posts: [],
+    reads: [],
+    conversationGets: [],
     postMode: 'ok',
     attempts: new Map(),
     eventLog: [],
@@ -89,6 +104,23 @@ export async function mockMessagingBackend(page_: Page): Promise<MsgBackend> {
     if (m === 'GET' && path === '/conversations') return j(route, 200, page(conversations));
     if (m === 'GET' && path === '/conversations/conv_demo_0001/messages') return j(route, 200, page(dmMsgs));
     if (m === 'GET' && path === '/conversations/conv_demo_0002/messages') return j(route, 200, page(channelMsgs));
+    const cm = /^\/conversations\/([^/]+)$/.exec(path);
+    if (m === 'GET' && cm) {
+      const id = decodeURIComponent(cm[1]!);
+      st.conversationGets.push(id);
+      const found = id === deepConversation.id ? deepConversation : conversations.find((c) => c.id === id);
+      return found ? j(route, 200, found) : j(route, 404, fixture('error-404-conversation'));
+    }
+    if (m === 'GET' && path === `/conversations/${deepConversation.id}/messages`) return j(route, 200, page([]));
+    const rm = /^\/conversations\/([^/]+)\/read$/.exec(path);
+    if (m === 'POST' && rm) {
+      st.reads.push({
+        conversationId: decodeURIComponent(rm[1]!),
+        csrf: req.headers()['x-csrf-token'] ?? '',
+        body: JSON.parse(req.postData() ?? '{}') as Json,
+      });
+      return route.fulfill({ status: 204 });
+    }
     if (m === 'POST' && path === '/send-attempts') {
       const body = JSON.parse(req.postData() ?? '{}') as Json;
       const h = req.headers();

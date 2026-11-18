@@ -98,6 +98,17 @@ export function describeAttempt(a: LocalAttempt, targetKind: 'contact' | 'channe
         terminal: targetKind === 'channel',
       };
     case 'acked':
+      // The contract never emits acked for a channel (no per-recipient ack).
+      // If one arrives anyway, claim only what channels can claim: transmitted.
+      if (targetKind === 'channel') {
+        return {
+          ...base,
+          label: 'Transmitted',
+          detail: 'Channels give no delivery confirmation.',
+          tone: 'ok',
+          terminal: true,
+        };
+      }
       // A native acknowledgement from the recipient device. Never a read receipt.
       return {
         ...base,

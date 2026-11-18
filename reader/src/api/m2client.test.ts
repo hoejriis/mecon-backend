@@ -1,7 +1,7 @@
 import { AmbiguousSendError, ApiError, CapabilityError, createApiClient, type ApiClient } from './client';
 import type { Capabilities, SendRequest } from './types';
 import { createBackend, fx, json, sessionWith, type Backend } from '../test/backend';
-import { attempt, identities, page } from '../test/m2';
+import { attempt, deepConversation, identities, notFound404, page } from '../test/m2';
 
 const ALL: Partial<Capabilities> = { messaging: 'available', send: 'available', events: 'available' };
 
@@ -72,6 +72,30 @@ describe('M2 capability gating', () => {
     b.on('GET /conversations/c%2F1/messages?cursor=abc&limit=20', json(page([])));
     await c.listMessages('c/1', { cursor: 'abc', limit: 20 });
     expect(b.calls[0]!.path).toBe('/conversations/c%2F1/messages?cursor=abc&limit=20');
+  });
+});
+
+describe('getConversation and markConversationRead', () => {
+  it('GET /conversations/{id} encodes the id and needs messaging', async () => {
+    const b = createBackend();
+    const c = await signedIn(b, ALL);
+    b.on('GET /conversations/c%2F1', json(deepConversation));
+    await expect(c.getConversation('c/1')).resolves.toMatchObject({ id: deepConversation.id });
+    b.on('GET /conversations/gone', json(notFound404, 404));
+    await expect(c.getConversation('gone')).rejects.toMatchObject({ status: 404, code: 'not_found' });
+    const off = await signedIn(createBackend(), { messaging: 'unavailable' });
+    await expect(off.getConversation('x')).rejects.toBeInstanceOf(CapabilityError);
+    await expect(off.markConversationRead('x', 'm')).rejects.toBeInstanceOf(CapabilityError);
+  });
+
+  it('mark-read POSTs {up_to} with the CSRF token to /read', async () => {
+    const b = createBackend();
+    const c = await signedIn(b, ALL);
+    b.on('POST /conversations/c1/read', () => new Response(null, { status: 204 }));
+    await c.markConversationRead('c1', 'msg_9');
+    const [call] = b.callsTo('POST /conversations/c1/read');
+    expect(JSON.parse(call!.body!)).toEqual({ up_to: 'msg_9' });
+    expect(call!.headers.get('X-CSRF-Token')).toBe('csrf_synthetic_0123456789abcdef');
   });
 });
 
@@ -177,6 +201,17 @@ describe('createSendAttempt', () => {
     await expect(c.createSendAttempt(REQ)).rejects.toBeInstanceOf(AmbiguousSendError);
     b.on('POST /send-attempts', () => new Response(JSON.stringify(attempt('queued', { client_attempt_id: 'someone-else' })), { status: 201 }));
     await expect(c.createSendAttempt(REQ)).rejects.toBeInstanceOf(AmbiguousSendError);
+  });
+
+  it.each([400, 404, 422, 429])('a %i answer is a definite refusal, never ambiguous', async (status) => {
+    const b = createBackend();
+    const c = await signedIn(b, ALL);
+    b.on('POST /send-attempts', json({ code: 'invalid', message: 'no', request_id: 'r', retryable: false }, status));
+    const err = await c.createSendAttempt(REQ).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err).not.toBeInstanceOf(AmbiguousSendError);
+    expect(err).toMatchObject({ status });
+    expect(b.count('POST /send-attempts')).toBe(1);
   });
 
   it('422 is a definite refusal carrying the server message', async () => {

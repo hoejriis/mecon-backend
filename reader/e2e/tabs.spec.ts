@@ -24,7 +24,6 @@ for (const vp of VIEWPORTS) {
       await nav.getByRole('link', { name: tab }).click();
       await expect(nav.getByRole('link', { name: tab })).toHaveAttribute('aria-current', 'page');
       await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
-      await page.screenshot({ path: `e2e-artifacts/${vp.name}-${tab.toLowerCase()}.png` });
     }
     const detail = page.locator('.pane-detail');
     if (vp.width >= 900) await expect(detail).toBeVisible();

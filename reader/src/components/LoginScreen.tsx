@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { Header } from './Header';
+import { SkipLink } from './SkipLink';
 
 export function LoginScreen() {
   const { loginPhase, loginMessage, submitEmail, restartLogin } = useAuth();
@@ -14,13 +15,14 @@ export function LoginScreen() {
   const waiting = loginPhase === 'waiting';
   return (
     <div className="shell">
+      <SkipLink />
       <Header />
-      <main className="content login">
+      <main className="content login" id="main" tabIndex={-1}>
         <h1>Sign in</h1>
         {waiting ? (
-          <div className="empty" role="status">
-            <p className="empty-title">Check your email</p>
-            <p className="empty-body">
+          <div className="state state-empty" role="status">
+            <p className="state-title">Check your email</p>
+            <p className="state-body">
               If this address has an account, a sign-in link is on its way. Open the link, then
               return here. This page signs in as soon as the link is approved.
             </p>
@@ -54,7 +56,7 @@ export function LoginScreen() {
             <button type="submit" className="btn" disabled={loginPhase === 'sending'}>
               {loginPhase === 'sending' ? 'Sending…' : 'Email me a sign-in link'}
             </button>
-            <p className="empty-body">
+            <p className="state-body">
               If this address has an account, a sign-in link is on its way.
             </p>
           </form>

@@ -37,7 +37,7 @@ Docker image, built from the repository root:
 - `reader/src/api/`: typed API client and the generated schema types.
 - `reader/src/auth/`: auth state, login polling and pending-login storage.
 - `reader/src/staleShell.ts`: stale-shell repair.
-- `reader/src/components/`: header, bottom tab bar and login screen.
+- `reader/src/components/`: header, skip link, bottom tab bar with icons, state components and login screen.
 - `reader/src/routes/`: one page component per tab; from 900px wide a list pane and a detail pane sit above the bottom bar.
 - `reader/src/styles/tokens.css`: design tokens (palette, light and dark via `prefers-color-scheme`).
 - `reader/public/brand/`: official brand SVGs.
@@ -74,6 +74,36 @@ reloads, at most once per served commit (`sessionStorage`). A null commit on
 either side does nothing. `/version.json` is served with `Cache-Control:
 no-cache` by `deploy/reader-headers.caddy` like everything outside
 `/assets/`.
+
+## Design tokens
+
+`reader/src/styles/tokens.css` has three layers; components use the second and
+third only, never raw hex values.
+
+- **Palette** (`--brand-*`, `--surface-dark-*`): the canonical MeshContinuum
+  colours from the brand specification.
+- **Roles**, defined for light and dark (`prefers-color-scheme`): `--bg`,
+  `--surface`, `--surface-raised`, `--surface-sunken`, `--text`,
+  `--text-muted`, `--text-on-accent`, `--border` (decorative), `--border-strong`
+  (control outlines, at least 3:1), `--accent` (violet: a darkened violet on
+  light, the brand violet on dark, both at least 4.5:1 as text), `--accent-soft`,
+  `--danger`, `--focus`.
+- **Scales**: spacing `--space-1`..`--space-7` (4 px base), radii `--radius-sm`
+  to `--radius-pill`, type `--text-xs`..`--text-xl` with weights, and sizes
+  (`--tap-min` 44 px, `--tabbar-height`, `--icon-size` 24 px).
+
+The focus ring is `--focus-width` (3 px) in `--focus` (violet on light,
+turquoise on dark; at least 3:1 against the backgrounds) with
+`--focus-offset`. Turquoise is never used as text or thin lines on light.
+
+Reusable states live in `reader/src/components/States.tsx`: `Empty`,
+`Unavailable` (capability unavailable), `Forbidden`, `Offline`
+(`navigator.onLine`), `ErrorState` (shows `request_id` small) and `Loading`
+(skeleton; the pulse is disabled under `prefers-reduced-motion`). Tab icons are
+original line drawings in `TabIcons.tsx`. Accessibility is checked by
+`reader/e2e/a11y.spec.ts` (axe, all five tabs, phone and desktop and tablet,
+light and dark, zero serious or critical violations); the same run saves
+screenshots to `reader/e2e-artifacts/`.
 
 ## Content Security Policy rule
 

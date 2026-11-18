@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { createApiClient } from '../api/client';
@@ -49,12 +50,19 @@ function fakePasskey() {
 }
 
 let b: Backend;
-let live: MessagingValue;
+/** The latest messaging value, published by the probe from an effect. */
+const latest: { current: MessagingValue | null } = { current: null };
+const live = new Proxy({} as MessagingValue, {
+  get: (_t, k) => (latest.current as unknown as Record<string | symbol, unknown>)[k],
+});
 function Probe() {
-  live = useMessaging();
+  const m = useMessaging();
+  useEffect(() => {
+    latest.current = m;
+  });
   return (
     <ul>
-      {live.attemptsFor(TARGET).map((a) => (
+      {m.attemptsFor(TARGET).map((a) => (
         <li key={a.clientAttemptId} data-testid={a.clientAttemptId}>
           {describeAttempt(a, 'contact').label}
         </li>

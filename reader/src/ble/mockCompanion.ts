@@ -1,6 +1,8 @@
 import { BleError, type BleDeviceInfo, type BleTransport, type TransportSupport, type Unsubscribe } from './transport';
 import { CMD, ERR, PUSH, RESP, bytesOfHex, hexOf, KEY_PREFIX_SIZE } from './protocol';
 import { fixtureBytes, SYNTHETIC_KEYS } from './fixtures/frames';
+import { CMD_MECON, MeconReassembler, encodeMeconFrames, type Envelope } from '../device/meconIface';
+import { helloEnvelope } from '../device/sim/hello';
 
 /**
  * SIMULATED Companion (GATT peer) for the supported command subset. Everything
@@ -49,6 +51,22 @@ export interface MockCompanionOptions {
   ackDelayMs?: number;
   /** Suggested ACK timeout the device reports in RESP_CODE_SENT. Default 4000. */
   suggestedTimeoutMs?: number;
+  /**
+   * Answer the MECON device interface carried as 0x7F frames (CMD_MECON). Default false: a stock
+   * Companion, which answers an unknown command with RESP_CODE_ERR / ERR_CODE_UNSUPPORTED_CMD.
+   */
+  mecon?: boolean;
+  /** Role string the simulated hello reports (default 'companion'). The BLE device name never feeds it. */
+  helloRole?: string;
+  capabilities?: string[];
+  firmware?: string;
+  hardware?: string;
+  /** Answer hello `refused` / `untrusted-transport`, as a link the firmware does not trust would (AUTHORITY.md section 3.5). */
+  helloRefused?: boolean;
+  /** The BLE device name the chooser shows (default 'MeshCore-Synthetic'). Detection must never use it. */
+  deviceName?: string;
+  /** A device that answers nothing at all, to anything: the "unknown device" case. */
+  silent?: boolean;
 }
 
 const le32 = (n: number): Uint8Array => Uint8Array.of(n & 255, (n >>> 8) & 255, (n >>> 16) & 255, (n >>> 24) & 255);
@@ -64,6 +82,13 @@ export class MockCompanion {
   private notifyCbs = new Set<(f: Uint8Array) => void>();
   private lossCbs = new Set<(reason: string) => void>();
   private queue: Uint8Array[] = [];
+  private readonly ifaceReasm = new MeconReassembler();
+  /** Every 0x7F request envelope the device received (parsed). */
+  readonly ifaceRequests: Envelope[] = [];
+
+  get deviceName(): string {
+    return this.opts.deviceName ?? 'MeshCore-Synthetic';
+  }
 
   constructor(private readonly opts: MockCompanionOptions = {}) {}
 
@@ -134,7 +159,9 @@ export class MockCompanion {
   receive(frame: Uint8Array): void {
     const f = frame.slice();
     this.writes.push(f);
+    if (this.opts.silent) return;
     const code = f[0];
+    if (code === CMD_MECON && this.opts.mecon) return this.onMecon(f);
     const isSend = code === CMD.SEND_TXT_MSG || code === CMD.SEND_CHANNEL_TXT_MSG;
     if (isSend && this.faults.disconnectOnSend === 'before_device') {
       this.dropLink('mid_send_before_device');
@@ -167,6 +194,23 @@ export class MockCompanion {
       default:
         this.emit(Uint8Array.of(RESP.ERR, ERR.UNSUPPORTED_CMD));
     }
+  }
+
+  private onMecon(f: Uint8Array): void {
+    const text = this.ifaceReasm.push(f);
+    if (text === null) return;
+    const env = JSON.parse(text) as Envelope;
+    this.ifaceRequests.push(env);
+    const id = String(env.id);
+    let reply: Envelope;
+    if (env.op === 'hello') {
+      reply = this.opts.helloRefused
+        ? { v: 1, id, status: 'refused', error: 'untrusted-transport' }
+        : helloEnvelope(id, this.opts.helloRole ?? 'companion', { capabilities: this.opts.capabilities, firmware: this.opts.firmware, hardware: this.opts.hardware });
+    } else if (env.op === 'status.get') reply = { v: 1, id, status: 'ok', result: { uptime_s: 12 } };
+    else if (env.op === 'clock.get') reply = { v: 1, id, status: 'ok', result: { epoch: null } };
+    else reply = { v: 1, id, status: 'unknown-op' };
+    for (const fr of encodeMeconFrames(f[1]!, JSON.stringify(reply))) this.emit(fr);
   }
 
   private onSendDirect(f: Uint8Array): void {
@@ -229,7 +273,7 @@ export class MockTransport implements BleTransport {
     if (this.support === 'unsupported') throw new BleError('unsupported');
     if (this.peer.faults.requestDevice === 'denied') throw new BleError('permission_denied');
     if (this.peer.faults.requestDevice === 'cancel') throw new BleError('chooser_cancelled');
-    this.chosen = { id: 'synthetic-device-1', name: 'MeshCore-Synthetic' };
+    this.chosen = { id: 'synthetic-device-1', name: this.peer.deviceName };
     return this.chosen;
   }
 

@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { encodeAppStart, encodeDeviceQuery, encodeSendDirect, encodeSyncNextMessage } from '../ble/protocol';
 import { encodeSerialFrame } from '../ble/serialFraming';
 import { encodeCliLine } from './cliText';
-import { classifyProbeWrite } from './guard';
+import { classifyProbeFrame, classifyProbeWrite, guardFrames } from './guard';
+import type { CompanionTransport } from '../ble/transport';
 import { buildRequest, encodeMeconFrames, encodeMeconLine } from './meconIface';
 
 const refused = (b: Uint8Array) => {
@@ -76,3 +77,60 @@ describe('probe write allowlist', () => {
     expect(refused(Uint8Array.of(0x16, 0x03, 0x0d))).toBe(true);
   });
 });
+
+describe('probe frame allowlist (BLE: frames carry no serial wrapper)', () => {
+  const frameRefused = (f: Uint8Array) => {
+    try {
+      classifyProbeFrame(f);
+      return false;
+    } catch {
+      return true;
+    }
+  };
+  const one = (op: string, extra: Record<string, unknown> = {}) => encodeMeconFrames(1, JSON.stringify({ v: 1, id: 'a', op, ...extra }))[0]!;
+
+  it('allows app start, device query and one read-only interface request in a single 0x7F frame', () => {
+    expect(classifyProbeFrame(encodeAppStart()).label).toBe('frame:1');
+    expect(classifyProbeFrame(encodeDeviceQuery()).label).toBe('frame:22');
+    for (const op of ['hello', 'status.get', 'clock.get']) expect(classifyProbeFrame(one(op)).label).toBe(`frame-iface:${op}`);
+  });
+
+  it('refuses every non-read interface operation carried as 0x7F, arguments, authority, and multi-frame requests', () => {
+    for (const op of ['config.apply', 'device.reboot', 'device.reset', 'message.send', 'advert.send', 'packet.transmit', 'log.erase', 'update.offer', 'identity.rotate', 'deployment.provision', 'channel.put', 'contact.put', 'job.ack', 'config.get', '']) {
+      expect(frameRefused(one(op)), op).toBe(true);
+    }
+    expect(frameRefused(one('hello', { args: { x: 1 } }))).toBe(true);
+    expect(frameRefused(one('hello', { mecon_auth: {} }))).toBe(true);
+    const many = encodeMeconFrames(1, JSON.stringify({ v: 1, id: 'a', op: 'hello', args: { pad: 'x'.repeat(400) } }));
+    expect(many.length).toBeGreaterThan(1);
+    for (const f of many) expect(frameRefused(f)).toBe(true);
+    expect(frameRefused(Uint8Array.of(0x7f))).toBe(true);
+    expect(frameRefused(Uint8Array.of(0x7f, 1, 0, 1, 0x7b))).toBe(true); // not JSON
+  });
+
+  it('refuses native commands that send, change or read private things, and empty frames', () => {
+    for (const code of [2, 3, 4, 10, 11, 17, 18, 0x99]) expect(frameRefused(Uint8Array.of(code, 0, 0, 0)), String(code)).toBe(true);
+    expect(frameRefused(new Uint8Array(0))).toBe(true);
+  });
+
+  it('guardFrames stops a refused frame before the link sees it, and logs what it let through', async () => {
+    const written: Uint8Array[] = [];
+    const log: string[] = [];
+    const g = guardFrames({ ...inertLink, write: async (f) => void written.push(f) }, log);
+    await g.write(one('hello'));
+    await expect(g.write(one('config.apply'))).rejects.toMatchObject({ code: 'bad_argument' });
+    expect(written).toHaveLength(1);
+    expect(log).toEqual(['frame-iface:hello']);
+  });
+});
+
+const inertLink: CompanionTransport = {
+  kind: 'ble',
+  support: 'supported',
+  requestDevice: async () => ({ id: 'x', name: null }),
+  connect: async () => undefined,
+  write: async () => undefined,
+  disconnect: async () => undefined,
+  onFrame: () => () => undefined,
+  onDisconnect: () => () => undefined,
+};

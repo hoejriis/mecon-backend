@@ -1,6 +1,7 @@
 import { BUILD_COMMIT } from '../../buildInfo';
 import { BleError } from '../../ble/transport';
-import { scrubText } from '../../ble/probe/probeCore';
+import { scrubText } from '../scrub';
+import { sanitizeDetected, type SanitizedDetected } from '../detectReport';
 import { detectDevice, type DetectedDevice } from '../detect';
 import { getSerial } from '../webSerialTransport';
 import type { ByteTransport, SerialPortInfo } from '../serialBytes';
@@ -168,23 +169,7 @@ export interface UsbProbeReport {
   commandsSent: string[];
   /** USB ids as the browser reports them (model level, hex), or null. */
   usb: { vendorId: string | null; productId: string | null } | null;
-  detected: null | {
-    summary: string;
-    firmware: 'mecon' | 'unknown';
-    firmwareVersion: string | null;
-    role: string;
-    roleSource: string | null;
-    interfaceVersion: string | null;
-    carriage: string | null;
-    consoleCli: boolean;
-    companionBinary: boolean;
-    capabilities: string[];
-    interfaceOps: string[];
-    hardware: string | null;
-    deviceIdPresent: boolean;
-    nodeKeyPresent: boolean;
-    evidence: string[];
-  };
+  detected: SanitizedDetected | null;
 }
 
 const hex4 = (n: number | undefined) => (n === undefined ? null : n.toString(16).padStart(4, '0'));
@@ -202,23 +187,6 @@ export function sanitizeUsbReport(raw: RawUsbProbe, opts: { now?: () => Date; co
     steps: raw.steps.map((x) => ({ id: x.id, status: x.status, ms: x.ms, error: x.error ? { name: scrubText(x.error.name, []), code: x.error.code, message: scrubText(x.error.message, []) } : null, note: t(x.note) })),
     commandsSent: d ? [...d.commandsSent] : [],
     usb: raw.port && (raw.port.usbVendorId !== undefined || raw.port.usbProductId !== undefined) ? { vendorId: hex4(raw.port.usbVendorId), productId: hex4(raw.port.usbProductId) } : null,
-    detected:
-      d && {
-        summary: scrubText(d.summary, []),
-        firmware: d.firmware,
-        firmwareVersion: t(d.firmwareVersion),
-        role: d.role,
-        roleSource: d.roleSource,
-        interfaceVersion: d.interfaceVersion,
-        carriage: d.carriage,
-        consoleCli: d.consoleCli,
-        companionBinary: d.companionBinary,
-        capabilities: [...d.capabilities],
-        interfaceOps: d.interfaceOps.map((o) => scrubText(o, [])),
-        hardware: t(d.hardware),
-        deviceIdPresent: d.deviceIdPresent,
-        nodeKeyPresent: d.nodeKeyPresent,
-        evidence: d.evidence.map((e) => scrubText(e, [])),
-      },
+    detected: d && sanitizeDetected(d),
   };
 }

@@ -4,6 +4,7 @@ import { installFakeBluetooth } from '../fakeBluetooth';
 import { CMD, encodeSendChannel, encodeSendDirect, encodeGetContacts, encodeSyncNextMessage, hexOf } from '../protocol';
 import { SYNTHETIC_KEYS } from '../fixtures/frames';
 import { WebBluetoothTransport } from '../webBluetoothTransport';
+import { encodeMeconFrames } from '../../device/meconIface';
 import {
   ALLOWED_CMD_CODES,
   guardTransport,
@@ -47,10 +48,12 @@ describe('read-only allowlist', () => {
     const mock = new MockCompanion();
     const raw = await runProbe({ transport: new MockTransport(mock), env, ...fast });
     expect(mock.writes.length).toBeGreaterThan(0);
-    for (const w of mock.writes) expect(ALLOWED_CMD_CODES).toContain(w[0]);
+    // The native codes are the two allowlisted; the interface carrier 0x7F is allowed only as one read-only hello (see the BLE detection tests).
+    for (const w of mock.writes) expect([...ALLOWED_CMD_CODES, 0x7f]).toContain(w[0]);
     expect(mock.sendWrites()).toHaveLength(0);
     expect(mock.rf).toHaveLength(0);
-    expect(raw.commandCodesSent.sort((a, b) => a - b)).toEqual([CMD.APP_START, CMD.DEVICE_QUERY]);
+    expect(raw.commandCodesSent.sort((a, b) => a - b)).toEqual([CMD.APP_START, CMD.DEVICE_QUERY, 0x7f]);
+    expect(raw.commandsSent).toEqual(['frame-iface:hello', 'frame:22', 'frame:1']);
   });
 });
 
@@ -198,5 +201,72 @@ describe('sanitizer', () => {
     for (const bad of ['Synthetic Node', 'MeshCore-Synthetic', 'synthetic-device-1', hexOf(new Uint8Array(32).fill(0x11)), '55.123456', '123456']) {
       expect(json, bad).not.toContain(bad);
     }
+  });
+});
+
+describe('probe with the shared detection (MockTransport, SIMULATED)', () => {
+  const run = (o: ConstructorParameters<typeof MockCompanion>[0]) => {
+    const mock = new MockCompanion(o);
+    return runProbe({ transport: new MockTransport(mock), env, ...fast }).then((raw) => ({ mock, raw }));
+  };
+  const ops = (m: MockCompanion) => m.ifaceRequests.map((r) => r.op);
+
+  it('MECON Companion: detected firmware, role and capabilities in the report; only read requests reach the device', async () => {
+    const { mock, raw } = await run({ mecon: true });
+    expect(statuses(raw.steps)).toMatchObject({ deviceQuery: 'pass', selfInfo: 'pass', disconnect: 'pass' });
+    const rep = sanitizeReport(raw, { commit: 'x' });
+    expect(rep.probe.version).toBe(2);
+    expect(rep.linkTrust).toBe('unknown');
+    expect(rep.commandsSent).toEqual(['frame-iface:hello', 'frame:22', 'frame:1']);
+    expect(rep.detected).toMatchObject({ transport: 'ble', trust: 'unknown', firmware: 'mecon', role: 'companion', roleSource: 'hello', interfaceVersion: '1.0', companionBinary: true, interfaceRefused: false });
+    expect(rep.detected!.capabilities).toEqual(expect.arrayContaining(['identity.read', 'status.read', 'clock.read']));
+    expect(rep.detected!.firmwareVersion).toMatch(/^v1\.18\.0-mecon/);
+    expect(ops(mock)).toEqual(['hello']);
+    for (const w of mock.writes) expect([1, 22, 0x7f]).toContain(w[0]);
+    expect(mock.sendWrites()).toHaveLength(0);
+    expect(mock.rf).toHaveLength(0);
+  });
+
+  it('stock Companion: reported as not MECON, the probe still passes its native steps', async () => {
+    const { mock, raw } = await run({});
+    const rep = sanitizeReport(raw, { commit: 'x' });
+    expect(rep.detected).toMatchObject({ firmware: 'unknown', role: 'companion', roleSource: 'companion frames', companionBinary: true, interfaceVersion: null });
+    expect(rep.detected!.summary).toMatch(/^Not MECON firmware or older/);
+    expect(statuses(raw.steps)).toMatchObject({ deviceQuery: 'pass', selfInfo: 'pass' });
+    expect(mock.ifaceRequests).toHaveLength(0);
+  });
+
+  it('unknown device: nothing answers, the steps fail truthfully and the report says unknown', async () => {
+    const { raw } = await run({ silent: true });
+    const rep = sanitizeReport(raw, { commit: 'x' });
+    expect(rep.detected).toMatchObject({ firmware: 'unknown', role: 'unknown', capabilities: [] });
+    expect(rep.detected!.summary).toMatch(/^Unknown device/);
+    expect(byId(raw.steps, 'deviceQuery')).toMatchObject({ status: 'fail', error: { code: 'response_timeout' } });
+    expect(byId(raw.steps, 'selfInfo').status).toBe('unknown');
+  });
+
+  it('the report holds no device name, id, key or node name, and the detected block is sanitized', async () => {
+    const { raw } = await run({ mecon: true, deviceName: 'Zed-Private-Radio' });
+    const text = JSON.stringify(sanitizeReport(raw, { commit: 'x' }));
+    for (const bad of ['Zed-Private-Radio', 'synthetic-device-1', 'ab'.repeat(16), 'cd'.repeat(32), 'Synthetic Node']) expect(text, bad).not.toContain(bad);
+  });
+
+  it('a hello the device refuses is shown as refused, and the native steps still run', async () => {
+    const { raw } = await run({ mecon: true, helloRefused: true });
+    const rep = sanitizeReport(raw, { commit: 'x' });
+    expect(rep.detected).toMatchObject({ firmware: 'unknown', interfaceRefused: true });
+    expect(statuses(raw.steps)).toMatchObject({ deviceQuery: 'pass', selfInfo: 'pass' });
+  });
+
+  it('the guard refuses a non-read interface request before the transport, so the device never sees it', async () => {
+    const mock = new MockCompanion({ mecon: true });
+    const g = guardTransport(new MockTransport(mock));
+    await g.requestDevice();
+    await g.connect();
+    for (const op of ['config.apply', 'device.reboot', 'message.send', 'advert.send']) {
+      const [f] = encodeMeconFrames(1, JSON.stringify({ v: 1, id: 'z', op }));
+      await expect(g.write(f!), op).rejects.toMatchObject({ code: 'bad_argument' });
+    }
+    expect(mock.writes).toHaveLength(0);
   });
 });

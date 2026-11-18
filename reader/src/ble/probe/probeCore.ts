@@ -1,17 +1,25 @@
 import { BUILD_COMMIT } from '../../buildInfo';
-import { CMD, decodeFrame, encodeAppStart, encodeDeviceQuery, type DeviceInfo, type Frame, type SelfInfo } from '../protocol';
+import { CMD, decodeFrame, encodeAppStart, type DeviceInfo, type Frame, type SelfInfo } from '../protocol';
+import { detectBleDevice, type DetectedDevice } from '../../device/detect';
+import { sanitizeDetected, type SanitizedDetected } from '../../device/detectReport';
+import { classifyProbeFrame } from '../../device/guard';
+import { scrubText } from '../../device/scrub';
 import { BleError, type BleDeviceInfo, type BlePhase, type BleTransport } from '../transport';
 
 /**
- * Read-only BLE probe. It connects, asks the Companion who it is, and
- * disconnects. It can never cause radio transmission or change a setting:
- * every write passes through an allowlist of command codes that holds only the
- * two read-only hello commands. Anything else is refused before it reaches the
- * transport.
+ * Read-only BLE probe. It connects, identifies the device with the shared detection
+ * (device/detect.ts: the MECON interface hello as 0x7F frames, then the Companion device
+ * query), asks the Companion for its self info, and disconnects. It can never cause radio
+ * transmission or change a setting: every write passes the shared read-only frame guard
+ * (device/guard.ts), whose allowlist holds only the Companion app start and device query and
+ * a 0x7F frame carrying one interface request of the read operations `hello`, `status.get`
+ * and `clock.get`, with no arguments and no authority. Anything else is refused before it
+ * reaches the transport. The BLE link's PIN state is not observable, so the link is reported
+ * with trust `unknown`.
  */
-export const PROBE_VERSION = 1;
+export const PROBE_VERSION = 2;
 
-/** The ONLY command codes the probe may write. Do not extend without a review. */
+/** The native Companion command codes the probe may write. The interface carrier 0x7F is allowed only through classifyProbeFrame. Do not extend without a review. */
 export const ALLOWED_CMD_CODES: readonly number[] = Object.freeze([CMD.APP_START, CMD.DEVICE_QUERY]);
 
 export type StepId = 'environment' | 'chooser' | 'connect' | 'service' | 'notifications' | 'deviceQuery' | 'selfInfo' | 'battery' | 'disconnect';
@@ -39,7 +47,7 @@ export const STEP_LABELS: Record<StepId, string> = {
   connect: 'Connect to the Companion',
   service: 'Service discovery',
   notifications: 'Start notifications',
-  deviceQuery: 'Hello: device query response',
+  deviceQuery: 'Hello: interface hello (0x7F) and device query',
   selfInfo: 'Self-info response',
   battery: 'Battery',
   disconnect: 'Disconnect',
@@ -73,10 +81,11 @@ export async function collectEnvironment(nav: unknown = typeof navigator === 'un
 }
 
 /**
- * Wraps a transport so that write() refuses any frame whose command code is not
- * allowlisted. The refusal happens before the inner transport is touched.
+ * Wraps a transport so that write() refuses any frame the shared read-only frame guard does not
+ * allow (classifyProbeFrame). The refusal happens before the inner transport is touched. `log`
+ * receives the command codes, `labels` the guard's names (`frame:22`, `frame-iface:hello`).
  */
-export function guardTransport(inner: BleTransport, log: number[] = []): BleTransport {
+export function guardTransport(inner: BleTransport, log: number[] = [], labels: string[] = []): BleTransport {
   return {
     get kind() {
       return inner.kind;
@@ -87,11 +96,9 @@ export function guardTransport(inner: BleTransport, log: number[] = []): BleTran
     requestDevice: () => inner.requestDevice(),
     connect: () => inner.connect(),
     async write(frame: Uint8Array): Promise<void> {
-      const code = frame[0];
-      if (code === undefined || !ALLOWED_CMD_CODES.includes(code)) {
-        throw new BleError('bad_argument', `probe refused command code ${code ?? 'none'}: not on the read-only allowlist`);
-      }
-      log.push(code);
+      const c = classifyProbeFrame(frame);
+      log.push(frame[0]!);
+      labels.push(c.label);
       await inner.write(frame);
     },
     disconnect: () => inner.disconnect(),
@@ -108,7 +115,10 @@ export interface RawProbe {
   device: BleDeviceInfo | null;
   deviceInfo: DeviceInfo | null;
   selfInfo: SelfInfo | null;
+  /** Absent in older fixtures; the probe always sets them. */
+  detected?: DetectedDevice | null;
   commandCodesSent: number[];
+  commandsSent?: string[];
 }
 
 export interface RunOptions {
@@ -134,8 +144,9 @@ function toStepError(e: unknown): StepError {
 export function runProbe(opts: RunOptions): Promise<RawProbe> {
   const now = opts.now ?? (() => performance.now());
   const sent: number[] = [];
-  const transport = guardTransport(opts.transport, sent);
-  const raw: RawProbe = { startedAt: now(), env: opts.env, steps: freshSteps(), device: null, deviceInfo: null, selfInfo: null, commandCodesSent: sent };
+  const labels: string[] = [];
+  const transport = guardTransport(opts.transport, sent, labels);
+  const raw: RawProbe = { startedAt: now(), env: opts.env, steps: freshSteps(), device: null, deviceInfo: null, selfInfo: null, detected: null, commandCodesSent: sent, commandsSent: labels };
   const step = (id: StepId): Step => raw.steps.find((s) => s.id === id)!;
   const push = () => opts.onUpdate?.({ ...raw, steps: raw.steps.map((s) => ({ ...s })) });
   const set = (id: StepId, patch: Partial<Step>) => {
@@ -259,30 +270,42 @@ export function runProbe(opts: RunOptions): Promise<RawProbe> {
         return raw;
       }
 
-      // 3. hello: device query, then self info. Read-only commands only.
-      const hello = async (id: StepId, kind: Frame['kind'], cmd: Uint8Array, take: (f: Frame) => void) => {
-        set(id, { status: 'running' });
+      // 3. identify with the shared detection (interface hello as 0x7F frames, then the Companion
+      // device query), then self info. Read-only requests only; the guard enforces it.
+      set('deviceQuery', { status: 'running' });
+      const tIdentify = now();
+      let d: DetectedDevice;
+      try {
+        d = await detectBleDevice(transport, { stepTimeoutMs: opts.responseTimeoutMs ?? 8000 });
+      } catch (e) {
+        set('deviceQuery', { status: 'fail', ms: Math.round(now() - tIdentify), error: toStepError(e) });
+        unknownFrom('selfInfo', 'not run: identification failed');
+        return raw;
+      }
+      early.length = 0; // frames seen so far belong to detection, not to the self-info request below
+      raw.detected = d;
+      raw.deviceInfo = d.deviceInfo;
+      if (d.companionBinary && d.deviceInfo) set('deviceQuery', { status: 'pass', ms: Math.round(now() - tIdentify), note: d.summary });
+      else {
+        const err = d.companionBinary
+          ? new BleError('device_error', `device refused the command: ${d.companionError ?? 'device query'}`)
+          : new BleError(lost || d.linkLost ? 'disconnected' : 'response_timeout', lost || d.linkLost ? 'link lost' : `no deviceInfo reply within ${opts.responseTimeoutMs ?? 8000} ms`);
+        set('deviceQuery', { status: 'fail', ms: Math.round(now() - tIdentify), error: toStepError(err), note: d.summary });
+      }
+      if (!d.companionBinary || !d.deviceInfo) unknownFrom('selfInfo', 'not run: device query failed');
+      else {
+        set('selfInfo', { status: 'running' });
         const t = now();
         try {
-          const f = await ask(kind, cmd, opts.responseTimeoutMs ?? 8000);
+          const f = await ask('selfInfo', encodeAppStart(), opts.responseTimeoutMs ?? 8000);
           if (f.kind === 'error') throw new BleError('device_error', `device refused the command: ${f.name}`);
-          if (f.kind !== kind) throw new BleError(lost ? 'disconnected' : 'device_error', `unexpected reply: ${f.kind}`);
-          take(f);
-          set(id, { status: 'pass', ms: Math.round(now() - t) });
-          return true;
+          if (f.kind !== 'selfInfo') throw new BleError(lost ? 'disconnected' : 'device_error', `unexpected reply: ${f.kind}`);
+          raw.selfInfo = f.info;
+          set('selfInfo', { status: 'pass', ms: Math.round(now() - t) });
         } catch (e) {
-          set(id, { status: 'fail', ms: Math.round(now() - t), error: toStepError(e) });
-          return false;
+          set('selfInfo', { status: 'fail', ms: Math.round(now() - t), error: toStepError(e) });
         }
-      };
-      const ok1 = await hello('deviceQuery', 'deviceInfo', encodeDeviceQuery(), (f) => {
-        if (f.kind === 'deviceInfo') raw.deviceInfo = f.info;
-      });
-      if (!ok1) unknownFrom('selfInfo', 'not run: device query failed');
-      else
-        await hello('selfInfo', 'selfInfo', encodeAppStart(), (f) => {
-          if (f.kind === 'selfInfo') raw.selfInfo = f.info;
-        });
+      }
     } finally {
       // 4. disconnect, always, when a link was made
       const t = now();
@@ -350,6 +373,12 @@ export interface ProbeReport {
   availability: string;
   steps: SanitizedStep[];
   commandCodesSent: number[];
+  /** Guard labels of every write, in order, for example `frame-iface:hello`, `frame:22`, `frame:1`. */
+  commandsSent: string[];
+  /** Trust of the BLE link: always `unknown`, a browser cannot read the PIN state (device/trust.ts). */
+  linkTrust: 'unknown';
+  /** What the shared detection identified over the link: firmware, role and capabilities. Null when the link never came up. */
+  detected: SanitizedDetected | null;
   device: { chosen: boolean; idPresent: boolean; nameLength: number };
   hello: null | {
     firmwareVersion: number;
@@ -378,20 +407,7 @@ export interface ProbeReport {
   };
 }
 
-const MAX_TEXT = 160;
-
-/** Removes known sensitive strings and anything shaped like a key, MAC or PIN. */
-export function scrubText(text: string, secrets: readonly string[]): string {
-  let out = text;
-  for (const s of secrets) {
-    if (s && s.length >= 3) out = out.split(s).join('[redacted]');
-  }
-  out = out
-    .replace(/(?:[0-9a-f]{2}[:-]){5}[0-9a-f]{2}/gi, '[redacted-mac]')
-    .replace(/[0-9a-f]{12,}/gi, '[redacted-hex]')
-    .replace(/\b\d{6}\b/g, '[redacted-number]');
-  return out.length > MAX_TEXT ? `${out.slice(0, MAX_TEXT)}...` : out;
-}
+export { scrubText };
 
 export function sanitizeReport(raw: RawProbe, opts: { now?: () => Date; commit?: string | null } = {}): ProbeReport {
   const secrets = [raw.device?.id ?? '', raw.device?.name ?? '', raw.selfInfo?.name ?? '', raw.selfInfo?.publicKey ?? ''];
@@ -413,6 +429,9 @@ export function sanitizeReport(raw: RawProbe, opts: { now?: () => Date; commit?:
       note: t(x.note),
     })),
     commandCodesSent: [...raw.commandCodesSent],
+    commandsSent: [...(raw.commandsSent ?? [])],
+    linkTrust: 'unknown',
+    detected: raw.detected ? sanitizeDetected(raw.detected) : null,
     device: { chosen: raw.device !== null, idPresent: !!raw.device?.id, nameLength: raw.device?.name?.length ?? 0 },
     hello: d && {
       firmwareVersion: d.firmwareVersion,

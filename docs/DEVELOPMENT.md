@@ -247,8 +247,11 @@ screenshots to `reader/e2e-artifacts/`.
 
 `/probe/ble` is a production, read-only Bluetooth diagnostics page used to
 collect real-hardware evidence (see `docs/BLE_PROBE.md`). It is a lazy chunk and
-is not in the main bundle. The dev-only harness at `/dev/ble` is separate and
-is still stripped from production.
+is not in the main bundle. It identifies the device with the shared detection
+(the interface `hello` as `0x7F` frames, then the Companion device query) and
+reports the detected firmware, role and capabilities. The dev-only harnesses at
+`/dev/ble` (the Companion adapter) and `/dev/ble-session` (the shared device
+session over Bluetooth) are separate and are still stripped from production.
 
 ## USB device access (Web Serial)
 
@@ -271,17 +274,28 @@ Layers, from the cable up (`reader/src/device/`, `reader/src/ble/serialFraming.t
    wrapper plus the resyncing deframer); it is attached only when the device
    answered Companion frames. A device without `message.send.*` refuses a send
    with `unsupported_capability` and writes nothing.
-4. **Send safety is the BLE adapter's**: an attempt is written at most once,
+4. **BLE uses the same layers.** `DeviceSession` accepts a BLE `CompanionTransport`
+   as well as a USB byte transport (`detectBleDevice` is the same detection minus
+   the console step; BLE has no console, and only Companions have BLE). Both
+   produce one `DeviceSession` snapshot and one `DetectedDevice`, gated by the
+   same capabilities. A link has a trust: USB `trusted`, BLE `unknown` (Web
+   Bluetooth cannot tell a default PIN from a custom one), and on an unknown link
+   `request(op)` and the probe ask for class `read` operations only (`trust.ts`).
+   See `reader/src/ble/README.md`.
+5. **Send safety is the BLE adapter's**: an attempt is written at most once,
    `unknown` is never resent or rerouted, every attempt records its `path`
    (`usb` or `ble`). `unplugged` and `busy` are USB link states.
 
-`/dev/usb` is a dev-only harness (stripped from production). `/probe/usb` is the
+`/dev/usb` and `/dev/ble-session` are dev-only harnesses (stripped from production). `/probe/usb` is the
 read-only page. The simulation (`device/sim/`) is a fake `navigator.serial` over
 `MockCompanion` (reused, with a serial wrapper) and `MockRepeater` (a console
 with the `mecon> ` interface), with line faults (split, coalesced, garbage,
 oversize length) and port faults (cancel, denied, busy, unplug, hang). `npm run e2e`
 writes `e2e-artifacts/usb-simulation-matrix.md`. Every result is SIMULATED; nothing
-claims hardware compatibility.
+claims hardware compatibility. The Bluetooth simulation is `MockCompanion` (a MECON
+Companion that answers `0x7F`, a stock one that does not, a silent one, and one that
+refuses `hello`) behind the fake `navigator.bluetooth`; the vitest and Playwright
+results for it are SIMULATED as well.
 
 ## Content Security Policy rule
 

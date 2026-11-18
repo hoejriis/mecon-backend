@@ -1,0 +1,31 @@
+# MECON USB Connector: configuration for the systemd service. Every value is a placeholder.
+# Installed once to /etc/mecon-connector/config.toml (root:mecon-connector, 0640); an upgrade never
+# overwrites it. Validate after editing:
+#   sudo -u mecon-connector /opt/mecon-connector/bin/mecon-connector --check-config --config /etc/mecon-connector/config.toml
+# The reference for every key is connector/config.example.toml.
+
+[device]
+mode = "companion"
+baud = 115200
+select = { by_id = "usb-REPLACE_WITH_YOUR_DEVICE_ID-*" }
+
+[mqtt]
+client_id = "example-connector-1"
+topic_root = "example/device-root"
+upstream_qos = 1
+
+[[mqtt.brokers]]
+name = "primary"
+host = "broker.example.invalid"
+port = 8883
+tls = true
+ca_file = "/etc/mecon-connector/ca.pem"
+username = "example-connector-1"
+# systemd places the credential here (LoadCredential= in the unit). Create the source file
+# /etc/mecon-connector/credentials/broker-password (root, 0600); see the README.
+password_file = "/run/credentials/mecon-connector.service/broker-password"
+
+[health]
+enabled = true
+bind = "127.0.0.1"
+port = 9464

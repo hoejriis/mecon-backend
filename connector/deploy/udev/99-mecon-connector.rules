@@ -1,0 +1,20 @@
+# MECON USB Connector: udev rule TEMPLATE. It ships no real ids and does nothing until you edit it.
+#
+# 1. Find your radio's ids:   udevadm info -a -n /dev/ttyACM0 | grep -E 'idVendor|idProduct|ATTRS\{serial\}'
+#    or                       mecon-connector --list-ports
+# 2. Uncomment the line below and replace VID, PID and SERIAL with those values. They must be the
+#    same ones as device.select in /etc/mecon-connector/config.toml (vid, pid, usb_serial).
+# 3. sudo udevadm control --reload && sudo udevadm trigger --subsystem-match=tty
+#
+# What it does for the matched device only:
+#   GROUP/MODE  the node is owned by group dialout, mode 0660 (the service runs with that group);
+#   SYMLINK     a fixed name /dev/mecon/connector-radio for people and scripts. The Connector itself
+#               selects by /dev/serial/by-id (made by the stock rules from vendor, product and serial)
+#               or by vid/pid, never by this link or by /dev/ttyACM0;
+#   ID_MM_DEVICE_IGNORE  keeps ModemManager from probing the port with AT commands, which would
+#               corrupt the framing and can reset the board.
+#
+# A radio whose USB descriptor has no serial number cannot be told apart from a second identical
+# one: leave ATTRS{serial} out only if exactly one such device is ever attached.
+#
+# SUBSYSTEM=="tty", SUBSYSTEMS=="usb", ATTRS{idVendor}=="VID", ATTRS{idProduct}=="PID", ATTRS{serial}=="SERIAL", GROUP="dialout", MODE="0660", SYMLINK+="mecon/connector-radio", ENV{ID_MM_DEVICE_IGNORE}="1"

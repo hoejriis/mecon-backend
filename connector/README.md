@@ -8,7 +8,7 @@ USB radio  <-- serial framing -->  Connector  <-- MQTT 3.1.1 / TLS -->  broker  
 
 **What it does not do.** It never mints or substitutes identity, holds keys, decrypts, parses or rewrites a payload, fabricates an acknowledgement, or chooses a route. A device-signed envelope leaves exactly as it arrived. MQTT accepting a message is not RF delivery and not Backend processing, and the Connector never reports it as either.
 
-**Status: stages C0 and C1 of the [implementation design](../docs/USB_CONNECTOR_IMPLEMENTATION_DESIGN.md).** It passes its unit tests, fake-device tests and a real-mosquitto integration test. It has not been run on a real device, a Pi, or against the Backend. See [What is not verified](#what-is-not-verified).
+**Status: stages C0, C1 and the packaging of C2 of the [implementation design](../docs/USB_CONNECTOR_IMPLEMENTATION_DESIGN.md).** It passes its unit tests, fake-device tests and a real-mosquitto integration test; the install scripts run in a Debian container and the unit under real systemd on a CI VM. It has not been run on a real device, a Pi, or against the Backend. See [What is not verified](#what-is-not-verified).
 
 The wire contract (frames, topics, QoS, retry rules, metrics) is in [`contracts/connector/v1`](../contracts/connector/v1/README.md). Its topic names are provisional: the Backend owns the real mapping.
 
@@ -106,26 +106,110 @@ Reconnect uses exponential backoff with jitter (1 s doubling to 60 s), a long co
 
 `GET http://127.0.0.1:9464/healthz` returns JSON and status 200 when the serial port is open and a broker session is up, otherwise 503. `GET /metrics` returns Prometheus text with the `mecon_connector_` prefix; the names are fixed by the contract. `ready` says only that the two transport links are up. Logs are one JSON object per line on stderr and never contain payloads, credentials or packet dumps.
 
-## Deploying on a Pi Zero 2 W
+## Install on a Pi or Debian
 
-Not yet verified on a Pi; this is the intended shape. Use Raspberry Pi OS Lite (64-bit), install Docker or a Python 3.11+ venv, put the config and secrets in `/etc/mecon-connector` (root-owned, secrets mode 600 and owned by the service user), and run the container above or this unit:
+For Raspberry Pi OS (Bookworm, 64-bit Lite is enough) and Debian 12 or newer: a systemd service in a virtualenv, running as its own unprivileged user. Needs `python3` 3.11+ and `python3-venv` (`sudo apt-get install -y python3 python3-venv git`).
 
-```ini
-[Service]
-User=mecon-connector
-SupplementaryGroups=dialout
-ExecStart=/opt/mecon-connector/bin/python -m mecon_connector --config /etc/mecon-connector/config.toml
-Restart=always
-RestartSec=3
-NoNewPrivileges=true
-ProtectSystem=strict
-ProtectHome=true
-PrivateTmp=true
-DeviceAllow=char-ttyACM rw
-DeviceAllow=char-ttyUSB rw
+```sh
+git clone https://github.com/hoejriis/mecon-backend.git && cd mecon-backend     # check out the release you want
+sudo connector/deploy/install.sh
 ```
 
-Packaging, udev rules, the unit and Pi measurements belong to stage C2.
+The script is idempotent and fails closed (`set -euo pipefail`, refuses anyone but root, prints no secret). It:
+
+- creates the system user and group `mecon-connector` (no login, no home); the service gets the serial device through the supplementary group `dialout`;
+- builds `/opt/mecon-connector` (a venv) from the hash-pinned `requirements.lock` and `deploy/build-requirements.lock`, so nothing is downloaded unverified, owned by root;
+- installs `/etc/systemd/system/mecon-connector.service` and the udev template `/etc/udev/rules.d/99-mecon-connector.rules` (inert until you fill it in);
+- creates `/etc/mecon-connector` (`root:mecon-connector` 0750) and `credentials/` (root 0700), and installs an example `config.toml` (`root:mecon-connector` 0640) **only if none exists**. An existing config is never overwritten, re-owned or re-moded.
+- does **not** start the service: the example config has placeholders.
+
+Then, by hand:
+
+1. **Find the radio's stable id** and write it into `/etc/mecon-connector/config.toml` (`device.select`): `/opt/mecon-connector/bin/mecon-connector --list-ports` prints `by_id` names and `vid`/`pid`/`usb_serial`. Set `mqtt.client_id`, `mqtt.topic_root` and the broker (the values come from whoever runs the broker; see the contract).
+2. **Put the broker password** in a root-only file, never in the config: `sudo sh -c 'umask 077; cat > /etc/mecon-connector/credentials/broker-password'` (type or paste, end with Ctrl-D). systemd hands it to the service through `LoadCredential=`; it appears only under `/run/credentials/mecon-connector.service/`, which is where `password_file` in the shipped config points. The file is required: the unit does not start without it. For a broker without a password, create it empty and drop `username` and `password_file`.
+3. **Broker CA:** `sudo install -o root -g mecon-connector -m 0640 ca.pem /etc/mecon-connector/ca.pem`.
+4. **udev (once):** edit `/etc/udev/rules.d/99-mecon-connector.rules` as its comments say, then `sudo udevadm control --reload && sudo udevadm trigger --subsystem-match=tty`. It sets group `dialout`, mode 0660, a fixed `/dev/mecon/connector-radio` symlink and tells ModemManager to leave the port alone. The ids in the rule are the same ones as in `device.select`. The repository ships no real ids.
+5. **Check and start:**
+   ```sh
+   sudo -u mecon-connector /opt/mecon-connector/bin/mecon-connector --check-config --config /etc/mecon-connector/config.toml
+   sudo systemctl enable --now mecon-connector
+   systemctl status mecon-connector; journalctl -u mecon-connector -f
+   curl -s http://127.0.0.1:9464/healthz
+   ```
+   `install.sh --enable` does 5 for you, and refuses while the config still has placeholders or the credential file is missing.
+
+### What the unit enforces
+
+`deploy/systemd/mecon-connector.service`: a fixed non-root user and `SupplementaryGroups=dialout`; `NoNewPrivileges`, an empty `CapabilityBoundingSet`, `ProtectSystem=strict`, `ProtectHome`, `PrivateTmp`, kernel, cgroup and clock protection, `RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX`, a syscall filter, `DevicePolicy=closed` with only `ttyACM` and `ttyUSB` allowed; the only writable path is `/var/lib/mecon-connector`; `MemoryHigh=128M`, `MemoryMax=192M` and `TasksMax=64` for a 512 MB board; `Restart=on-failure` after 10 s with no start limit, and **no restart on exit status 2** (a configuration error would only loop). `systemd-analyze security` scores it well under 3 (CI gates at 3.0). A `systemd` older than 254 (Bookworm has 252) has no `RestartSteps`; on 254 or newer a drop-in with `RestartSteps=5` and `RestartMaxDelaySec=120` gives a growing delay. Do not edit the unit; use `systemctl edit mecon-connector` (an upgrade replaces the unit file, never a drop-in).
+
+**Shutdown.** `systemctl stop` sends SIGTERM; the Connector publishes the retained status `offline`, closes the broker session and the port, and exits 0, in about half a second (`tests/test_shutdown_signal.py` bounds it to a third of `TimeoutStopSec=15`; systemd sends SIGKILL after that).
+
+**Secrets.** The password is a root 0600 file loaded with `LoadCredential=`; the unit and the process environment never hold it (a static test and the install test both look for it). Nothing in the scripts reads or prints it.
+
+## Container
+
+`deploy/docker-compose.example.yml` is the container equivalent: non-root user 10001, read-only root filesystem, all capabilities dropped, `no-new-privileges`, the device passed with `devices:` by its `/dev/serial/by-id` path, the broker password as a compose secret (host file mode 0400, owned by uid 10001), the config mounted read-only, a `/healthz` healthcheck, 192 MB and 64 pids. Copy it, set the device name, `SERIAL_GID` (`stat -c %g /dev/ttyACM0`) and the files it lists, then `docker compose up -d --build`. In config.toml use `password_file = "/run/secrets/broker-password"`. Docker does not honour `uid` or `mode` on file secrets, which is why the host file itself carries them.
+
+## Upgrade
+
+```sh
+cd mecon-backend && git pull        # or check out the release tag
+sudo connector/deploy/install.sh    # rebuilds the venv from the locks, replaces the unit, keeps config, credentials and the udev rule
+```
+
+The venv is rebuilt in place; if the build fails the previous one is put back. A running service is restarted onto the new version after a successful install; a stopped one stays stopped. Read the release notes for a config or contract change first: the config is yours and is never rewritten.
+
+## Uninstall
+
+```sh
+sudo connector/deploy/uninstall.sh            # stops and removes the service, unit, udev rule and venv; keeps config, credentials, state and the user
+sudo connector/deploy/uninstall.sh --purge    # also removes /etc/mecon-connector, /var/lib/mecon-connector and the user and group
+```
+
+## Troubleshooting (dialout, by-id, apparmor)
+
+| Symptom | Cause and fix |
+| --- | --- |
+| `serial_unavailable` in the journal, `/healthz` `serial: down` | No port matches `device.select`. `mecon-connector --list-ports` shows what the host sees; the by-id name changes with the interface (`-if00`) and with the radio's firmware. A radio with no USB serial number gets a by-id name without one: select by `vid` and `pid`. |
+| `Permission denied` opening `/dev/ttyACM0` | The service user is not in the device's group. On Debian and Pi OS the group is `dialout`, which the unit adds with `SupplementaryGroups=`; check `ls -l /dev/ttyACM0` and, if your distribution uses another group (`uucp` on Arch), add a drop-in `SupplementaryGroups=uucp`. A container needs `--group-add` with the numeric gid. |
+| `/dev/serial/by-id` is empty or missing | udev has not made the links yet, or the board has no serial descriptor. `udevadm info -a -n /dev/ttyACM0`; replug; check `ls /dev/serial/by-id`. A hub or a power-starved port can drop the device repeatedly: look at `dmesg -w`. |
+| The radio resets or answers garbage right after plugging in | ModemManager probes new serial ports. The udev rule's `ID_MM_DEVICE_IGNORE` stops that; or `sudo systemctl disable --now ModemManager`. Also, opening the port can reset an ESP32-S3 board and an nRF52 bridge may need DTR (see "What is not verified"). |
+| `Failed to start ... credential` or `Permission denied: /run/credentials/...` | The source file `/etc/mecon-connector/credentials/broker-password` is missing, or the unit was edited and lost `LoadCredential=`. It must be root-owned; the service sees its own copy. |
+| Exit status 2, service not restarted | A configuration error. `journalctl -u mecon-connector` lists every problem; fix it and `systemctl restart mecon-connector`. |
+| Killed with `Memory cgroup out of memory` | Hit `MemoryMax=192M`. Report it with `/metrics`; the expected size is about 25 to 30 MB. |
+| mosquitto exits at once on Ubuntu when started with a config under `/tmp` (tests, `measure.py`) | The distribution's AppArmor profile confines `/usr/sbin/mosquitto` to system paths. `sudo apparmor_parser -R /etc/apparmor.d/usr.sbin.mosquitto` (the profile may be named `mosquitto`) unloads it until reboot. It does not affect the Connector's own unit. |
+| `systemd-analyze verify` says the user or the binary does not exist | It checks the paths on the machine it runs on; run it after `install.sh`. |
+
+## Measurements
+
+`scripts/measure.py` runs the real bridge and MQTT client against a fake serial device and a local mosquitto for N seconds and writes a JSON report: resident memory (and the bare interpreter for comparison), CPU, three broker restarts with the time to reconnect, upstream latency p50 and p95 (steady state, and around the outages), delivery counts, and the time of a clean shutdown. CI runs it for 60 s on GitHub's arm64 and amd64 runners and uploads `measure-report.json` as an artifact. **Those numbers are labelled "runner, not a Pi" and say nothing about a Pi Zero 2 W.** A runner is faster, has gigabytes of memory and no SD card, and the fake serial device removes the UART, so USB throughput and byte loss are not measured either. The reconnect time is the Connector's backoff (1 s doubling to 60 s), so it is dominated by when the next retry happens to fall after the broker returns.
+
+```sh
+python3 -m venv .venv && . .venv/bin/activate && pip install --require-hashes --no-deps -r requirements.lock
+python scripts/measure.py --seconds 60 --out report.json      # needs mosquitto on PATH and Linux
+```
+
+### Pooled owner step for C2 on a real Pi Zero 2 W
+
+One sitting, about 20 minutes, no radio and no broker account needed (the checks use a throwaway local broker and a synthetic credential). On a Pi Zero 2 W running Raspberry Pi OS Lite 64-bit (Bookworm), with network access, over SSH:
+
+```sh
+sudo apt-get update && sudo apt-get install -y --no-install-recommends git python3 python3-venv mosquitto mosquitto-clients
+sudo systemctl disable --now mosquitto
+git clone https://github.com/hoejriis/mecon-backend.git && cd mecon-backend
+git checkout <the commit or tag named on the Issue>      # git rev-parse HEAD must match it
+# 1. memory, CPU, reconnect and latency on the Pi (10 minutes)
+python3 -m venv /tmp/m && /tmp/m/bin/pip install --require-hashes --no-deps -r connector/requirements.lock
+/tmp/m/bin/python connector/scripts/measure.py --seconds 600 --label "Raspberry Pi Zero 2 W" --out "$HOME/measure-pi.json"
+# 2. the systemd unit under the real sandbox, install, start, stop, uninstall (about 2 minutes; leaves the Pi as it was)
+sudo connector/deploy/smoke-systemd.sh 2>&1 | tee "$HOME/smoke-pi.txt"
+# 3. facts about the machine
+{ cat /proc/device-tree/model; echo; uname -a; systemctl --version | head -1; free -m; vcgencmd get_throttled; vcgencmd measure_temp; git rev-parse HEAD; } 2>&1 | tee "$HOME/pi-facts.txt"
+```
+
+Paste back to Issue 21: the full contents of `measure-pi.json`, `smoke-pi.txt` and `pi-facts.txt` (`cat` them). They hold no secret: the credential in the smoke test is a synthetic constant that the script never prints. If `vcgencmd get_throttled` is not `0x0` the Pi was under-powered or too hot and the numbers are suspect; say so. If a check in step 2 fails, paste its output and `journalctl -u mecon-connector --no-pager | tail -50` as it is, and stop.
+
+With a radio attached the same install covers stage C3; that is a separate step.
 
 ## Tests
 
@@ -134,6 +218,8 @@ cd connector
 pip install --require-hashes --no-deps -r requirements-dev.lock
 python -m pytest -q                 # unit tests; integration tests run when `mosquitto` is on PATH
 python scripts/mutation.py          # breaks each transport-safety rule and checks a test fails
+python scripts/mutation_deploy.py   # breaks the packaging rules (config overwrite, secrets, root...) in a copy; needs docker or a Debian root shell
+sh deploy/test-install.sh           # inside a disposable Debian container as root: install, upgrade, uninstall checks
 sh scripts/test-in-docker.sh        # from the repo root: the same image shape CI uses, mosquitto included
 python scripts/gen_fixtures.py      # regenerates contracts/connector/v1/fixtures (stdlib only, independent of the code)
 ```
@@ -148,7 +234,8 @@ python scripts/gen_fixtures.py      # regenerates contracts/connector/v1/fixture
 
 - Nothing has run with a real USB radio. Not verified: that a Companion's USB accepts `0x7F` frames on every build and before the app handshake, that boot text never precedes frames, that opening the port does not reset the board (an ESP32-S3 may reset on open, an nRF52 bridge may need DTR), and that 115200 baud is right for every board.
 - Nothing has run against the Backend or its broker policy. Topic names are provisional until the Backend confirms the mapping at stage C3. The enrolment gate has run only against a fake device that models `deployment.get`, `epoch` and `usig` from the firmware docs; the real answers, the exact place of `epoch` in them, and whether an enrolled device accepts any unsigned read that returns data the Backend alone should see are unverified. Q4 and Q6 in the contract are open.
-- No Pi measurements: resident memory, CPU at sustained traffic, reconnect time, and behaviour under UART byte loss are unknown.
+- No Pi measurements: resident memory, CPU at sustained traffic, reconnect time, and behaviour under UART byte loss are unknown on a Pi. CI measures a runner (labelled as such); the Pi run is the pooled owner step under "Measurements".
+- The systemd unit has run on a CI VM (Ubuntu, systemd 255) and, by hand, on Debian 12 (systemd 252) in a container; not on a Pi, and not with a real serial device, so `DeviceAllow` for `ttyACM` and `ttyUSB` and the `dialout` group on a real radio are untested. `LoadCredential=` did not populate in a nested-container test environment (a container limitation, not seen on a VM); the CI VM run is the evidence.
 - The TLS check was exercised against a synthetic CA and mosquitto 2.0.x only. Failure classification between a certificate failure and a plain network failure depends on paho's log text and is best effort; both fail closed.
 - Hot-unplug on Linux is covered by a fake device. The real error codes from a vanished USB serial port were not observed.
 - The multi-arch image builds for arm64 under emulation in CI only; it has not been run on arm hardware.

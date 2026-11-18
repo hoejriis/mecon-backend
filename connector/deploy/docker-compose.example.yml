@@ -1,0 +1,57 @@
+# MECON USB Connector in a container. Example: every value is a placeholder.
+#
+#   cp connector/deploy/docker-compose.example.yml compose.yml    # then edit the placeholders
+#   docker compose up -d --build
+#
+# Needs on the host (see connector/README.md, "Container"):
+#   ./config/config.toml        the Connector config; password_file = "/run/secrets/broker-password"
+#   ./secrets/broker-password   the broker password, mode 0400, owned by uid 10001 (never in this file)
+#   ./config/ca.pem             the broker's CA certificate, if the broker uses TLS
+# The device is passed by its stable /dev/serial/by-id name, never /dev/ttyACM0.
+name: mecon-connector
+
+services:
+  connector:
+    build:
+      context: ../..                       # the repository root
+      dockerfile: connector/Dockerfile
+      target: runtime
+    image: mecon-connector:local
+    restart: unless-stopped
+    user: "10001:10001"                    # non-root, as the image already is
+    group_add:
+      - "${SERIAL_GID:-20}"                # the numeric group that owns the device node: stat -c %g /dev/ttyACM0
+    read_only: true                        # read-only root filesystem
+    tmpfs:
+      - /tmp:size=8m,mode=1777
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    devices:
+      - /dev/serial/by-id/usb-REPLACE_WITH_YOUR_DEVICE_ID-if00:/dev/serial/by-id/usb-REPLACE_WITH_YOUR_DEVICE_ID-if00
+    volumes:
+      - ./config:/etc/mecon-connector:ro
+    secrets:
+      - broker-password                    # appears at /run/secrets/broker-password
+    ports:
+      - "127.0.0.1:9464:9464"              # health and metrics, loopback only
+    mem_limit: 192m
+    pids_limit: 64
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:9464/healthz', timeout=2).status == 200 else 1)"
+      interval: 30s
+      timeout: 3s
+      start_period: 20s
+      retries: 3
+    stop_grace_period: 15s                 # SIGTERM: publish offline, close, exit (about a second)
+    logging:
+      driver: json-file
+      options: {max-size: "5m", max-file: "3"}
+
+secrets:
+  broker-password:
+    file: ./secrets/broker-password

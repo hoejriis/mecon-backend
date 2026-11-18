@@ -39,6 +39,7 @@ COPY connector/pyproject.toml ./
 COPY connector/src ./src
 COPY connector/tests ./tests
 COPY connector/scripts ./scripts
+COPY connector/deploy ./deploy
 COPY contracts/connector /contracts/connector
 # mosquitto drops privileges when started as root and then cannot read the test directory.
 RUN useradd --create-home tester

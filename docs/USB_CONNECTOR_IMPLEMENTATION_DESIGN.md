@@ -51,13 +51,13 @@ Private Backend topic/ACL/envelope mapping and device-control-link arbitration; 
 
 ## Status
 
-Updated 18 November 2026. Nothing below has run against hardware or the private Backend.
+Updated 19 November 2026. Nothing below has run against hardware, a Pi or the private Backend.
 
 | Stage | State |
 | --- | --- |
 | C0 contract and fixtures | **Draft published** in `contracts/connector/v1` (mapping, schemas, synthetic fixtures, validator in the contracts CI). Topic names are provisional. Q1, Q2, Q3 and Q5 in `mapping.json` are answered; Q4 and Q6 are open. The fake serial device and fake and real-mosquitto broker harness are in `connector/tests`. |
 | C1 transport | **Core implemented** in `connector/` (Python; see "Runtime choice" below): serial selection by stable id, bounded framing, transparent forwarding both ways, one broker session with fallback and backoff, bounded queues with counted drops, health and metrics, and the enrolment gate on downlink (below). Verified with unit tests, fakes and a real mosquitto in CI, plus a mutation check of the transport-safety rules. Not verified on a USB device, a Pi or against the Backend. |
-| C2 local deployment | Not started. A container image exists; systemd packaging, USB permissions on a real Pi, TLS secret handling and Pi Zero 2 W measurements are open. |
+| C2 local deployment | **Packaging implemented, not verified on a Pi.** `connector/deploy/` has a hardened systemd unit (dedicated user, `dialout` as supplementary group, strict sandbox, memory bounds, broker password through `LoadCredential=`), a udev template with no real ids, hash-pinned install and uninstall scripts for Debian and Raspberry Pi OS that never overwrite an existing config, a compose example (read-only root, non-root, device passthrough, healthcheck), and a measurement harness (`connector/scripts/measure.py`). CI runs shellcheck, `systemd-analyze verify` and `security`, the install test in a Debian bookworm container, a smoke test under real systemd on a CI VM (not a Pi), a mutation check of the packaging rules, and the harness for 60 s on GitHub's arm64 and amd64 runners (results labelled "runner, not a Pi"). **Open:** Pi Zero 2 W measurements (memory, CPU, reconnect, latency) and the systemd smoke test on a real Pi are a pooled owner step in the Connector README; a real serial device (`DeviceAllow`, `dialout`, hot-unplug codes) belongs to C3. |
 | C3 interoperability | Not started. Needs the Backend's topic and ACL mapping, a real public-firmware device (including the real `deployment.get`, `epoch` and `usig` behaviour the gate relies on), and a firmware answer on whether an enrolled device accepts any unsigned read of data only the Backend should see. |
 | C4 acceptance | Not started. |
 

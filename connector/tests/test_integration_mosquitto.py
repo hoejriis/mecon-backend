@@ -18,7 +18,6 @@ import pytest
 from conftest import make_cfg
 from fakes.fake_serial import FakeOpener
 from mecon_connector.bridge import Bridge
-from mecon_connector.framing import encode_mecon_frames, encode_serial_frame
 from mecon_connector.metrics import Metrics
 from mecon_connector.paho_transport import PahoTransport
 
@@ -33,8 +32,10 @@ def free_port():
         return s.getsockname()[1]
 
 
-def wire(msg, xid=1):
-    return b"".join(encode_serial_frame(f, 0x3E) for f in encode_mecon_frames(xid, msg))
+# Envelopes are framed by the fake device itself (live.dev.wire), never with a fixed xid: the device
+# answers the Connector's deployment.get from the same xid counter, and the reassembler drops a repeat of
+# the last completed xid by design, so a hard-coded xid that collided with a probe answer silently lost
+# the test's envelope (test_failover_to_second_broker, about 1 run in 8 under load).
 
 
 def until(pred, timeout=15.0, step=0.05):
@@ -200,7 +201,7 @@ def test_roundtrip_and_retained_status(tmp, procs):
     try:
         assert until(lambda: live.bridge.snapshot()["ready"])
         msg = b'{"v":1,"id":"syn-it-1","op":"hello","pad":"\xc3\xa6 "}'
-        live.feed(wire(msg))
+        live.feed(live.dev.wire(msg))
         assert until(lambda: obs.on(f"{ROOT}/up"))
         (t, payload, qos, retain) = obs.on(f"{ROOT}/up")[0]
         assert payload == msg and retain is False and qos == 1
@@ -317,14 +318,14 @@ def test_broker_restart_never_duplicates_and_accounts_for_every_envelope(tmp, pr
         assert until(lambda: live.bridge.snapshot()["ready"])
         for i in range(5):
             sent.append(b'{"id":"pre-%d"}' % i)
-            live.feed(wire(sent[-1], i))
+            live.feed(live.dev.wire(sent[-1]))
         assert until(lambda: len(obs.on(f"{ROOT}/up")) == 5)
         assert until(lambda: live.metrics.get("upstream_acked_total") == 5)  # all five settled before the broker goes
         obs.close()
         m.stop()
         for i in range(5, 12):
             sent.append(b'{"id":"mid-%d"}' % i)
-            live.feed(wire(sent[-1], i))
+            live.feed(live.dev.wire(sent[-1]))
             time.sleep(0.05)
         assert until(lambda: live.metrics.get("broker_connected") == 0)
         m.start()
@@ -360,7 +361,7 @@ def test_failover_to_second_broker(tmp, procs):
     live = Live([plain(dead, "primary"), plain(m.port, "backup")])
     try:
         assert until(lambda: live.bridge.snapshot()["broker_name"] == "backup", 20)
-        live.feed(wire(b'{"id":"via-backup"}'))
+        live.feed(live.dev.wire(b'{"id":"via-backup"}'))
         assert until(lambda: obs.on(f"{ROOT}/up"))
         assert until(lambda: live.metrics.get("broker_connect_attempts_total", "network") >= 1, 10)
     finally:
@@ -383,7 +384,7 @@ def test_tls_with_password_ok_and_wrong_ca_or_password_fail_closed(tmp, procs):
     live = Live([tls_broker(good["ca"], pwfile)])
     try:
         assert until(lambda: live.bridge.snapshot()["ready"], 20)
-        live.feed(wire(b'{"id":"tls-ok"}'))
+        live.feed(live.dev.wire(b'{"id":"tls-ok"}'))
         assert until(lambda: obs.on(f"{ROOT}/up"))
     finally:
         live.close()
@@ -391,7 +392,7 @@ def test_tls_with_password_ok_and_wrong_ca_or_password_fail_closed(tmp, procs):
     # 2. a CA that did not sign the broker certificate: never connects, never publishes
     live = Live([tls_broker(other["ca"], pwfile)])
     try:
-        live.feed(wire(b'{"id":"must-not-leave"}'))
+        live.feed(live.dev.wire(b'{"id":"must-not-leave"}'))
         time.sleep(4)
         assert not live.bridge.snapshot()["ready"] and live.metrics.get("broker_connected") == 0
         assert live.metrics.total("broker_connect_attempts_total") >= 1
@@ -403,7 +404,7 @@ def test_tls_with_password_ok_and_wrong_ca_or_password_fail_closed(tmp, procs):
     bad.write_text("not-the-password\n")
     live = Live([tls_broker(good["ca"], bad)])
     try:
-        live.feed(wire(b'{"id":"must-not-leave-2"}'))
+        live.feed(live.dev.wire(b'{"id":"must-not-leave-2"}'))
         time.sleep(3)
         assert not live.bridge.snapshot()["ready"]
         assert live.metrics.get("broker_connect_attempts_total", "auth") >= 1

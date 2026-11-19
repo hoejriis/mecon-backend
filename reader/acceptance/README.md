@@ -21,11 +21,12 @@ Bound a run so a hung network cannot linger: `perl -e 'alarm shift; exec @ARGV' 
 | `ACCEPTANCE_SESSION_A` | Value of the `__Host-mecon_session` cookie of test user A. |
 | `ACCEPTANCE_SESSION_B` | The same for test user B. |
 
-Without the two session variables the signed-in suite (`authenticated.spec.ts`) is skipped. Use dedicated test users only, never a real person's session.
+Without the two session variables the signed-in suite (`authenticated.spec.ts`) is skipped; `offline.spec.ts` needs only `ACCEPTANCE_SESSION_A`. Use dedicated test users only, never a real person's session.
 
 ## What runs
 
 - `public.spec.ts`: read-only GETs and page loads, no sign-in, including the service worker, the signed-out Map and device-chunk boundaries, and the probes. Checks that depend on the Reader API are skipped with the note "API not routed yet" while `/api/reader/v1/health` still answers 404.
+- `offline.spec.ts`: the encrypted offline cache with a Backend-issued lease, signed in as test user A with a Chromium virtual WebAuthn authenticator (PRF, over CDP): setup in Settings, `POST /leases` answers 200, offline reload and passkey unlock show the cached conversations and the lease state with no `/api/` response, and a removed credential never unlocks. Skips when messaging is not `available`, when the Chromium has no `hasPrf`, or when user A has no conversation. Sends nothing; clears the origin's site data and signs out at the end, which ends session A, so mint a fresh session and run it alone: `npm run acceptance -- offline.spec.ts`.
 - `authenticated.spec.ts`: Settings, device isolation between A and B, Chats lists, mark-read (the only write: the test user's own read mark), the send path with no device connected, Map capability gating, and logout. Logout ends session A, so mint a fresh one for each run. The suite sends no message; send journeys are manual rows in the matrix.
 
 ## No secrets in output

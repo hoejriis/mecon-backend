@@ -162,6 +162,7 @@ Sends transmit over radio, so the automated suites never send. Before running an
 | OFF-07 | Drafts and uncertain attempts are never evicted, and return to their conversation after a reload or unlock with the same ids, with nothing posted | Auto | `src/offline/cache.test.ts`; `src/offline/reconcile.test.ts`; `e2e/offline.spec.ts` "an ambiguous send survives a reload ..." | Simulated |  |
 | OFF-08 | Sending switched off (`403 sending_disabled`) shows "Sending is switched off on this Backend. Nothing was sent.", is never retried, and refreshes the session | Auto | `src/test/chats.test.tsx` (sending_disabled cases) | Simulated | Live: Not run; needs the Backend to answer it while sending is off, with a test user. |
 | OFF-09 | The cache locks on sign-out, account switch, reload and idle | Auto | `src/offline/unlock.test.ts`; `e2e/offline.spec.ts` "reconnecting returns to the signed-in app, and the reload locks the cache again ..." | Simulated |  |
+| OFF-10 | Live, signed in as a test user: passkey setup (virtual authenticator with PRF), the Backend issues a lease (`POST /leases` 200, about 7 days), offline reload and unlock show the cache and the lease state with no `/api/` response, a removed credential never unlocks, then site data is cleared and the session signed out | Auto | `acceptance/offline.spec.ts`; mock counterpart `e2e/offline.spec.ts` "a removed passkey credential ..." | Simulated | Mock e2e passes. Live: Not run; needs a test session and the Backend `messaging` capability reported correctly (the test skips otherwise). |
 
 ### Send path
 

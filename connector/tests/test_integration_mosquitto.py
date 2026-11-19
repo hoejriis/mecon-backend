@@ -4,6 +4,7 @@ Skipped unless a `mosquitto` binary is on PATH (CI installs it; the Docker test 
 The serial side is still the fake device: no hardware is involved.
 """
 
+import itertools
 import json
 import shutil
 import socket
@@ -121,6 +122,9 @@ def mk_tls(tmp, name="ca"):
     return {"ca": str(d / "ca.pem"), "cert": str(d / "srv.pem"), "key": str(d / "srv.key")}
 
 
+_OBSERVER_IDS = itertools.count(1)
+
+
 class Backendish:
     """A paho client playing the part of whoever is on the other side of the broker."""
 
@@ -129,7 +133,11 @@ class Backendish:
         before that would reach nobody. durable: a persistent session, so a broker that keeps its
         persistence file holds the subscription and queues QoS 1 messages while this client is away."""
         self.msgs = []
-        self.c = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id="syn-observer", protocol=mqtt.MQTTv311,
+        # A unique id per client: two clients sharing one id make the broker drop the older one (a second
+        # observer in the same test disconnected the first). A durable client keeps one fixed id so the
+        # reconnected instance resumes the same persistent session.
+        cid = "syn-observer-durable" if durable else f"syn-observer-{next(_OBSERVER_IDS)}"
+        self.c = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=cid, protocol=mqtt.MQTTv311,
                              clean_session=not durable)
         self.c.on_message = lambda _c, _u, m: self.msgs.append((m.topic, bytes(m.payload), m.qos, m.retain))
         subacked = set()

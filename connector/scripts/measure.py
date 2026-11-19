@@ -251,7 +251,7 @@ def main() -> int:
 
     obs = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id="measure-observer", protocol=mqtt.MQTTv311)
     obs.on_message = on_message
-    obs.on_connect = lambda c, *_: c.subscribe(f"{TOPIC_ROOT}/up", 1)
+    obs.on_connect = lambda c, *_: c.subscribe(f"{TOPIC_ROOT}/ev/health", 1)
     obs.reconnect_delay_set(min_delay=1, max_delay=2)
     obs.connect_async("127.0.0.1", mport)
     obs.loop_start()

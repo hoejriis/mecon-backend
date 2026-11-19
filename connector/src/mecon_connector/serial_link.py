@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import fnmatch
 import os
+import stat
 from dataclasses import dataclass, field
 
 from .config import Selector
@@ -36,7 +37,25 @@ def list_ports(by_id_dir: str = BY_ID_DIR) -> list[PortInfo]:
     ]
 
 
+def open_path(sel: Selector) -> str:
+    """The explicit path of a path selector, if it names a character device now.
+
+    No enumeration: the operator named the port (normally a udev symlink such as /dev/bench/<name>), so
+    nothing else is ever a candidate. An absent path is "not plugged in yet" and is polled, like a stable id.
+    """
+    assert sel.path is not None
+    try:
+        mode = os.stat(sel.path).st_mode  # follows the symlink
+    except OSError:
+        raise SerialUnavailable("the selected port path does not exist") from None
+    if not stat.S_ISCHR(mode):
+        raise SerialUnavailable("the selected port path is not a character device")
+    return sel.path
+
+
 def matches(port: PortInfo, sel: Selector) -> bool:
+    if sel.path is not None:
+        return port.device == sel.path
     if sel.by_id is not None:
         return any(fnmatch.fnmatchcase(n, sel.by_id) for n in port.by_id_names)
     if port.vid != sel.vid or port.pid != sel.pid:
@@ -88,6 +107,8 @@ class PySerialLink:
 
 def make_opener(sel: Selector, baud: int):  # type: ignore[no-untyped-def]
     def opener() -> SerialLink:
+        if sel.path is not None:
+            return PySerialLink(open_path(sel), baud)
         port = select_port(list_ports(), sel)
         return PySerialLink(port.device, baud)
 

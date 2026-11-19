@@ -202,33 +202,33 @@ def test_roundtrip_and_retained_status(tmp, procs):
         assert until(lambda: live.bridge.snapshot()["ready"])
         msg = b'{"v":1,"id":"syn-it-1","op":"hello","pad":"\xc3\xa6 "}'
         live.feed(live.dev.wire(msg))
-        assert until(lambda: obs.on(f"{ROOT}/up"))
-        (t, payload, qos, retain) = obs.on(f"{ROOT}/up")[0]
+        assert until(lambda: obs.on(f"{ROOT}/resp"))
+        (t, payload, qos, retain) = obs.on(f"{ROOT}/resp")[0]
         assert payload == msg and retain is False and qos == 1
         assert until(lambda: live.metrics.get("upstream_acked_total") == 1)
         # status is retained: a late subscriber still sees it
-        late = Backendish(m.port, f"{ROOT}/connector/status")
-        assert until(lambda: late.on(f"{ROOT}/connector/status"))
-        st = late.on(f"{ROOT}/connector/status")[0]
-        assert st[3] is True and json.loads(st[1]) == {"v": 1, "connector": "online", "serial": "up"}
+        late = Backendish(m.port, f"{ROOT}/status")
+        assert until(lambda: late.on(f"{ROOT}/status"))
+        st = late.on(f"{ROOT}/status")[0]
+        assert st[3] is True and json.loads(st[1]) == {"online": True}
         late.close()
         # downlink: broker to serial, byte for byte, once
         cmd = b'{"v":1,"id":"syn-cmd-1","op":"clock.get"}'
         assert until(lambda: live.bridge.snapshot()["downlink"] == "open")  # the device answered deployment.get
-        obs.publish(f"{ROOT}/down", cmd)
+        obs.publish(f"{ROOT}/req", cmd)
         assert until(lambda: live.dev.written)
         time.sleep(0.5)
         w = live.dev.written_bytes  # one frame: '<' len 0x7f xid index count body; the xid depends on how many enrolment requests came first
         assert len(live.dev.written) == 1 and w[0] == 0x3C and w[3:4] == b"\x7f" and w[5:7] == b"\x00\x01" and w[7:] == cmd
         # A command left retained on the broker comes back at every (re)subscribe. The Connector must
         # refuse it: the broker flags it retained exactly then.
-        obs.publish(f"{ROOT}/down", cmd, retain=True)  # delivered live (not flagged), so it runs once
+        obs.publish(f"{ROOT}/req", cmd, retain=True)  # delivered live (not flagged), so it runs once
         assert until(lambda: len(live.dev.written) == 2)
         kill_connection(live)
         assert until(lambda: live.metrics.get("downlink_dropped_total", "retained") == 1, 20)
         time.sleep(0.5)
         assert len(live.dev.written) == 2  # the redelivered retained copy was not written
-        obs.publish(f"{ROOT}/down", b"", retain=True)  # clear it
+        obs.publish(f"{ROOT}/req", b"", retain=True)  # clear it
     finally:
         live.close()
         obs.close()
@@ -237,7 +237,7 @@ def test_roundtrip_and_retained_status(tmp, procs):
 def test_gate_closed_then_provisioned_opens_then_unsigned_event_closes(tmp, procs):
     m = Mosq(tmp).start()
     procs.append(m)
-    obs = Backendish(m.port, f"{ROOT}/up")
+    obs = Backendish(m.port, f"{ROOT}/resp", f"{ROOT}/ev/health")
     gate = {"gate": {"retry_s": 5, "recheck_s": 30, "timeout_s": 3}}
     live = Live([plain(m.port)], enrolment="none", downlink=gate)
     cmd = b'{"v":1,"id":"syn-cmd-2","op":"clock.get"}'
@@ -245,27 +245,27 @@ def test_gate_closed_then_provisioned_opens_then_unsigned_event_closes(tmp, proc
         assert until(lambda: live.bridge.snapshot()["ready"])
         # 1. the device reports no Deployment record: a command from the broker is refused
         assert until(lambda: live.metrics.get("downlink_gate_probes_total", "none") >= 1)
-        obs.publish(f"{ROOT}/down", cmd)
+        obs.publish(f"{ROOT}/req", cmd)
         assert until(lambda: live.metrics.get("downlink_closed_total") == 1)
         assert live.dev.written == []
         # 2. it becomes enrolled; the next check opens the gate and a command goes through, once
         live.dev.enrolment = "provisioned"
         assert until(lambda: live.bridge.snapshot()["downlink"] == "open", 15)
-        obs.publish(f"{ROOT}/down", cmd)
+        obs.publish(f"{ROOT}/req", cmd)
         assert until(lambda: len(live.dev.written) == 1)
         # 3. an unsigned event (what follows a deployment.reset) closes it at once, and is forwarded unchanged
         live.dev.enrolment = "none"
         ev = live.dev.event(signed=False)
         live.dev.say(ev)
-        assert until(lambda: ev in [p for _t, p, _q, _r in obs.on(f"{ROOT}/up")])
+        assert until(lambda: ev in [p for _t, p, _q, _r in obs.on(f"{ROOT}/ev/health")])
         assert until(lambda: live.bridge.snapshot()["downlink"] == "closed")
         before = live.metrics.get("downlink_closed_total")
-        obs.publish(f"{ROOT}/down", cmd)
+        obs.publish(f"{ROOT}/req", cmd)
         assert until(lambda: live.metrics.get("downlink_closed_total") == before + 1)
         time.sleep(0.5)
         assert len(live.dev.written) == 1
         # the Connector's own deployment.get requests were never published upstream
-        assert all(b"deployment.get" not in p and b"cg-" not in p for _t, p, _q, _r in obs.on(f"{ROOT}/up"))
+        assert all(b"deployment.get" not in p and b"cg-" not in p for _t, p, _q, _r in obs.on(f"{ROOT}/resp"))
     finally:
         live.close()
         obs.close()
@@ -277,12 +277,11 @@ def test_clean_shutdown_releases_the_session_with_offline_status(tmp, procs):
     live = Live([plain(m.port)])
     assert until(lambda: live.bridge.snapshot()["ready"])
     live.close()
-    late = Backendish(m.port, f"{ROOT}/connector/status")
+    late = Backendish(m.port, f"{ROOT}/status")
     try:
-        assert until(lambda: late.on(f"{ROOT}/connector/status"))
-        assert json.loads(late.on(f"{ROOT}/connector/status")[-1][1])["connector"] == "offline"
-        # a clean DISCONNECT: the will message is not what said offline (it says serial unknown)
-        assert json.loads(late.on(f"{ROOT}/connector/status")[-1][1])["serial"] == "up"
+        assert until(lambda: late.on(f"{ROOT}/status"))
+        last = late.on(f"{ROOT}/status")[-1]
+        assert json.loads(last[1]) == {"online": False} and last[3] is True  # retained
     finally:
         late.close()
 
@@ -290,17 +289,17 @@ def test_clean_shutdown_releases_the_session_with_offline_status(tmp, procs):
 def test_abrupt_loss_leaves_will_then_reconnects(tmp, procs):
     m = Mosq(tmp).start()
     procs.append(m)
-    obs = Backendish(m.port, f"{ROOT}/connector/status")
+    obs = Backendish(m.port, f"{ROOT}/status")
     live = Live([plain(m.port)])
     try:
         assert until(lambda: live.bridge.snapshot()["ready"])
-        assert until(lambda: obs.on(f"{ROOT}/connector/status"))
+        assert until(lambda: obs.on(f"{ROOT}/status"))
         n = len(obs.msgs)
         kill_connection(live)
-        assert until(lambda: any(json.loads(p)["connector"] == "offline" for _t, p, _q, _r in obs.msgs[n:]), 10)
+        assert until(lambda: any(json.loads(p) == {"online": False} for _t, p, _q, _r in obs.msgs[n:]), 10)
         assert until(lambda: live.metrics.get("broker_disconnects_total") == 1, 10)
         assert until(lambda: live.bridge.snapshot()["ready"], 15)
-        assert until(lambda: json.loads(obs.msgs[-1][1])["connector"] == "online", 10)
+        assert until(lambda: json.loads(obs.msgs[-1][1]) == {"online": True}, 10)
     finally:
         live.close()
         obs.close()
@@ -311,7 +310,7 @@ def test_broker_restart_never_duplicates_and_accounts_for_every_envelope(tmp, pr
     # broker receives) at whatever instant after the restart the Connector reconnects and publishes.
     m = Mosq(tmp, persistent=True).start()
     procs.append(m)
-    obs = Backendish(m.port, f"{ROOT}/up", durable=True)
+    obs = Backendish(m.port, f"{ROOT}/resp", durable=True)
     live = Live([plain(m.port)])
     sent = []
     try:
@@ -319,7 +318,7 @@ def test_broker_restart_never_duplicates_and_accounts_for_every_envelope(tmp, pr
         for i in range(5):
             sent.append(b'{"id":"pre-%d"}' % i)
             live.feed(live.dev.wire(sent[-1]))
-        assert until(lambda: len(obs.on(f"{ROOT}/up")) == 5)
+        assert until(lambda: len(obs.on(f"{ROOT}/resp")) == 5)
         assert until(lambda: live.metrics.get("upstream_acked_total") == 5)  # all five settled before the broker goes
         obs.close()
         m.stop()
@@ -330,16 +329,16 @@ def test_broker_restart_never_duplicates_and_accounts_for_every_envelope(tmp, pr
         assert until(lambda: live.metrics.get("broker_connected") == 0)
         m.start()
         procs.append(m)
-        obs = Backendish(m.port, f"{ROOT}/up", durable=True)
+        obs = Backendish(m.port, f"{ROOT}/resp", durable=True)
         assert until(lambda: live.bridge.snapshot()["ready"], 20)
         assert until(lambda: live.metrics.get("upstream_queue_depth") == 0 and live.metrics.get("upstream_inflight") == 0, 20)
         # Every publish the broker acknowledged after the restart (the 5 before it were acknowledged earlier)
         # reaches the durable observer: wait for exactly that many, then a short quiet period in which a
         # duplicate, if there were one, would show up as a further message.
         acked_after_restart = lambda: int(live.metrics.get("upstream_acked_total")) - 5  # noqa: E731
-        assert until(lambda: len(obs.on(f"{ROOT}/up")) >= acked_after_restart(), 15), "acknowledged publishes never reached the observer"
+        assert until(lambda: len(obs.on(f"{ROOT}/resp")) >= acked_after_restart(), 15), "acknowledged publishes never reached the observer"
         time.sleep(0.5)
-        got = [p for _t, p, _q, _r in obs.on(f"{ROOT}/up")]
+        got = [p for _t, p, _q, _r in obs.on(f"{ROOT}/resp")]
         assert len(got) == acked_after_restart(), "the broker delivered a different number than it acknowledged"
         assert len(got) == len(set(got)), "a payload was published twice"
         assert set(got) <= set(sent)
@@ -357,12 +356,12 @@ def test_failover_to_second_broker(tmp, procs):
     m = Mosq(tmp).start()
     procs.append(m)
     dead = free_port()
-    obs = Backendish(m.port, f"{ROOT}/up")
+    obs = Backendish(m.port, f"{ROOT}/resp")
     live = Live([plain(dead, "primary"), plain(m.port, "backup")])
     try:
         assert until(lambda: live.bridge.snapshot()["broker_name"] == "backup", 20)
         live.feed(live.dev.wire(b'{"id":"via-backup"}'))
-        assert until(lambda: obs.on(f"{ROOT}/up"))
+        assert until(lambda: obs.on(f"{ROOT}/resp"))
         assert until(lambda: live.metrics.get("broker_connect_attempts_total", "network") >= 1, 10)
     finally:
         live.close()
@@ -373,9 +372,9 @@ def test_return_to_primary_is_probe_first_then_switch(tmp, procs):
     backup = Mosq(tmp).start()
     procs.append(backup)
     dead = free_port()  # nothing listens here yet
-    obs_backup = Backendish(backup.port, f"{ROOT}/up", f"{ROOT}/connector/status")
+    obs_backup = Backendish(backup.port, f"{ROOT}/resp", f"{ROOT}/status")
     live = Live([plain(dead, "primary"), plain(backup.port, "backup")])
-    status = f"{ROOT}/connector/status"
+    status = f"{ROOT}/status"
     obs_primary = None
     try:
         assert until(lambda: live.bridge.snapshot()["broker_name"] == "backup", 20)
@@ -390,18 +389,18 @@ def test_return_to_primary_is_probe_first_then_switch(tmp, procs):
         assert len(obs_backup.on(status)) == 1  # online once: no offline/online flap
         # the working session carries data throughout
         live.feed(live.dev.wire(b'{"id":"on-backup"}'))
-        assert until(lambda: [m for m in obs_backup.on(f"{ROOT}/up") if m[1] == b'{"id":"on-backup"}'])
+        assert until(lambda: [m for m in obs_backup.on(f"{ROOT}/resp") if m[1] == b'{"id":"on-backup"}'])
         # the primary comes back on the same port: the Connector probes it, then switches
         primary = Mosq(tmp, port=dead).start()
         procs.append(primary)
-        obs_primary = Backendish(primary.port, f"{ROOT}/up")
+        obs_primary = Backendish(primary.port, f"{ROOT}/resp")
         assert until(lambda: live.bridge.snapshot()["broker_name"] == "primary" and live.bridge.snapshot()["ready"], 20)
         live.feed(live.dev.wire(b'{"id":"on-primary"}'))
-        assert until(lambda: [m for m in obs_primary.on(f"{ROOT}/up") if m[1] == b'{"id":"on-primary"}'])
+        assert until(lambda: [m for m in obs_primary.on(f"{ROOT}/resp") if m[1] == b'{"id":"on-primary"}'])
         assert until(lambda: live.metrics.get("upstream_acked_total") == 2)
         assert live.metrics.get("upstream_uncertain_total") == 0
-        assert [m[1] for m in obs_backup.on(f"{ROOT}/up")] == [b'{"id":"on-backup"}']  # nothing twice, nothing rerouted
-        assert [m[1] for m in obs_primary.on(f"{ROOT}/up")] == [b'{"id":"on-primary"}']
+        assert [m[1] for m in obs_backup.on(f"{ROOT}/resp")] == [b'{"id":"on-backup"}']  # nothing twice, nothing rerouted
+        assert [m[1] for m in obs_primary.on(f"{ROOT}/resp")] == [b'{"id":"on-primary"}']
         assert live.bridge.accounting_gap() == 0
     finally:
         live.close()
@@ -416,7 +415,7 @@ def test_tls_with_password_ok_and_wrong_ca_or_password_fail_closed(tmp, procs):
     pwfile.write_text("synthetic-test-password\n")
     m = Mosq(tmp, tls=good, password="synthetic-test-password").start()
     procs.append(m)
-    obs = Backendish_tls(m, good["ca"], f"{ROOT}/up")
+    obs = Backendish_tls(m, good["ca"], f"{ROOT}/resp")
 
     def tls_broker(ca, pw_file):
         return {"name": "t", "host": "localhost", "port": m.port, "tls": True, "ca_file": ca, "username": "syn-user", "password_file": str(pw_file)}
@@ -426,10 +425,10 @@ def test_tls_with_password_ok_and_wrong_ca_or_password_fail_closed(tmp, procs):
     try:
         assert until(lambda: live.bridge.snapshot()["ready"], 20)
         live.feed(live.dev.wire(b'{"id":"tls-ok"}'))
-        assert until(lambda: obs.on(f"{ROOT}/up"))
+        assert until(lambda: obs.on(f"{ROOT}/resp"))
     finally:
         live.close()
-    n_ok = len(obs.on(f"{ROOT}/up"))
+    n_ok = len(obs.on(f"{ROOT}/resp"))
     # 2. a CA that did not sign the broker certificate: never connects, never publishes
     live = Live([tls_broker(other["ca"], pwfile)])
     try:
@@ -452,7 +451,7 @@ def test_tls_with_password_ok_and_wrong_ca_or_password_fail_closed(tmp, procs):
     finally:
         live.close()
     time.sleep(0.5)
-    assert len(obs.on(f"{ROOT}/up")) == n_ok
+    assert len(obs.on(f"{ROOT}/resp")) == n_ok
     obs.close()
 
 

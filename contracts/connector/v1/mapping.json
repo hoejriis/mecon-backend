@@ -2,7 +2,7 @@
   "contract": "mecon-usb-connector",
   "version": "1.0.0-draft.1",
   "status": "draft",
-  "status_note": "Synthetic, versioned contract for the public USB Connector (stages C0 and C1). Topic names are PROVISIONAL: the Backend owns the real topic, ACL and envelope mapping and may change them. Nothing here is verified against hardware or a Backend.",
+  "status_note": "Versioned contract for the public USB Connector. The topic, ACL and envelope mapping below is the Backend's, relayed by its coder on 2026-11-19 for stage C3. Not yet verified against a real device or a real Backend: that is the C3 hardware leg.",
   "sources": [
     { "repo": "hoejriis/mecon-firmware", "path": "docs/contract/DEVICE_INTERFACE.md", "commit": "5a729ef6127869d404fdffd7e5e08ddbb72a87b5", "used_for": "interface framing (0x7F), console line, one-request-at-a-time, id cache, limits" },
     { "repo": "hoejriis/mecon-firmware", "path": "docs/contract/OPERATIONS.md", "commit": "5a729ef6127869d404fdffd7e5e08ddbb72a87b5", "used_for": "operation classes, USB cable as a transport" },
@@ -14,15 +14,17 @@
   ],
   "transparency": [
     "never mints or substitutes identity; the topic root is configuration, not something read from the device",
-    "never holds keys, decrypts, parses or rewrites a payload",
+    "never holds keys, decrypts or rewrites a payload; it parses an uplink message only for its id, ev, epoch and usig members (routing and the enrolment gate)",
     "never fabricates an acknowledgement; MQTT acceptance is not RF delivery and not Backend processing",
-    "never routes: one device, one configured topic root",
+    "never chooses a device or identity: one device, one configured topic root; the only choice it makes is the topic LEVEL (resp or ev/<ev>) under that root",
     "device-signed envelopes are forwarded byte for byte"
   ],
   "serial": {
     "selection": {
-      "by": ["by_id name glob (a /dev/serial/by-id entry)", "vid + pid (+ optional usb serial number)"],
-      "refused": ["raw /dev/ttyUSB* or /dev/ttyACM* paths", "a selector matching more than one port", "the pattern '*'"],
+      "by": ["path: an explicit /dev/... path, normally a udev symlink such as /dev/bench/<name> (also --port <path> on the command line, which replaces the config selector)", "by_id name glob (a /dev/serial/by-id entry)", "vid + pid (+ optional usb serial number)"],
+      "exactly_one_of": ["path", "by_id", "vid+pid"],
+      "path_rules": "absolute, under /dev/, no wildcard or .., not a kernel tty node (/dev/ttyUSB*, /dev/ttyACM*, /dev/ttyS*, /dev/ttyAMA*, /dev/cu.*); it must resolve to a character device or it is polled like an absent stable id; no enumeration, so nothing else is ever a candidate",
+      "refused": ["raw /dev/ttyUSB* or /dev/ttyACM* paths", "a selector matching more than one port", "the pattern '*'", "more than one selector kind"],
       "no_match": "keep polling every 1 s; not an error",
       "exclusive_open": true,
       "mode_is_configured": "companion or console; never auto-detected, because detection means reading payloads"
@@ -92,40 +94,73 @@
     },
     "topic_root": {
       "source": "configuration; provisioned by the party that provisions the broker login",
+      "shape": "mecon/<device_id>, where device_id is the device's own 16-byte id as 32 lowercase hex digits (^[0-9a-f]{32}$), as reported by hello and deployment.get. The Connector never reads it from the device: the operator copies it into the config.",
       "rules": "plain levels of A-Za-z0-9._- ; no wildcard, no leading slash, no $"
     },
+    "login": {
+      "username": "dev-<gateway_id>-g<generation>; one login per device",
+      "acl": {
+        "publish": ["{topic_root}/resp", "{topic_root}/status", "{topic_root}/ev/+"],
+        "subscribe": ["{topic_root}/req"],
+        "nothing_else": true
+      },
+      "note": "The Connector publishes and subscribes only on those topics, so a login with exactly this ACL is enough. The ACL is the Backend's; the Connector never relies on it for its own safety rules."
+    },
     "topics": {
-      "up": {
-        "template": "{topic_root}/up",
+      "resp": {
+        "template": "{topic_root}/resp",
         "direction": "connector_to_broker",
-        "carries": "device-to-host envelopes, one MQTT message per envelope, payload byte for byte",
+        "carries": "a device-to-host message that answers a request: it has an `id` member (and no `ev`). One MQTT message per envelope, payload byte for byte, with the device's own usig signature.",
         "qos": 1,
         "qos_configurable": [0, 1],
         "retain": false,
-        "provisional": true,
-        "provenance": "the topic itself says the envelope arrived over USB; direct Wi-Fi uses the device's own response and event topics"
+        "provisional": false
       },
-      "down": {
-        "template": "{topic_root}/down",
+      "ev": {
+        "template": "{topic_root}/ev/{ev}",
+        "direction": "connector_to_broker",
+        "carries": "a device-to-host event: it has an `ev` member naming the stream (inventory, health, power, radio, runtime, rf, message, ...). Published to {topic_root}/ev/<that name>, payload byte for byte, with the device's own usig signature.",
+        "qos": 1,
+        "qos_configurable": [0, 1],
+        "retain": false,
+        "ev_name_rule": "^[A-Za-z0-9_-]{1,32}$; any other value (a slash, a wildcard, empty, not a string) has no route",
+        "provisional": false
+      },
+      "req": {
+        "template": "{topic_root}/req",
         "direction": "broker_to_connector",
-        "carries": "host-to-device requests, one MQTT message per envelope",
+        "carries": "host-to-device requests, one MQTT message per envelope: the Backend's signed envelope, passed through unchanged",
         "subscribe_qos": 0,
-        "retained_messages": "refused and counted",
+        "retained_messages": "refused and counted; the Backend never retains a request",
         "opens_when": "the enrolment gate is open (see enrolment_gate); there is no configuration switch",
         "while_closed": "messages are refused and counted (downlink_closed_total), never held, never replayed",
-        "provisional": true
+        "provisional": false
       },
       "status": {
-        "template": "{topic_root}/connector/status",
+        "template": "{topic_root}/status",
         "direction": "connector_to_broker",
-        "carries": "the Connector's own transport state, never the device's identity, health or presence",
-        "qos": 1,
+        "carries": "the Connector's own transport state: online is true only while the broker session is up AND the device's serial port is open. It never stands for the device's identity, health, enrolment or radio presence.",
+        "qos": 0,
         "retain": true,
-        "payload": { "v": 1, "connector": "online|offline", "serial": "up|down|unknown" },
-        "last_will": { "payload": { "v": 1, "connector": "offline", "serial": "unknown" }, "qos": 1, "retain": true },
-        "published_on": ["every broker connect", "serial up or down", "clean shutdown (offline)"],
-        "provisional": true
+        "payload": { "online": "true|false" },
+        "payload_exact": ["{\"online\":true}", "{\"online\":false}"],
+        "last_will": { "payload": { "online": false }, "qos": 0, "retain": true },
+        "published_on": ["every broker connect", "serial up or down", "clean shutdown ({\"online\":false}, the same bytes as the will)"],
+        "decision": "The retained status and the will share the Backend's shape {\"online\":...}, so one consumer reads both. The Connector's earlier detail payload (connector and serial members) is dropped from the topic; serial state remains in /healthz and /metrics.",
+        "provisional": false
       }
+    },
+    "routing": {
+      "decision": "The Connector chooses only the TOPIC from the parsed envelope. The bytes published are the device's own bytes, never re-serialised, never signed, never given a wrapper.",
+      "parsed_members": ["ev", "id"],
+      "rules": [
+        "an `ev` member that is a safe name (ev_name_rule) -> {topic_root}/ev/<ev>",
+        "no `ev` and an `id` that is a non-empty string or an integer -> {topic_root}/resp",
+        "both `ev` and `id` -> event",
+        "anything else (no id and no ev, an unsafe or non-string ev, id empty/null/boolean, JSON that is not an object, or bytes that are not JSON) -> no route: dropped and counted as upstream_dropped_total{reason=\"unroutable\"}, never published and never guessed. An unsafe ev never falls back to resp."
+      ],
+      "already_parsed": "The enrolment gate already parses every uplink message for id, epoch and usig; routing reads two more members of the same parse.",
+      "unchanged_bytes": "Nothing is added or removed. The Connector does not verify, rewrite or re-sign: a Connector that rewrote an answer or event would break its usig signature."
     },
     "client_id": {
       "rule": "configured, 1-64 chars of A-Za-z0-9._- ; never generated or derived from the device",
@@ -161,10 +196,10 @@
     "closed_when": ["result.state none or corrupt", "status other than ok", "no answer within timeout_s", "an answer that does not parse or has another state", "the serial port is lost", "a broker session is (re)established", "a new epoch is seen", "an uplink interface message without a usig member"],
     "ask_when": ["the serial port opens", "a broker session is established", "an epoch different from the last one is seen", "the first unsigned uplink message closes an open gate", "every recheck_s while open (default 600, 30-3600)", "every retry_s while closed (default 30, 5-600)"],
     "timeout_s_default": 8,
-    "inspection": "Only: the Connector's own reply (matched by its request id), whether the top-level usig member is present, and an epoch (top-level epoch, result.epoch or usig_boot). Nothing else is read. Uplink is never altered and always forwarded, except the device's reply to the Connector's own request.",
+    "inspection": "Only: the Connector's own reply (matched by its request id), whether the top-level usig member is present, and an epoch (top-level epoch, result.epoch or usig_boot). Nothing else is read. Uplink is never altered and forwarded to the topic its envelope routes to (routing), except the device's reply to the Connector's own request.",
     "own_traffic_upstream": "The request is never published upstream and the reply to it is not published upstream: they are the Connector's traffic, not device-originated. The protocol does not require them upstream. Replies are matched by the reserved id prefix cg-; a late reply is dropped and counted (result late).",
     "unsigned_rule": "While a record exists every interface event and result ends with usig_boot, usig_seq and usig. The first uplink 0x7F or `mecon> {` message with no usig closes downlink at once, because that is what follows a deployment.reset. It reopens only after a fresh deployment.get says provisioned. Native Companion frames are not interface messages and never count.",
-    "downlink_content": "No signature or operation check on relayed content: for an enrolled device the firmware requires a member's signature for everything but reads, and the owner decided unsigned reads are relayed too. The broker ACL on down stays a further layer.",
+    "downlink_content": "No signature or operation check on relayed content: for an enrolled device the firmware requires a member's signature for everything but reads, and the owner decided unsigned reads are relayed too. The broker ACL on req stays a further layer.",
     "one_request_at_a_time": "The firmware handles one interface message at a time. The Connector's request can interleave with a Backend request that is in flight; a Backend that gets a busy answer re-sends with the same id.",
     "xid": "The request is the first message written after the port opens (xid 1), so the first relayed message uses xid 2."
   },
@@ -229,7 +264,7 @@
     { "name": "upstream_published_total", "type": "counter", "labels": {} },
     { "name": "upstream_acked_total", "type": "counter", "labels": {} },
     { "name": "upstream_uncertain_total", "type": "counter", "labels": {} },
-    { "name": "upstream_dropped_total", "type": "counter", "labels": { "reason": ["queue_full", "ttl", "oversize", "shutdown"] } },
+    { "name": "upstream_dropped_total", "type": "counter", "labels": { "reason": ["queue_full", "ttl", "oversize", "shutdown", "unroutable"] } },
     { "name": "downlink_gate_open", "type": "gauge", "labels": {} },
     { "name": "downlink_closed_total", "type": "counter", "labels": {} },
     { "name": "downlink_gate_closes_total", "type": "counter", "labels": { "reason": ["unsigned_uplink", "not_provisioned", "probe_failed", "epoch_changed", "serial_lost", "reconnect"] } },
@@ -264,11 +299,11 @@
     { "id": "config_invalid", "condition": "any config check fails", "behaviour": "refuse to start, exit 2, list every problem" }
   ],
   "open_questions": [
-    { "id": "Q1", "owner": "backend", "status": "answered", "question": "One up topic for results and events; the Connector cannot split them without reading the payload. Does the Backend de-multiplex?", "answer": "Yes (deimos-mesh, 2026-11-18). The Backend parses each message by its own shape. Keep the bytes untouched: the usig signature is checked over them. Topic names stay provisional until the Backend confirms the mapping at stage C3." },
+    { "id": "Q1", "owner": "backend", "status": "answered", "question": "One up topic for results and events; the Connector cannot split them without reading the payload. Does the Backend de-multiplex?", "answer": "Yes (Backend, 2026-11-18). The Backend parses each message by its own shape. Keep the bytes untouched: the usig signature is checked over them. Superseded in shape by the Backend's mapping of 2026-11-19: the Connector now splits the single up topic into resp and ev/<ev> from the parsed envelope (routing), bytes unchanged." },
     { "id": "Q2", "owner": "owner", "status": "answered", "question": "A relayed write arrives as the unsigned local cable caller.", "answer": "Owner decision, 2026-11-18: downlink is relayed only while the device reports an enrolled Deployment record, and fails closed otherwise (enrolment_gate). Unsigned reads are relayed too for an enrolled device; there is no signature check on downlink content. Still to confirm with mecon-firmware before stage C3: whether an enrolled device accepts any unsigned read that returns data the Backend alone should see." },
     { "id": "Q3", "owner": "backend", "status": "answered", "question": "Dual transport arbitration and duplicate events.", "answer": "The Backend de-duplicates by (device, stream, epoch, seq) after the signature verifies, and sends a request over the path that currently holds the device. The holder must release cleanly: the Connector publishes its status offline and closes the broker session on shutdown. Gap counting across transports is a Backend gap, tracked on their side." },
-    { "id": "Q4", "owner": "firmware", "status": "open", "question": "Does a Companion's USB serial accept 0x7F frames before the app handshake, and does boot-time text ever precede frames on every USB build?" },
+    { "id": "Q4", "owner": "firmware", "status": "open", "question": "Does a Companion's USB serial accept 0x7F frames before the app handshake, and does boot-time text ever precede frames on every USB build? Not answered by the Backend mapping: it is device behaviour, observed by the C3 hardware run (the Connector's first write is deployment.get, with no handshake)." },
     { "id": "Q5", "owner": "firmware+backend", "status": "answered", "question": "Should native (non-0x7F) Companion frames be forwarded?", "answer": "No (mecon-firmware, 2026-11-18). Downlink they would run at cable trust (CLI command frame, native key export and import, set-PIN, factory reset); uplink they carry private messages. Dropped and counted both ways." },
-    { "id": "Q6", "owner": "backend", "status": "open", "question": "Is the Connector status topic wanted, and under what name? It is the Connector's own state and never stands for the device's presence." }
+    { "id": "Q6", "owner": "backend", "status": "answered", "question": "Is the Connector status topic wanted, and under what name?", "answer": "Yes (Backend coder, 2026-11-19): {topic_root}/status, retained, QoS 0, last will {\"online\":false} retained on the same topic. The Connector's own detail topic {topic_root}/connector/status is gone: the login's ACL allows exactly resp, status and ev/+ for publish. Payload decision: the Backend's {\"online\":...} shape wins over the earlier connector/serial payload, because it is the single shape the Backend and the will already share and the ACL leaves no second topic for the detail; online means broker session up and serial port open, never device presence." }
   ]
 }

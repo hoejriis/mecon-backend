@@ -56,15 +56,16 @@
       }
     },
     "mqtt": {
-      "type": "object", "required": ["protocol", "clean_session", "topics", "client_id", "brokers", "reconnect"],
+      "type": "object", "required": ["protocol", "clean_session", "topics", "routing", "login", "client_id", "brokers", "reconnect"],
       "properties": {
         "protocol": { "const": "3.1.1" },
         "clean_session": { "const": true },
         "topics": {
-          "type": "object", "required": ["up", "down", "status"], "additionalProperties": false,
+          "type": "object", "required": ["resp", "ev", "req", "status"], "additionalProperties": false,
           "properties": {
-            "up": { "$ref": "#/$defs/topic" },
-            "down": { "$ref": "#/$defs/topic" },
+            "resp": { "$ref": "#/$defs/topic" },
+            "ev": { "$ref": "#/$defs/topic" },
+            "req": { "$ref": "#/$defs/topic" },
             "status": { "$ref": "#/$defs/topic" }
           }
         },
@@ -134,12 +135,12 @@
     "topic": {
       "type": "object", "required": ["template", "direction", "provisional"],
       "properties": {
-        "template": { "type": "string", "pattern": "^\\{topic_root\\}/[a-z/]+$" },
+        "template": { "type": "string", "pattern": "^\\{topic_root\\}/[a-z/{}]+$" },
         "direction": { "enum": ["connector_to_broker", "broker_to_connector"] },
         "qos": { "enum": [0, 1] },
         "subscribe_qos": { "enum": [0, 1] },
         "retain": { "type": "boolean" },
-        "provisional": { "const": true }
+        "provisional": { "type": "boolean" }
       }
     },
     "backoffClass": {

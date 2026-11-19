@@ -11,7 +11,7 @@ select = { by_id = "usb-REPLACE_WITH_YOUR_DEVICE_ID-*" }
 
 [mqtt]
 client_id = "example-connector-1"
-topic_root = "example/device-root"
+topic_root = "mecon/00112233445566778899aabbccddeeff"
 upstream_qos = 1
 
 [[mqtt.brokers]]

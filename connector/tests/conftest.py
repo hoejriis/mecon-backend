@@ -60,8 +60,9 @@ class Rig:
             self.cfg, self.transport, self.opener, self.metrics, clock=self.clock, rng=lambda: 0.5,
             probe_runner=lambda fn: fn(),  # the fake probe is instant: run it inline, deterministically
         )
-        self.up = self.cfg.mqtt.topic_up
-        self.down = self.cfg.mqtt.topic_down
+        self.up = self.cfg.mqtt.topic_resp  # responses; events go under topic_ev
+        self.ev = self.cfg.mqtt.topic_ev
+        self.down = self.cfg.mqtt.topic_req
         self.status = self.cfg.mqtt.topic_status
 
     def step(self, n=1, dt=0.01):
@@ -81,7 +82,8 @@ class Rig:
         self.step(extra)
 
     def published(self, broker="primary"):
-        return [r.payload for r in self.net.brokers[broker].on_topic(self.up)]
+        """Every uplink payload published (responses and events, in order); not the status."""
+        return [r.payload for r in self.net.brokers[broker].received if r.topic != self.status]
 
 
 @pytest.fixture

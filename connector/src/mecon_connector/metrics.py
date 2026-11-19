@@ -45,7 +45,7 @@ REGISTRY: dict[str, tuple[str, str, tuple[str, ...]]] = {
 
 REASONS = {
     "serial_discarded_bytes_total": {"garbage", "stall", "native", "unplug"},
-    "upstream_dropped_total": {"queue_full", "ttl", "oversize", "shutdown"},
+    "upstream_dropped_total": {"queue_full", "ttl", "oversize", "shutdown", "unroutable"},
     "downlink_dropped_total": {"queue_full", "ttl", "serial_down", "retained", "invalid", "too_large", "shutdown"},
     "downlink_gate_closes_total": {
         "unsigned_uplink", "not_provisioned", "probe_failed", "epoch_changed", "serial_lost", "reconnect",

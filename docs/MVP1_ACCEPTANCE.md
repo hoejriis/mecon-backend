@@ -190,7 +190,7 @@ Sends transmit over radio, so the automated suites never send. Before running an
 
 | ID | Criterion | Method | Where automated, or manual steps | Evidence status | Notes |
 | --- | --- | --- | --- | --- | --- |
-| CON-01 | The C0 contract and its synthetic fixtures validate, and the code matches the contract | Auto | `cd contracts && npm test`; `connector/tests/test_contract_fixtures.py`, `connector/tests/test_contract_matches_code.py` | Simulated | Draft contract; topics provisional. |
+| CON-01 | The C0 contract and its synthetic fixtures validate, and the code matches the contract | Auto | `cd contracts && npm test`; `connector/tests/test_contract_fixtures.py`, `connector/tests/test_contract_matches_code.py` | Simulated | Draft contract; the topic mapping is the Backend's, not yet run against it. |
 | CON-02 | C1 forwards device-signed envelopes byte for byte, holds no keys, and reassembles split frames into one message | Auto | `connector/tests/test_bridge.py` ("random_opaque_messages_arrive_byte_identical", "split_frame_is_published_exactly_once"); `connector/tests/test_framing.py` | Simulated |  |
 | CON-03 | A device command is written at most once: not after a broker reconnect, not held across an unplug, not retried after a write failure | Auto | `connector/tests/test_bridge.py` ("command_is_not_written_again_after_broker_reconnect", "command_dropped_when_serial_is_down_and_not_held_for_replug", "write_failure_is_counted_and_never_retried") | Simulated |  |
 | CON-04 | A publish whose outcome is unknown is never resent, and every drop is counted | Auto | `connector/tests/test_bridge.py` ("publish_in_doubt_at_disconnect_is_never_resent", "queue_full_drops_newest_and_counts_each") | Simulated |  |

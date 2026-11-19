@@ -33,7 +33,7 @@
               "type": "array",
               "items": {
                 "type": "object", "required": ["topic", "payload_hex", "qos", "retain"], "additionalProperties": false,
-                "properties": { "topic": { "const": "{up}" }, "payload_hex": { "$ref": "#/$defs/hex" }, "qos": { "const": 1 }, "retain": { "const": false } }
+                "properties": { "topic": { "type": "string", "pattern": "^\\{(resp|ev:[A-Za-z0-9_-]{1,32})\\}$" }, "payload_hex": { "$ref": "#/$defs/hex" }, "qos": { "const": 1 }, "retain": { "const": false } }
               }
             },
             "metrics": { "type": "object", "additionalProperties": { "type": "integer", "minimum": 0 } }
@@ -83,7 +83,7 @@
         "mode": { "$ref": "#/$defs/mode" },
         "inbound": {
           "type": "object", "required": ["topic", "payload_hex", "retain"], "additionalProperties": false,
-          "properties": { "topic": { "const": "{down}" }, "payload_hex": { "$ref": "#/$defs/hex" }, "retain": { "type": "boolean" } }
+          "properties": { "topic": { "const": "{req}" }, "payload_hex": { "$ref": "#/$defs/hex" }, "retain": { "type": "boolean" } }
         },
         "expect": {
           "type": "object", "required": ["serial_written_hex", "dropped_reason"], "additionalProperties": false,

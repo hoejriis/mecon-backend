@@ -21,7 +21,7 @@ from collections import deque
 from dataclasses import dataclass
 from typing import Callable
 
-from .config import BrokerConfig, Config
+from .config import EVENT_NAME_RE, BrokerConfig, Config
 from .framing import (
     CMD_MECON,
     ConsoleLineReader,
@@ -55,14 +55,37 @@ SERIAL_AMBIGUOUS_RETRY_S = 5.0
 class _Entry:
     payload: bytes
     at: float
+    topic: str = ""  # upstream only: where this envelope goes, chosen when it arrived
 
 
-def status_payload(online: bool, serial_up: bool | None) -> bytes:
-    """The Connector's own state. It says nothing about the device's identity or health."""
-    serial = "unknown" if serial_up is None else ("up" if serial_up else "down")
-    return json.dumps(
-        {"v": 1, "connector": "online" if online else "offline", "serial": serial}, separators=(",", ":")
-    ).encode()
+def status_payload(online: bool) -> bytes:
+    """The retained status: exactly {"online":true|false}, the same shape as the last will.
+
+    `online` is the Connector's own state: the broker session is up AND the device's serial port is open.
+    It says nothing about the device's identity, health or enrolment.
+    """
+    return b'{"online":true}' if online else b'{"online":false}'
+
+
+def route_topic(obj: dict | None, resp_topic: str, ev_topic: str) -> str | None:
+    """The topic for one parsed uplink envelope, or None if it has no route. Only the topic is chosen
+    here: the bytes published are always the device's own.
+
+    An event has an `ev` member naming it (a safe topic level) and goes to {ev_topic}/<ev>. A response
+    has an `id` (a string or an integer) and no `ev`, and goes to {resp_topic}. A message with an `ev`
+    that is not a safe name never falls back to the response topic.
+    """
+    if obj is None:
+        return None
+    if "ev" in obj:
+        name = obj["ev"]
+        if isinstance(name, str) and EVENT_NAME_RE.match(name):
+            return f"{ev_topic}/{name}"
+        return None
+    rid = obj.get("id")
+    if isinstance(rid, str) and rid or isinstance(rid, int) and not isinstance(rid, bool):
+        return resp_topic
+    return None
 
 
 SETTLE_S = 5.0  # most a switch to a better broker waits for in-flight publishes to be acknowledged
@@ -267,7 +290,7 @@ class Bridge:
         self._end_session()
 
     def _on_message(self, now: float, topic: str, payload: bytes, retain: bool) -> None:
-        if topic != self.cfg.mqtt.topic_down:
+        if topic != self.cfg.mqtt.topic_req:
             return
         self.m.inc("downlink_received_total")
         dev = self.cfg.device
@@ -397,8 +420,8 @@ class Bridge:
 
     def _start_connect(self, now: float, i: int, b: BrokerConfig) -> None:
         c = self.cfg.mqtt
-        will = Will(c.topic_status, status_payload(False, None), 1, True)
-        subs = [(c.topic_down, 0)]
+        will = Will(c.topic_status, status_payload(False), 0, True)
+        subs = [(c.topic_req, 0)]
         self._active = i
         self._state = "connecting"
         self._connect_started = now
@@ -415,7 +438,7 @@ class Bridge:
             return None
         try:
             mid = self.transport.publish(
-                self.cfg.mqtt.topic_status, status_payload(online, self._link is not None), 1, True
+                self.cfg.mqtt.topic_status, status_payload(online and self._link is not None), 0, True
             )
         except TransportError:
             return None
@@ -424,8 +447,12 @@ class Bridge:
 
     # ---- upstream (device -> broker) ---------------------------------------------------
 
-    def _on_envelope(self, payload: bytes, now: float) -> None:
+    def _on_envelope(self, payload: bytes, now: float, topic: str | None) -> None:
         self.m.inc("upstream_envelopes_total")
+        if topic is None:
+            # No route: not a response (no `id`) and not an event (no safe `ev`). Counted, never guessed.
+            self.m.inc("upstream_dropped_total", 1, "unroutable")
+            return
         q = self.cfg.queues
         if len(self._up) >= q.upstream_max_messages or self._up_bytes + len(payload) > q.upstream_max_bytes:
             # Newest is dropped: what is queued was accepted first and keeps its order.
@@ -434,7 +461,7 @@ class Bridge:
                 self._last_drop_log = now
                 self.log.warn("upstream_queue_full", depth=len(self._up))
             return
-        self._up.append(_Entry(payload, now))
+        self._up.append(_Entry(payload, now, topic))
         self._up_bytes += len(payload)
 
     def _flush_upstream(self, now: float) -> None:
@@ -449,7 +476,7 @@ class Bridge:
         while self._up and (qos == 0 or len(self._inflight) < self.cfg.queues.upstream_max_inflight):
             e = self._up[0]
             try:
-                mid = self.transport.publish(self.cfg.mqtt.topic_up, e.payload, qos, False)
+                mid = self.transport.publish(e.topic, e.payload, qos, False)
             except TransportError:
                 break  # refused before anything was sent: it stays queued
             self._up.popleft()
@@ -702,7 +729,8 @@ class Bridge:
             self._epoch = epoch
         if self._gate_open and (obj is None or "usig" not in obj):
             self._close_gate("unsigned_uplink", now)
-        self._on_envelope(payload, now)
+        c = self.cfg.mqtt
+        self._on_envelope(payload, now, route_topic(obj, c.topic_resp, c.topic_ev))
 
     def _on_probe_reply(self, obj: dict, pid: str, now: float) -> None:
         if pid != self._probe_id:

@@ -8,14 +8,16 @@ mode = "companion"
 baud = 115200
 # A stable id, not a /dev/ttyUSB0 path. List what the host sees with:  python -m mecon_connector --list-ports
 select = { by_id = "usb-REPLACE_WITH_YOUR_DEVICE_ID-*" }
+# select = { path = "/dev/bench/REPLACE" }   # an explicit port: a udev-provided stable symlink (also: --port <path>)
 # select = { vid = 0x303A, pid = 0x1001, usb_serial = "REPLACE" }
 
 [mqtt]
 # The broker login's client id. Required; never generated.
 client_id = "example-connector-1"
 # The topic root provisioned for this device by whoever runs the broker and Backend.
-# Provisional: the Backend owns the real mapping (see contracts/connector/v1).
-topic_root = "example/device-root"
+# mecon/<device_id>: the device's own id as 32 lowercase hex digits (from `hello` or `deployment.get`).
+# The Backend's mapping publishes under it: resp, ev/<name>, status; and reads req (contracts/connector/v1).
+topic_root = "mecon/00112233445566778899aabbccddeeff"
 upstream_qos = 1
 
 # The first broker is the primary; the rest are fallbacks, tried in order. One session at a time.

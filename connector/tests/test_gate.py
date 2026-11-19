@@ -125,7 +125,8 @@ def test_unparseable_uplink_counts_as_unsigned():
     rig.dev.enrolment = "none"
     rig.dev.say(b"not json at all")
     rig.step(2)
-    assert not gate_open(rig) and rig.published() == [b"not json at all"]
+    assert not gate_open(rig) and rig.published() == []  # no route: dropped and counted, not guessed
+    assert rig.metrics.get("upstream_dropped_total", "unroutable") == 1
 
 
 def test_it_reopens_only_after_a_fresh_provisioned_answer():
@@ -253,7 +254,7 @@ def test_stop_publishes_offline_before_closing_the_session():
     rig.settle()
     order = []
     orig_pub, orig_disc = rig.transport.publish, rig.transport.disconnect
-    rig.transport.publish = lambda *a, **k: (order.append(("publish", a[0], json.loads(a[1])["connector"])), orig_pub(*a, **k))[1]
+    rig.transport.publish = lambda *a, **k: (order.append(("publish", a[0], json.loads(a[1])["online"])), orig_pub(*a, **k))[1]
     rig.transport.disconnect = lambda: (order.append(("disconnect",)), orig_disc())[1]
     rig.bridge.stop()
-    assert order[0] == ("publish", rig.status, "offline") and order[-1] == ("disconnect",)
+    assert order[0] == ("publish", rig.status, False) and order[-1] == ("disconnect",)

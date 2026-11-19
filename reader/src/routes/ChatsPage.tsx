@@ -7,6 +7,7 @@ import { describeAttempt, pathOf, type LocalAttempt } from '../messaging/attempt
 import { useMessaging } from '../messaging/MessagingContext';
 import { useDevices } from '../device/DeviceContext';
 import { directoryOf } from '../messaging/directory';
+import { ownsIdentity } from '../messaging/localPath';
 import { SendPathControls, useSendPath, viaLabel } from './SendPathControls';
 
 /*
@@ -381,21 +382,32 @@ function Composer({ target, defaultIdentityId }: { target: Target; defaultIdenti
   const devices = useDevices();
   const [picked, setPicked] = useState<string | null>(null);
   const [refusal, setRefusal] = useState<string | null>(null);
-  const sendable = m.identities.items.filter((i) => i.can_send);
+  const backendSend = m.sendState === 'available';
+  // `can_send` is the Backend's permission. With Backend sending off it says nothing about a local path, where the
+  // connected device's own identity sends; the device-ownership check (ownsIdentity) is what gates that path.
+  const sendable = backendSend ? m.identities.items.filter((i) => i.can_send) : m.identities.items;
+  const ownedByDevice = backendSend
+    ? undefined
+    : sendable.find((i) =>
+        Object.values(devices.handles).some((h) => ownsIdentity({ ownKey: h.getSnapshot().companion?.selfInfo?.publicKey ?? null }, i)),
+      );
   const chosen =
     sendable.find((i) => i.id === picked) ??
+    ownedByDevice ??
     sendable.find((i) => i.id === defaultIdentityId) ??
     sendable[0] ??
     null;
   const text = m.draftText(target);
   const path = useSendPath({ identity: chosen, target, online, sendState: m.sendState, directory: directoryOf(m), initial: undefined });
   const anyDevice = Object.keys(devices.handles).length > 0;
+  // Connecting a device must stay reachable while the Backend cannot send: the connect buttons live in the composer.
+  const canConnect = anyDevice || devices.hasApi('ble') || devices.hasApi('usb');
 
   if (m.sendState === 'forbidden') return <Forbidden title="Sending is not permitted" />;
-  if (m.sendState !== 'available' && !anyDevice) return <Unavailable title="Sending is not available" body="This Backend does not provide sending yet." />;
+  if (!backendSend && !canConnect) return <Unavailable title="Sending is not available" body="This Backend does not provide sending yet." />;
   if (m.identities.status === 'error') return <ErrorState title="Could not load your identities" body="Sending needs them." />;
   if (m.identities.status !== 'ready') return <Loading label="Loading identities" />;
-  if (!chosen) {
+  if (!chosen && backendSend) {
     return <Unavailable title="No identity can send" body="None of your messaging identities is allowed to send." />;
   }
   return (
@@ -403,12 +415,12 @@ function Composer({ target, defaultIdentityId }: { target: Target; defaultIdenti
       className="composer"
       onSubmit={(e) => {
         e.preventDefault();
-        if (!path.route) return;
+        if (!path.route || !chosen) return;
         const r = m.send(target, chosen.id, path.route);
         setRefusal(r.ok ? null : r.reason);
       }}
     >
-      {sendable.length > 1 ? (
+      {sendable.length > 1 && chosen ? (
         <label className="composer-field">
           Send as
           <select value={chosen.id} onChange={(e) => setPicked(e.target.value)}>
@@ -420,7 +432,7 @@ function Composer({ target, defaultIdentityId }: { target: Target; defaultIdenti
           </select>
         </label>
       ) : (
-        <p className="state-meta">Sending as {chosen.display_name}</p>
+        <p className="state-meta">{chosen ? `Sending as ${chosen.display_name}` : 'No messaging identity is known yet.'}</p>
       )}
       <label className="composer-field">
         Message

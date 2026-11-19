@@ -34,10 +34,10 @@ const page = (items: unknown[], next: string | null = null) => ({ items, next_cu
  */
 export async function mockMessagingBackend(
   page_: Page,
-  opts: { identityPrefix?: string; channelName?: string; channelHash?: string | null; contactPrefix?: string } = {},
+  opts: { identityPrefix?: string; channelName?: string; channelHash?: string | null; contactPrefix?: string; send?: 'available' | 'unavailable' } = {},
 ): Promise<MsgBackend> {
   const session = fixture('session-device-user');
-  session.capabilities = { devices: 'available', messaging: 'available', send: 'available', events: 'available', observations: 'unavailable' };
+  session.capabilities = { devices: 'available', messaging: 'available', send: opts.send ?? 'available', events: 'available', observations: 'unavailable' };
   const conversations = [
     ...fixture('conversations-merged-pair').items,
     {

@@ -157,12 +157,27 @@ test.describe('signed-in test users', () => {
     await page.goto(`/chats/c/${encodeURIComponent(list.items[0]!.id)}`);
     await expect(page.getByRole('list', { name: 'Messages' })).toBeVisible();
     const sp = page.getByTestId('send-path');
+    const apis = await page.evaluate(() => ({ ble: 'bluetooth' in navigator, usb: 'serial' in navigator }));
+    test.info().annotations.push({ type: 'device-apis', description: `bluetooth=${apis.ble} serial=${apis.usb}` });
+    const sendBtn = page.getByRole('button', { name: 'Send', exact: true });
     if (session.capabilities.send !== 'available') {
-      // Sending off and no device: an honest unavailable state, no composer, no path, no Send button.
-      await expect(page.getByText('Sending is not available')).toBeVisible();
-      await expect(sp).toHaveCount(0);
-      await expect(page.getByRole('radio', { name: /Bluetooth|USB/ })).toHaveCount(0);
-      await expect(page.getByRole('button', { name: 'Send', exact: true })).toHaveCount(0);
+      if (apis.ble || apis.usb) {
+        // Sending off, a device API present, nothing connected: the composer is shown so a device can be connected.
+        // No route radio, no Backend line, Send disabled. This spec never clicks Connect or Send.
+        await expect(sp).toBeVisible();
+        await expect(page.getByText('Sending is not available')).toHaveCount(0);
+        await expect(page.getByRole('button', { name: 'Connect Bluetooth device' })).toHaveCount(apis.ble ? 1 : 0);
+        await expect(page.getByRole('button', { name: 'Connect USB device' })).toHaveCount(apis.usb ? 1 : 0);
+        await expect(sp.getByRole('radio')).toHaveCount(0);
+        expect((await sp.innerText()).replace(/\s+/g, ' ')).not.toContain('Sent through the Backend');
+        await expect(sendBtn).toBeDisabled();
+      } else {
+        // Sending off and no device API: an honest unavailable state, no composer, no path, no Send button.
+        await expect(page.getByText('Sending is not available')).toBeVisible();
+        await expect(sp).toHaveCount(0);
+        await expect(page.getByRole('radio', { name: /Bluetooth|USB/ })).toHaveCount(0);
+        await expect(sendBtn).toHaveCount(0);
+      }
       await context.close();
       return;
     }

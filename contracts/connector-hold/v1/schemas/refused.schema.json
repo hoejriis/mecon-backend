@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mecon:connector-hold:v1:refused",
+  "title": "refused (Backend to agent)",
+  "description": "Another agent holds this device, or the token was revoked. Followed by close 1008. The agent stops and tells its operator.",
+  "type": "object",
+  "required": [
+    "type",
+    "reason"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "type": {
+      "const": "refused"
+    },
+    "reason": {
+      "type": "string"
+    }
+  }
+}

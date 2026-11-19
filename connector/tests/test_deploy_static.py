@@ -64,7 +64,7 @@ def test_serial_group_is_supplementary_only():
         ("DevicePolicy", "closed"),
         ("Restart", "on-failure"),
         ("KillSignal", "SIGTERM"),
-        ("RestartPreventExitStatus", "2"),
+        ("RestartPreventExitStatus", "2 3"),
     ],
 )
 def test_hardening_directive(key, value):

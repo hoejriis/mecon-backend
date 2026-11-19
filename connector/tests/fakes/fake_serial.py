@@ -41,6 +41,13 @@ class FakeSerialDevice:
         self.stalled = False
         self.fail_next_write = False
         self.closed = False
+        # hold transport: the Connector's own `hello`, bare console CRs, and decoded relayed requests
+        self.answers_hello = False
+        self.hello_result = {"v": 1, "name": "synthetic", "node_key": "00" * 32, "epoch": 1}
+        self.hello_writes: list[bytes] = []
+        self.cr_writes = 0
+        self.messages: list[bytes] = []  # each relayed request as the device decoded it
+        self.reply_hook = None  # callable(message: bytes) -> bytes | None: the device's answer to a relayed request
 
     def feed(self, *chunks: bytes) -> None:
         self._chunks.extend(chunks)
@@ -66,6 +73,9 @@ class FakeSerialDevice:
         if self.gone or self.fail_next_write:
             self.fail_next_write = False
             raise SerialGone("write failed")
+        if bytes(data) == b"\r":
+            self.cr_writes += 1
+            return
         msg = self._decode(bytes(data))
         obj = None
         try:
@@ -75,8 +85,18 @@ class FakeSerialDevice:
         if isinstance(obj, dict) and obj.get("op") == "deployment.get":
             self.probe_writes.append(bytes(data))
             self._answer(obj["id"])
+        elif isinstance(obj, dict) and obj.get("op") == "hello" and str(obj.get("id", "")).startswith("ch-"):
+            self.hello_writes.append(bytes(data))
+            if self.answers_hello:
+                self._answer_hello(obj["id"])
         else:
             self.written.append(bytes(data))
+            if msg is not None:
+                self.messages.append(msg)
+                if self.reply_hook is not None:
+                    reply = self.reply_hook(msg)
+                    if reply is not None:
+                        self.say(reply)
 
     # -- a tiny independent model of the device's side of the wire --------------------------
 
@@ -137,6 +157,12 @@ class FakeSerialDevice:
         else:
             base["result"] = {"state": "weird" if e == "bad_state" else e}
         if e in ("provisioned", "corrupt") and self.signed:
+            base.update({"usig_boot": self.epoch, "usig_seq": self._next_seq(), "usig": "U1lOVEhFVElD"})
+        self.say(json.dumps(base, separators=(",", ":")).encode())
+
+    def _answer_hello(self, rid: str) -> None:
+        base = {"v": 1, "id": rid, "op": "hello", "status": "ok", "result": dict(self.hello_result)}
+        if self.signed and self.enrolment in ("provisioned", "corrupt"):
             base.update({"usig_boot": self.epoch, "usig_seq": self._next_seq(), "usig": "U1lOVEhFVElD"})
         self.say(json.dumps(base, separators=(",", ":")).encode())
 

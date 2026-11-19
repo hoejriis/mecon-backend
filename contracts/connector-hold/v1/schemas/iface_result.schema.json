@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mecon:connector-hold:v1:iface_result",
+  "title": "iface_result (agent to Backend)",
+  "description": "A device result exactly as the device sent it. message is not re-serialised; its length limit is in characters, the device limit of 4096 bytes is checked by the agent.",
+  "type": "object",
+  "required": [
+    "type",
+    "ref",
+    "message"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "type": {
+      "const": "iface_result"
+    },
+    "ref": {
+      "description": "Any JSON value, echoed."
+    },
+    "message": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 8192
+    }
+  }
+}

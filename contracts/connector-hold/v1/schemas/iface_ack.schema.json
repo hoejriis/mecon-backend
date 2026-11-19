@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mecon:connector-hold:v1:iface_ack",
+  "title": "iface_ack (Backend to agent)",
+  "description": "The Backend's answer to one upload. An outcome starting with refused means nothing was recorded and the bytes are not resent; duplicate is success.",
+  "type": "object",
+  "required": [
+    "type",
+    "of",
+    "ref",
+    "outcome"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "type": {
+      "const": "iface_ack"
+    },
+    "of": {
+      "type": "string",
+      "pattern": "^iface_[a-z_]+$"
+    },
+    "ref": {
+      "description": "As sent."
+    },
+    "outcome": {
+      "type": "string"
+    }
+  }
+}

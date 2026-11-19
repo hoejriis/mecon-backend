@@ -1,0 +1,124 @@
+{
+  "contract": "mecon-connector-hold/1.0.0-draft.1",
+  "synthetic": true,
+  "id": "E",
+  "title": "Event forwarding, duplicate, refusal and a stream that is not forwarded",
+  "description": "Each acknowledgement answers one upload. duplicate is success. An outcome starting with refused is not resent. An event whose ev is result is dropped by the agent and never sent.",
+  "link": "companion",
+  "steps": [
+    {
+      "step": "handshake",
+      "presentation": "subprotocol",
+      "offered": [
+        "mecon-bridge",
+        "bearer.<token>"
+      ],
+      "selected": "mecon-bridge"
+    },
+    {
+      "step": "send",
+      "frame": {
+        "type": "iface_relay"
+      }
+    },
+    {
+      "step": "send",
+      "frame": {
+        "type": "iface_hello",
+        "ref": 1,
+        "hello": {
+          "epoch": 1,
+          "node_public_key_hex": "<pubkey>"
+        }
+      }
+    },
+    {
+      "step": "recv",
+      "frame": {
+        "type": "iface_ack",
+        "of": "iface_hello",
+        "ref": 1,
+        "outcome": "recorded"
+      }
+    },
+    {
+      "step": "device_read",
+      "text": "{\"v\":1,\"ev\":\"health\",\"seq\":12,\"epoch\":1,\"ts\":1763539200,\"data\":{},\"usig\":\"<sig>\"}"
+    },
+    {
+      "step": "send",
+      "frame": {
+        "type": "iface_event",
+        "ref": 2,
+        "stream": "health",
+        "message": "{\"v\":1,\"ev\":\"health\",\"seq\":12,\"epoch\":1,\"ts\":1763539200,\"data\":{},\"usig\":\"<sig>\"}"
+      }
+    },
+    {
+      "step": "recv",
+      "frame": {
+        "type": "iface_ack",
+        "of": "iface_event",
+        "ref": 2,
+        "outcome": "recorded"
+      }
+    },
+    {
+      "step": "device_read",
+      "text": "{\"v\":1,\"ev\":\"health\",\"seq\":13,\"epoch\":1,\"ts\":1763539200,\"data\":{},\"usig\":\"<sig>\"}"
+    },
+    {
+      "step": "send",
+      "frame": {
+        "type": "iface_event",
+        "ref": 3,
+        "stream": "health",
+        "message": "{\"v\":1,\"ev\":\"health\",\"seq\":13,\"epoch\":1,\"ts\":1763539200,\"data\":{},\"usig\":\"<sig>\"}"
+      }
+    },
+    {
+      "step": "recv",
+      "frame": {
+        "type": "iface_ack",
+        "of": "iface_event",
+        "ref": 3,
+        "outcome": "duplicate"
+      }
+    },
+    {
+      "step": "device_read",
+      "text": "{\"v\":1,\"ev\":\"health\",\"seq\":14,\"epoch\":1,\"ts\":1763539200,\"data\":{},\"usig\":\"<tampered>\"}"
+    },
+    {
+      "step": "send",
+      "frame": {
+        "type": "iface_event",
+        "ref": 4,
+        "stream": "health",
+        "message": "{\"v\":1,\"ev\":\"health\",\"seq\":14,\"epoch\":1,\"ts\":1763539200,\"data\":{},\"usig\":\"<tampered>\"}"
+      }
+    },
+    {
+      "step": "recv",
+      "frame": {
+        "type": "iface_ack",
+        "of": "iface_event",
+        "ref": 4,
+        "outcome": "refused: signature does not verify"
+      }
+    },
+    {
+      "step": "device_read",
+      "text": "{\"v\":1,\"ev\":\"result\",\"seq\":1,\"epoch\":1,\"usig\":\"<sig>\"}",
+      "not_sent": true
+    },
+    {
+      "step": "recv",
+      "frame": {
+        "type": "registered",
+        "id": 3
+      },
+      "ignored": true
+    }
+  ]
+}

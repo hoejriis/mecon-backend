@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mecon:connector-hold:v1:status",
+  "title": "status (agent to Backend, optional)",
+  "description": "Presence and identity. Other members are carried to the same handler, so extras are allowed.",
+  "type": "object",
+  "required": [
+    "type"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "type": {
+      "const": "status"
+    },
+    "online": {
+      "type": "boolean"
+    },
+    "role": {
+      "type": "string"
+    },
+    "transport": {
+      "type": "string"
+    },
+    "hardware_target": {
+      "type": "string"
+    },
+    "mecon_firmware_version": {
+      "type": "string"
+    },
+    "companion_name": {
+      "type": "string"
+    },
+    "companion_public_key_hex": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{64}$|^<pubkey>$"
+    },
+    "node_public_key_hex": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{64}$|^<pubkey>$"
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "health": {
+      "type": "object"
+    },
+    "reported_gateway_id": {
+      "type": "string"
+    }
+  }
+}

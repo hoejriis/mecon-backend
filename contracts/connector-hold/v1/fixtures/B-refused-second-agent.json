@@ -1,0 +1,30 @@
+{
+  "contract": "mecon-connector-hold/1.0.0-draft.1",
+  "synthetic": true,
+  "id": "B",
+  "title": "Refusal of a second agent",
+  "description": "The handshake succeeds, then the Backend refuses the socket and closes it 1008. The agent stops, surfaces the reason and does not reconnect.",
+  "link": "none",
+  "steps": [
+    {
+      "step": "handshake",
+      "presentation": "header",
+      "offered": [
+        "Authorization: Bearer <token>"
+      ],
+      "selected": null
+    },
+    {
+      "step": "recv",
+      "frame": {
+        "type": "refused",
+        "reason": "another agent holds this device"
+      }
+    },
+    {
+      "step": "close",
+      "by": "backend",
+      "code": 1008
+    }
+  ]
+}

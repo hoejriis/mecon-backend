@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mecon:connector-hold:v1:iface_hello",
+  "title": "iface_hello (agent to Backend)",
+  "description": "The device's v1 hello result object, sent after iface_relay on every connect. ref is echoed in the iface_ack.",
+  "type": "object",
+  "required": [
+    "type",
+    "ref",
+    "hello"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "type": {
+      "const": "iface_hello"
+    },
+    "ref": {
+      "description": "Any JSON value, echoed."
+    },
+    "hello": {
+      "type": "object"
+    }
+  }
+}

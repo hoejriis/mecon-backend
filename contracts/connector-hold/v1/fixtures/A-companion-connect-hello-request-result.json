@@ -1,0 +1,78 @@
+{
+  "contract": "mecon-connector-hold/1.0.0-draft.1",
+  "synthetic": true,
+  "id": "A",
+  "title": "Connect, declare, hello, one request, one result (Companion)",
+  "description": "The subprotocol form is used; the server selects mecon-bridge and never echoes the token entry. The device link is up and the agent has already read the device's hello with a request of its own (not shown: it is the agent's traffic and is never uploaded).",
+  "link": "companion",
+  "steps": [
+    {
+      "step": "handshake",
+      "presentation": "subprotocol",
+      "offered": [
+        "mecon-bridge",
+        "bearer.<token>"
+      ],
+      "selected": "mecon-bridge"
+    },
+    {
+      "step": "send",
+      "frame": {
+        "type": "iface_relay"
+      }
+    },
+    {
+      "step": "send",
+      "frame": {
+        "type": "iface_hello",
+        "ref": 1,
+        "hello": {
+          "epoch": 1,
+          "node_public_key_hex": "<pubkey>"
+        }
+      }
+    },
+    {
+      "step": "recv",
+      "frame": {
+        "type": "iface_ack",
+        "of": "iface_hello",
+        "ref": 1,
+        "outcome": "recorded"
+      }
+    },
+    {
+      "step": "recv",
+      "frame": {
+        "type": "iface_req",
+        "id": "j7",
+        "wire": "{\"mecon_auth\":1,\"issuer\":\"<issuer>\",\"sig\":\"<sig>\",\"body\":\"{\\\"v\\\":1,\\\"id\\\":\\\"j7\\\",\\\"op\\\":\\\"status.get\\\"}\"}"
+      }
+    },
+    {
+      "step": "device_write",
+      "wire": "{\"mecon_auth\":1,\"issuer\":\"<issuer>\",\"sig\":\"<sig>\",\"body\":\"{\\\"v\\\":1,\\\"id\\\":\\\"j7\\\",\\\"op\\\":\\\"status.get\\\"}\"}"
+    },
+    {
+      "step": "device_read",
+      "text": "{\"v\":1,\"id\":\"j7\",\"op\":\"status.get\",\"status\":\"ok\",\"usig_boot\":1,\"usig_seq\":8,\"result\":{},\"usig\":\"<sig>\"}"
+    },
+    {
+      "step": "send",
+      "frame": {
+        "type": "iface_result",
+        "ref": 2,
+        "message": "{\"v\":1,\"id\":\"j7\",\"op\":\"status.get\",\"status\":\"ok\",\"usig_boot\":1,\"usig_seq\":8,\"result\":{},\"usig\":\"<sig>\"}"
+      }
+    },
+    {
+      "step": "recv",
+      "frame": {
+        "type": "iface_ack",
+        "of": "iface_result",
+        "ref": 2,
+        "outcome": "recorded"
+      }
+    }
+  ]
+}

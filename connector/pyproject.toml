@@ -5,10 +5,10 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "mecon-connector"
 version = "0.1.0"
-description = "Transparent USB serial-to-MQTT Connector for MECON public firmware devices"
+description = "Transparent USB serial Connector for MECON public firmware devices (MQTT or WebSocket hold)"
 requires-python = ">=3.11"
 license = { text = "Apache-2.0" }
-dependencies = ["paho-mqtt==2.2.0", "pyserial==3.5"]
+dependencies = ["paho-mqtt==2.2.0", "pyserial==3.5", "websockets==17.4"]
 
 [project.scripts]
 mecon-connector = "mecon_connector.__main__:main"

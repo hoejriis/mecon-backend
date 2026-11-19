@@ -14,6 +14,8 @@ from .config import ConfigError, Selector, check_path, check_secrets, load
 from .health import make_server, serve_in_thread
 from .logutil import Log
 from .metrics import Metrics
+from .hold import EXIT_HOLD_STOPPED, HoldBridge
+from .hold_transport import WebsocketsTransport
 from .paho_transport import PahoTransport
 from .serial_link import list_ports, make_opener
 
@@ -65,9 +67,14 @@ def main(argv: list[str] | None = None) -> int:
         print("config ok")
         return 0
 
-    log, metrics = Log(level=cfg.log_level), Metrics()
-    transport = PahoTransport(cfg.mqtt.client_id, cfg.mqtt.keepalive_s)
-    bridge = Bridge(cfg, transport, make_opener(cfg.device.selector, cfg.device.baud), metrics, log)
+    hold = cfg.transport == "hold"
+    log, metrics = Log(level=cfg.log_level), Metrics(hold=hold)
+    opener = make_opener(cfg.device.selector, cfg.device.baud)
+    bridge: Bridge | HoldBridge
+    if hold:
+        bridge = HoldBridge(cfg, WebsocketsTransport(cfg.hold), opener, metrics, log)  # type: ignore[arg-type]
+    else:
+        bridge = Bridge(cfg, PahoTransport(cfg.mqtt.client_id, cfg.mqtt.keepalive_s), opener, metrics, log)
     stop = threading.Event()
     for sig in (signal.SIGTERM, signal.SIGINT):
         signal.signal(sig, lambda *_: stop.set())
@@ -75,13 +82,19 @@ def main(argv: list[str] | None = None) -> int:
     if cfg.health.enabled:
         server = make_server(cfg.health.bind, cfg.health.port, metrics, bridge.snapshot)
         serve_in_thread(server)
-    log.info("started", version=__version__, mode=cfg.device.mode, brokers=len(cfg.mqtt.brokers))
+    log.info("started", version=__version__, mode=cfg.device.mode, transport=cfg.transport,
+             brokers=len(cfg.mqtt.brokers) if cfg.mqtt is not None else 0)
     try:
         bridge.run(stop)
     finally:
         if server is not None:
             server.shutdown()
     log.info("stopped")
+    stopped = getattr(bridge, "hold_stop", None)
+    if stopped is not None:
+        # A refusal or a rejected token needs the operator; a distinct status keeps systemd from looping on it.
+        print(f"hold stopped: {stopped[0]}: {stopped[1][:200]}", file=sys.stderr)
+        return EXIT_HOLD_STOPPED
     return 0
 
 

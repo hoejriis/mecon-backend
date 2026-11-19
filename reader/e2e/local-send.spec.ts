@@ -52,6 +52,45 @@ async function goOffline(page: Page, context: BrowserContext, be: { down: boolea
   await page.reload();
 }
 
+test.describe(`${SIMULATED}: Backend sending off (connect a device with no composer path)`, () => {
+  test('a device API and no device: the composer shows the connect buttons, Send is disabled; connecting offers the local path, and a send goes only to the device', async ({ page }) => {
+    const sim = await installSim(page, { sim: SIM });
+    const msg = await mockMessagingBackend(page, { identityPrefix: OWN_KEY_PREFIX, send: 'unavailable' });
+    await page.goto('/chats');
+    await page.getByRole('link', { name: /Demo Peer \(merged pair\)/ }).click();
+    await expect(page.getByText('Hello from the peer')).toBeVisible();
+    await expect(page.getByText('Sending is not available')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Connect Bluetooth device' })).toBeVisible();
+    await expect(page.getByRole('radio')).toHaveCount(0);
+    await expect(page.getByText(/Sent through the Backend/)).toHaveCount(0);
+    await page.getByRole('textbox', { name: 'Message', exact: true }).fill('hello with the Backend off');
+    await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeDisabled();
+
+    await connectBluetooth(page);
+    await expect(page.getByText(/Sent through the Bluetooth\./)).toBeVisible();
+    await chooseAlice(page);
+    await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeEnabled();
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(page.getByText('You · not yet in history · via Bluetooth')).toBeVisible();
+    expect(await sim.sendWrites()).toBe(1);
+    expect(msg.posts).toHaveLength(0);
+  });
+
+  test('no Bluetooth or USB API and no device: the honest unavailable state, no composer', async ({ page }) => {
+    await page.addInitScript(() => {
+      // `'bluetooth' in navigator` must be false, not just undefined.
+      for (const k of ['bluetooth', 'serial']) delete (Navigator.prototype as unknown as Record<string, unknown>)[k];
+    });
+    await mockMessagingBackend(page, { identityPrefix: OWN_KEY_PREFIX, send: 'unavailable' });
+    await page.goto('/chats');
+    await page.getByRole('link', { name: /Demo Peer \(merged pair\)/ }).click();
+    await expect(page.getByText('Hello from the peer')).toBeVisible();
+    await expect(page.getByText('Sending is not available')).toBeVisible();
+    await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /Connect/ })).toHaveCount(0);
+  });
+});
+
 test.describe(`${SIMULATED}: local sends from the Chats composer`, () => {
   test('online with a device: choose Bluetooth, send, accepted and the recipient ACK are shown; nothing goes to the Backend', async ({ page }) => {
     const violations: string[] = [];

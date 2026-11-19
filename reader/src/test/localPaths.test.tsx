@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
@@ -29,11 +30,11 @@ function devicesValue(handle: LocalDeviceHandle | null): DevicesValue {
   return { handles: handle ? { usb: handle } : {}, hasApi: () => true, connect: async () => null, disconnect: async () => undefined };
 }
 
-function mount(handle: LocalDeviceHandle | null) {
+function mount(handle: LocalDeviceHandle | null, value: DevicesValue = devicesValue(handle)) {
   return render(
     <MemoryRouter initialEntries={['/chats']}>
       <AuthProvider>
-        <DeviceContext.Provider value={devicesValue(handle)}>
+        <DeviceContext.Provider value={value}>
           <App />
         </DeviceContext.Provider>
       </AuthProvider>
@@ -216,6 +217,86 @@ describe('SIMULATED: the composer offers only the paths that can carry the send'
     await openDm(user);
     expect(await screen.findByText(/Sent through the USB\./)).toBeInTheDocument();
     expect(screen.queryByRole('radio', { name: 'Backend' })).not.toBeInTheDocument();
+  });
+
+  // Issue 87: with the Backend unable to send, the composer (and so the only Connect control) must still be reachable.
+  it('Backend sending off, both device APIs, nothing connected: a composer with a connect button for each API, Send disabled, no Backend route', async () => {
+    routes('unavailable');
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    mount(null);
+    await openDm(user);
+    expect(await screen.findByLabelText('Message')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Connect Bluetooth device' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Connect USB device' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
+    expect(screen.getByText(/No send path is available\. Connect your device/)).toBeInTheDocument();
+    expect(screen.queryByRole('radio')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Sent through the Backend/)).not.toBeInTheDocument();
+    expect(screen.queryByText('Sending is not available')).not.toBeInTheDocument();
+    await user.type(screen.getByLabelText('Message'), 'typed but no route');
+    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
+    expect(posted()).toHaveLength(0);
+  });
+
+  it('Backend sending off, only Web Serial: only the USB connect button', async () => {
+    routes('unavailable');
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    mount(null, { ...devicesValue(null), hasApi: (p) => p === 'usb' });
+    await openDm(user);
+    expect(await screen.findByRole('button', { name: 'Connect USB device' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Connect Bluetooth device' })).not.toBeInTheDocument();
+  });
+
+  it('Backend sending off and no device API and no device: the unavailable state, no composer', async () => {
+    routes('unavailable');
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    mount(null, { ...devicesValue(null), hasApi: () => false });
+    await openDm(user);
+    expect(await screen.findByText('Sending is not available')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Message')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Connect/ })).not.toBeInTheDocument();
+  });
+
+  it('Backend sending forbidden keeps its own state even with device APIs', async () => {
+    routes('unavailable');
+    b.on('GET /session', json(sessionWith({ messaging: 'available', send: 'forbidden', events: 'unavailable' })));
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    mount(null);
+    await openDm(user);
+    expect(await screen.findByText('Sending is not permitted')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Message')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Connect/ })).not.toBeInTheDocument();
+  });
+
+  it('Backend sending off: after a simulated device connects, the local path is offered and selected, and Send is enabled', async () => {
+    routes('unavailable');
+    const r = await connectedRig();
+    function Harness() {
+      const [h, setH] = useState<LocalDeviceHandle | null>(null);
+      const value: DevicesValue = { ...devicesValue(h), connect: async () => { setH(r.session); return null; } };
+      return (
+        <DeviceContext.Provider value={value}>
+          <App />
+        </DeviceContext.Provider>
+      );
+    }
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(
+      <MemoryRouter initialEntries={['/chats']}>
+        <AuthProvider>
+          <Harness />
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+    await openDm(user);
+    await user.type(await screen.findByLabelText('Message'), 'hello over usb');
+    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: 'Connect USB device' }));
+    expect(await screen.findByText(/Sent through the USB\./)).toBeInTheDocument();
+    expect(screen.queryByRole('radio', { name: 'Backend' })).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Send as')).toHaveValue('ident_demo_0001'); // the device's own identity is chosen
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Send' })).toBeEnabled());
+    expect(posted()).toHaveLength(0);
   });
 });
 

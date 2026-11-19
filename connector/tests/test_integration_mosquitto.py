@@ -4,6 +4,7 @@ Skipped unless a `mosquitto` binary is on PATH (CI installs it; the Docker test 
 The serial side is still the fake device: no hardware is involved.
 """
 
+import itertools
 import json
 import shutil
 import socket
@@ -17,7 +18,6 @@ import pytest
 from conftest import make_cfg
 from fakes.fake_serial import FakeOpener
 from mecon_connector.bridge import Bridge
-from mecon_connector.framing import encode_mecon_frames, encode_serial_frame
 from mecon_connector.metrics import Metrics
 from mecon_connector.paho_transport import PahoTransport
 
@@ -32,8 +32,10 @@ def free_port():
         return s.getsockname()[1]
 
 
-def wire(msg, xid=1):
-    return b"".join(encode_serial_frame(f, 0x3E) for f in encode_mecon_frames(xid, msg))
+# Envelopes are framed by the fake device itself (live.dev.wire), never with a fixed xid: the device
+# answers the Connector's deployment.get from the same xid counter, and the reassembler drops a repeat of
+# the last completed xid by design, so a hard-coded xid that collided with a probe answer silently lost
+# the test's envelope (test_failover_to_second_broker, about 1 run in 8 under load).
 
 
 def until(pred, timeout=15.0, step=0.05):
@@ -48,9 +50,13 @@ def until(pred, timeout=15.0, step=0.05):
 class Mosq:
     """A mosquitto process with its own port, config and log."""
 
-    def __init__(self, tmp, tls=None, password=None):
+    def __init__(self, tmp, tls=None, password=None, persistent=False):
         self.tmp, self.port, self.tls, self.proc = tmp, free_port(), tls, None
         conf = [f"listener {self.port} 127.0.0.1", "persistence false", f"log_dest file {tmp}/mosq-{self.port}.log"]
+        if persistent:
+            # Subscriptions and queued messages of a durable client survive a restart of this broker.
+            (tmp / f"data-{self.port}").mkdir()
+            conf[1:2] = ["persistence true", f"persistence_location {tmp}/data-{self.port}/"]
         if tls:
             conf += [f"cafile {tls['ca']}", f"certfile {tls['cert']}", f"keyfile {tls['key']}"]
         if password:
@@ -117,18 +123,34 @@ def mk_tls(tmp, name="ca"):
     return {"ca": str(d / "ca.pem"), "cert": str(d / "srv.pem"), "key": str(d / "srv.key")}
 
 
+_OBSERVER_IDS = itertools.count(1)
+
+
 class Backendish:
     """A paho client playing the part of whoever is on the other side of the broker."""
 
-    def __init__(self, port, *topics):
+    def __init__(self, port, *topics, durable=False):
+        """Returns only once the broker has acknowledged every subscription (SUBACK): a message published
+        before that would reach nobody. durable: a persistent session, so a broker that keeps its
+        persistence file holds the subscription and queues QoS 1 messages while this client is away."""
         self.msgs = []
-        self.c = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id="syn-observer", protocol=mqtt.MQTTv311)
+        # A unique id per client: two clients sharing one id make the broker drop the older one (a second
+        # observer in the same test disconnected the first). A durable client keeps one fixed id so the
+        # reconnected instance resumes the same persistent session.
+        cid = "syn-observer-durable" if durable else f"syn-observer-{next(_OBSERVER_IDS)}"
+        self.c = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=cid, protocol=mqtt.MQTTv311,
+                             clean_session=not durable)
         self.c.on_message = lambda _c, _u, m: self.msgs.append((m.topic, bytes(m.payload), m.qos, m.retain))
+        subacked = set()
+        self.c.on_subscribe = lambda _c, _u, mid, _rc, _p: subacked.add(mid)
         self.c.connect("127.0.0.1", port)
         self.c.loop_start()
+        mids = []
         for t in topics:
-            self.c.subscribe(t, 1)
-        time.sleep(0.3)
+            rc, mid = self.c.subscribe(t, 1)
+            assert rc == mqtt.MQTT_ERR_SUCCESS
+            mids.append(mid)
+        assert until(lambda: subacked.issuperset(mids), 15), "broker never acknowledged the observer's subscription"
 
     def on(self, topic):
         return [m for m in list(self.msgs) if m[0] == topic]
@@ -179,7 +201,7 @@ def test_roundtrip_and_retained_status(tmp, procs):
     try:
         assert until(lambda: live.bridge.snapshot()["ready"])
         msg = b'{"v":1,"id":"syn-it-1","op":"hello","pad":"\xc3\xa6 "}'
-        live.feed(wire(msg))
+        live.feed(live.dev.wire(msg))
         assert until(lambda: obs.on(f"{ROOT}/up"))
         (t, payload, qos, retain) = obs.on(f"{ROOT}/up")[0]
         assert payload == msg and retain is False and qos == 1
@@ -285,31 +307,40 @@ def test_abrupt_loss_leaves_will_then_reconnects(tmp, procs):
 
 
 def test_broker_restart_never_duplicates_and_accounts_for_every_envelope(tmp, procs):
-    m = Mosq(tmp).start()
+    # The observer is a durable client on a persistent broker, so it is subscribed (and queues what the
+    # broker receives) at whatever instant after the restart the Connector reconnects and publishes.
+    m = Mosq(tmp, persistent=True).start()
     procs.append(m)
-    obs = Backendish(m.port, f"{ROOT}/up")
+    obs = Backendish(m.port, f"{ROOT}/up", durable=True)
     live = Live([plain(m.port)])
     sent = []
     try:
         assert until(lambda: live.bridge.snapshot()["ready"])
         for i in range(5):
             sent.append(b'{"id":"pre-%d"}' % i)
-            live.feed(wire(sent[-1], i))
+            live.feed(live.dev.wire(sent[-1]))
         assert until(lambda: len(obs.on(f"{ROOT}/up")) == 5)
+        assert until(lambda: live.metrics.get("upstream_acked_total") == 5)  # all five settled before the broker goes
         obs.close()
         m.stop()
         for i in range(5, 12):
             sent.append(b'{"id":"mid-%d"}' % i)
-            live.feed(wire(sent[-1], i))
+            live.feed(live.dev.wire(sent[-1]))
             time.sleep(0.05)
         assert until(lambda: live.metrics.get("broker_connected") == 0)
         m.start()
         procs.append(m)
-        obs = Backendish(m.port, f"{ROOT}/up")
+        obs = Backendish(m.port, f"{ROOT}/up", durable=True)
         assert until(lambda: live.bridge.snapshot()["ready"], 20)
         assert until(lambda: live.metrics.get("upstream_queue_depth") == 0 and live.metrics.get("upstream_inflight") == 0, 20)
-        time.sleep(1.0)
+        # Every publish the broker acknowledged after the restart (the 5 before it were acknowledged earlier)
+        # reaches the durable observer: wait for exactly that many, then a short quiet period in which a
+        # duplicate, if there were one, would show up as a further message.
+        acked_after_restart = lambda: int(live.metrics.get("upstream_acked_total")) - 5  # noqa: E731
+        assert until(lambda: len(obs.on(f"{ROOT}/up")) >= acked_after_restart(), 15), "acknowledged publishes never reached the observer"
+        time.sleep(0.5)
         got = [p for _t, p, _q, _r in obs.on(f"{ROOT}/up")]
+        assert len(got) == acked_after_restart(), "the broker delivered a different number than it acknowledged"
         assert len(got) == len(set(got)), "a payload was published twice"
         assert set(got) <= set(sent)
         # Every envelope is either on the broker or counted as lost-in-doubt or dropped: none vanishes quietly.
@@ -330,9 +361,9 @@ def test_failover_to_second_broker(tmp, procs):
     live = Live([plain(dead, "primary"), plain(m.port, "backup")])
     try:
         assert until(lambda: live.bridge.snapshot()["broker_name"] == "backup", 20)
-        live.feed(wire(b'{"id":"via-backup"}'))
+        live.feed(live.dev.wire(b'{"id":"via-backup"}'))
         assert until(lambda: obs.on(f"{ROOT}/up"))
-        assert live.metrics.get("broker_connect_attempts_total", "network") >= 1
+        assert until(lambda: live.metrics.get("broker_connect_attempts_total", "network") >= 1, 10)
     finally:
         live.close()
         obs.close()
@@ -353,7 +384,7 @@ def test_tls_with_password_ok_and_wrong_ca_or_password_fail_closed(tmp, procs):
     live = Live([tls_broker(good["ca"], pwfile)])
     try:
         assert until(lambda: live.bridge.snapshot()["ready"], 20)
-        live.feed(wire(b'{"id":"tls-ok"}'))
+        live.feed(live.dev.wire(b'{"id":"tls-ok"}'))
         assert until(lambda: obs.on(f"{ROOT}/up"))
     finally:
         live.close()
@@ -361,7 +392,7 @@ def test_tls_with_password_ok_and_wrong_ca_or_password_fail_closed(tmp, procs):
     # 2. a CA that did not sign the broker certificate: never connects, never publishes
     live = Live([tls_broker(other["ca"], pwfile)])
     try:
-        live.feed(wire(b'{"id":"must-not-leave"}'))
+        live.feed(live.dev.wire(b'{"id":"must-not-leave"}'))
         time.sleep(4)
         assert not live.bridge.snapshot()["ready"] and live.metrics.get("broker_connected") == 0
         assert live.metrics.total("broker_connect_attempts_total") >= 1
@@ -373,7 +404,7 @@ def test_tls_with_password_ok_and_wrong_ca_or_password_fail_closed(tmp, procs):
     bad.write_text("not-the-password\n")
     live = Live([tls_broker(good["ca"], bad)])
     try:
-        live.feed(wire(b'{"id":"must-not-leave-2"}'))
+        live.feed(live.dev.wire(b'{"id":"must-not-leave-2"}'))
         time.sleep(3)
         assert not live.bridge.snapshot()["ready"]
         assert live.metrics.get("broker_connect_attempts_total", "auth") >= 1
@@ -391,8 +422,14 @@ class Backendish_tls(Backendish):
         self.c.on_message = lambda _c, _u, mm: self.msgs.append((mm.topic, bytes(mm.payload), mm.qos, mm.retain))
         self.c.username_pw_set("syn-user", "synthetic-test-password")
         self.c.tls_set(ca_certs=ca)
+        subacked = set()
+        self.c.on_subscribe = lambda _c, _u, mid, _rc, _p: subacked.add(mid)
         self.c.connect("localhost", m.port)
         self.c.loop_start()
+        mids = []
         for t in topics:
-            self.c.subscribe(t, 1)
-        time.sleep(0.3)
+            rc, mid = self.c.subscribe(t, 1)
+            assert rc == mqtt.MQTT_ERR_SUCCESS
+            mids.append(mid)
+        # Wait for SUBACK, not a fixed sleep: under load the TLS handshake alone can outlast 0.3 s.
+        assert until(lambda: subacked.issuperset(mids), 15), "broker never acknowledged the TLS observer's subscription"

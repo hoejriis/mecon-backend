@@ -7,6 +7,7 @@ the caller from bytes), unplug and replug, stall (silence), and write failure.
 from __future__ import annotations
 
 import json
+import threading
 from collections import deque
 
 from mecon_connector.transport import SerialAmbiguous, SerialGone, SerialUnavailable
@@ -32,6 +33,7 @@ class FakeSerialDevice:
         self.signed = True  # while a record exists the device signs every event and result
         self._seq = 0
         self._xid = 0
+        self._xid_lock = threading.Lock()
         self.probe_writes: list[bytes] = []  # raw bytes of deployment.get requests
         self._chunks: deque[bytes] = deque()
         self.written: list[bytes] = []
@@ -96,9 +98,11 @@ class FakeSerialDevice:
         """What this device would send for one interface message, in its mode's framing."""
         if self.mode == "console":
             return b"mecon> " + message + b"\r"
-        self._xid = (self._xid + 1) & 0xFF
+        with self._xid_lock:  # the test thread and the bridge thread (probe answers) both frame
+            self._xid = (self._xid + 1) & 0xFF
+            xid = self._xid
         n = max(1, -(-len(message) // 168))
-        frames = [bytes([0x7F, self._xid, i, n]) + message[i * 168 : (i + 1) * 168] for i in range(n)]
+        frames = [bytes([0x7F, xid, i, n]) + message[i * 168 : (i + 1) * 168] for i in range(n)]
         return b"".join(bytes([0x3E, len(f) & 255, len(f) >> 8]) + f for f in frames)
 
     def event(self, ev="health", signed=None, epoch=None, **extra) -> bytes:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import tomllib
 from dataclasses import dataclass, field
@@ -311,5 +312,36 @@ def load(path: str | Path) -> Config:
 
 
 def read_secret(path: str) -> str:
-    """Reads a secret file at connect time. The value is never logged or stored in config."""
-    return Path(path).read_text(encoding="utf-8").rstrip("\r\n")
+    """Reads a secret file at connect time. The value is never logged or stored in config.
+
+    An unreadable file (absent, wrong owner or mode, a directory, not UTF-8) raises ConfigError naming the
+    path and the error class only, never the content or the OS message.
+    """
+    try:
+        return Path(path).read_text(encoding="utf-8").rstrip("\r\n")
+    except (OSError, UnicodeDecodeError) as e:
+        raise ConfigError([f"cannot read password_file {path}: {type(e).__name__}"]) from e
+
+
+def check_secrets(cfg: Config, missing_ok: bool = False) -> list[str]:
+    """Startup check: every configured password_file must be readable now. Raises ConfigError.
+
+    missing_ok (--check-config): an absent file is not an error, because the file may be provided only at
+    run time (systemd LoadCredential, a container secret) and `--check-config` is run by installers and CI
+    where it is not there. Returns the notes to print for such files. A file that exists but cannot be read
+    is always an error.
+    """
+    problems: list[str] = []
+    notes: list[str] = []
+    for b in cfg.mqtt.brokers:
+        if b.username and b.password_file:
+            if missing_ok and not os.path.lexists(b.password_file):
+                notes.append(f"password_file {b.password_file} does not exist here; it must exist when the service starts")
+                continue
+            try:
+                read_secret(b.password_file)
+            except ConfigError as e:
+                problems.extend(e.problems)
+    if problems:
+        raise ConfigError(problems)
+    return notes

@@ -327,7 +327,13 @@ class Bridge:
         self._active = i
         self._state = "connecting"
         self._connect_started = now
-        self._session = self.transport.connect(b, will, subs)
+        try:
+            self._session = self.transport.connect(b, will, subs)
+        except TransportError as e:
+            # No session was started (for example the password_file cannot be read now). Counted as an
+            # auth failure, which backs off for at least a minute: retrying fast changes nothing.
+            self.log.warn("broker_credential_unavailable", broker=b.name, reason=str(e))
+            self._attempt_failed(now, "auth")
 
     def _publish_status(self, online: bool) -> int | None:
         if self._state != "connected":

@@ -14,7 +14,7 @@ import threading
 
 import paho.mqtt.client as mqtt
 
-from .config import BrokerConfig, read_secret
+from .config import BrokerConfig, ConfigError, read_secret
 from .transport import BrokerCallbacks, ConnectResult, TransportError, Will
 
 _AUTH_RC = {4, 5, 134, 135}  # v3.1.1 bad credentials / not authorised; v5-style codes for safety
@@ -34,6 +34,14 @@ class PahoTransport:
 
     def connect(self, broker: BrokerConfig, will: Will, subscriptions: list[tuple[str, int]]) -> int:
         self.disconnect()
+        pw = None
+        if broker.username and broker.password_file:
+            # Read before any client exists: a credential that became unreadable after startup is a
+            # failed attempt (the bridge counts and logs it), never an exception out of the bridge loop.
+            try:
+                pw = read_secret(broker.password_file)
+            except ConfigError as e:
+                raise TransportError(e.problems[0]) from None
         with self._lock:
             self._session += 1
             session = self._session
@@ -49,7 +57,6 @@ class PahoTransport:
         c.reconnect_delay_set(min_delay=3600, max_delay=3600)
         c.max_inflight_messages_set(64)
         if broker.username:
-            pw = read_secret(broker.password_file) if broker.password_file else None
             c.username_pw_set(broker.username, pw)
         if broker.tls:
             ctx = ssl.create_default_context(cafile=broker.ca_file)

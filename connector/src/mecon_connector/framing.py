@@ -25,7 +25,8 @@ MECON_INCOMPLETE_S = 5.0
 
 CONSOLE_PREFIX = b"mecon> "
 CONSOLE_JSON_PREFIX = CONSOLE_PREFIX + b"{"
-CONSOLE_MAX_LINE = 1600  # prefix included, terminator excluded
+CONSOLE_MAX_WIRE = 1600  # the device bound: bytes of envelope after "mecon> ", terminator not counted
+CONSOLE_MAX_LINE = 7 + CONSOLE_MAX_WIRE  # a whole line: prefix included, terminator excluded (1,609 with CRLF)
 
 
 class FrameEncodeError(ValueError):

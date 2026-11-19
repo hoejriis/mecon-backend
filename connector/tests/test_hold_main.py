@@ -139,9 +139,11 @@ def test_check_config_notes_an_absent_token_file_and_refuses_an_unreadable_or_wo
     assert entry.main(["--check-config", "--config", str(cfg)]) == 0
 
 
-@pytest.mark.parametrize("how", ["bad_token", "refused"])
+@pytest.mark.parametrize("how", ["bad_token", "refused", "http403"])
 def test_main_exits_3_when_the_hold_is_stopped_for_good(tmp_path, monkeypatch, capsys, how):
     server = FakeHoldServer()
+    if how == "http403":
+        server.http_status = 403
     if how == "refused":
         server.on_connect = lambda c: (c.send({"type": "refused", "reason": "another agent holds this device"}), c.close(1008, ""))
     try:

@@ -26,7 +26,7 @@ from typing import Callable
 from .config import Config
 from .framing import (
     CMD_MECON,
-    CONSOLE_MAX_LINE,
+    CONSOLE_MAX_WIRE,
     CONSOLE_PREFIX,
     MECON_MAX_MESSAGE,
     ConsoleLineReader,
@@ -56,7 +56,6 @@ GATE_ID_RE = re.compile(r"^cg-(\d+)$")  # ids of the Connector's own deployment.
 HELLO_ID_RE = re.compile(r"^ch-(\d+)$")  # ids of the Connector's own hello requests
 MAX_UPLOAD_CHARS = 8192
 COMPANION_MAX_WIRE = MECON_MAX_MESSAGE  # 4096 bytes
-CONSOLE_MAX_WIRE = CONSOLE_MAX_LINE - len(CONSOLE_PREFIX)  # the line bound includes the 7-byte prefix
 HELLO_RETRY_S = 5.0
 READ_CHUNK = 1024
 SERIAL_RETRY_S = 1.0

@@ -21,7 +21,7 @@ All fixture data is synthetic: no real device id, key, signature or credential. 
 | --- | --- |
 | Companion: `>` wrapper frame whose payload starts `0x7F`, reassembled by (xid, index, count) | publish the message bytes, QoS 1, not retained, to the topic its envelope routes to (below) |
 | Companion: any other `>` frame | dropped and counted (`serial_frames_total{kind="native"}`) |
-| Repeater or Room server: line `mecon> {...}` + CR or LF, at most 1600 bytes | publish the bytes after `mecon> `, same routing |
+| Repeater or Room server: line `mecon> {...}` + CR or LF, at most 1600 bytes after the prefix (1607 with it) | publish the bytes after `mecon> `, same routing |
 | Uplink envelope with an `ev` member (a safe name) | `{topic_root}/ev/<ev>` |
 | Uplink envelope with an `id` and no `ev` | `{topic_root}/resp` |
 | Uplink envelope with neither, an unsafe `ev`, or not JSON | dropped and counted (`upstream_dropped_total{reason="unroutable"}`) |

@@ -71,7 +71,7 @@ If the client offered `mecon-bridge`, the server selects (echoes) `mecon-bridge`
 
 ### 2.4 Handshake failure
 
-A token that is unknown, revoked, expired or missing is not told apart: the server closes the socket with code **1008** (policy violation). **(observed)** The check runs before the upgrade is accepted, so a client typically sees a failed handshake (an HTTP rejection) or an immediate close 1008 with no message, depending on its WebSocket library. An agent MUST NOT retry such a failure automatically with the same token: it stops and tells its operator (section 6).
+A token that is unknown, expired or missing is not told apart, and is rejected **before** the upgrade is accepted: the client sees the upgrade answered with **HTTP 403** and never receives a WebSocket frame, so no 1008 close arrives for a bad token. (A token revoked while a socket is open is different: it arrives after accept, as a `refused` frame then close 1008; see 2.5 and section 7.) An agent MUST NOT retry a rejected upgrade with the same token: it stops and tells its operator (section 6). An agent SHOULD treat HTTP 401 the same as 403, and a close 1008 with no `refused` frame the same way, in case a Backend or an intermediary signals a rejection differently.
 
 ### 2.5 One agent per device
 
@@ -167,7 +167,7 @@ The Backend treats the send as delivered once the frame is queued on the socket;
 
 ### 4.2 Device framing of `wire`
 
-Check size first: at most **4,096** bytes for a Companion link; at most **1,600** bytes for a console link (the device's line bound after the prefix; open item 6). A `wire` over the bound for its link cannot be sent: the agent drops it silently (no failure message exists; the Backend sweeps).
+Check size first: at most **4,096** bytes for a Companion link; at most **1,600** bytes for a console link (the device's bound on the envelope after `mecon> `, not counting the ending CR or LF; open item 6). A `wire` over the bound for its link cannot be sent: the agent drops it silently (no failure message exists; the Backend sweeps).
 
 **Companion (USB serial), device interface v1 message frames.** Split the UTF-8 bytes into chunks of at most 168 bytes; every chunk but the last carries exactly 168 bytes. Count = ceil(len / 168), 1 to 25. Each frame is the Companion command code `0x7F` followed by a 3-byte header and the chunk:
 
@@ -204,8 +204,8 @@ The Backend answers each upload with one acknowledgement:
 
 - `of` is the type of the frame acknowledged and `ref` is the value the agent sent.
 - An `outcome` starting with `refused` means nothing was recorded: an unsigned, forged or replayed message, an invalid frame or stream, a device not enrolled, or no v1 device on record. The agent MUST NOT resend the same bytes.
-- `duplicate` (events) means the event was already received, from another transport or earlier. Treat it as success.
-- Anything else is accepted; the text is informational.
+- `outcome` is an informational string. Success is anything that does not start with `refused`. Only `iface_hello` is answered with a fixed word (`recorded`); for `iface_result` and `iface_event` the outcome is whatever the Backend's handler returns (for example `hello: confirmed` or `config.get: ...`), so an agent MUST NOT depend on a particular success text.
+- `duplicate` (events) means the event was already received, from another transport or earlier. It counts as success.
 
 An acknowledgement is not a delivery receipt for the radio or an answer from the device. An agent MUST NOT fabricate one.
 
@@ -239,16 +239,17 @@ A result that arrives after its request was abandoned is still the device's own 
 - **Reconnect.** On any close other than `refused`, an agent reconnects with delays of **1, 2, 4, 8, then 15 s** (it stays at 15 s); the attempt counter resets when a socket opens. After reconnecting it sends `iface_relay` again (and `iface_hello`).
 - **Stop, do not retry.**
   - On `refused`, do not reconnect.
-  - On a close 1008, or a failed handshake that rejects the token, **with no `refused` frame** (a token the Backend does not accept), an agent MUST stop and surface it to its operator **(observed: the reference retries such a close like any other, at the 15 s cap; a new agent SHOULD stop instead)**. Retrying cannot help, and a loop only adds load.
+  - On an upgrade answered with HTTP 403 (a token the Backend does not reject by close but by refusing the upgrade), an agent MUST stop and surface it to its operator. It SHOULD do the same for HTTP 401 and for a close 1008 with no `refused` frame. **(observed: the reference retries such a failure like any other, at the 15 s cap; a new agent SHOULD stop instead)**. Retrying cannot help, and a loop only adds load.
   - When the operator stops the agent, do not reconnect.
 - **Agent stop.** Close with code 1000 and a short reason (the reference sends `stopped`).
+- **Subscriptions.** An agent that starts event subscriptions on the device itself (with its own `sub.start` requests) ends those, and only those, with `sub.stop` when it stops. Streams the Backend started belong to the Backend.
 - **Device link drop.** An agent closes the socket when the device link drops, so the Backend does not route requests to a dead link. A cable cannot tell the device it was unplugged, so a device may keep streaming events to the dead link until its subscription lifetime ends.
 
 ## 7. Errors and close codes
 
 | where | condition | signal |
 |---|---|---|
-| handshake | token missing, unknown, revoked or expired; or `bearer.<token>` without `mecon-bridge` | close 1008 with no message, or an HTTP rejection of the upgrade (library dependent) |
+| handshake | token missing, unknown or expired; or `bearer.<token>` without `mecon-bridge` | the upgrade is answered with HTTP 403 before accept; no WebSocket frame, no 1008 |
 | after accept | another agent already holds this device | text frame `{"type":"refused","reason":"another agent holds this device"}`, then close 1008 |
 | after accept | the token was revoked while the socket was open | text frame `{"type":"refused","reason":"connector token revoked"}`, then close 1008 |
 | agent close | normal stop, or the device link dropped | close 1000 (reason free text, for example `stopped`) |
@@ -267,7 +268,7 @@ The JSON Schemas check the shape of each frame. They cannot express the byte lim
 
 1. The agent connects to `{base}/gateway/ws` and offers either `Authorization: Bearer <token>` or exactly the subprotocols `mecon-bridge` and `bearer.<token>`.
 2. With the subprotocol form, the agent accepts `mecon-bridge` as the negotiated subprotocol and never expects the token entry to be echoed.
-3. With an invalid, revoked or expired token the agent sees a rejected handshake or close 1008 with no `refused` frame, stops, surfaces it to its operator and does not enter a reconnect loop.
+3. With a missing, unknown or expired token the upgrade is answered with HTTP 403; the agent stops, surfaces it to its operator and does not enter a reconnect loop. (A token revoked while the socket is open arrives as a `refused` frame then close 1008, which also stops it.)
 4. The agent sends the text frame `{"type":"iface_relay"}` after every successful connect, before it expects any `iface_req`.
 5. A second agent for the same device receives `{"type":"refused","reason":"another agent holds this device"}` followed by close 1008; the first agent's socket is unaffected; the second agent does not auto-reconnect.
 6. On `{"type":"iface_req","id":I,"wire":W}` the agent writes exactly the UTF-8 bytes of W to the device (never re-serialised), and sends nothing to the device for a frame missing a string `id` or `wire`.
@@ -298,12 +299,12 @@ JSON files, one scenario each, validated by `contracts/validate.mjs` against `fi
 
 1. **Stale-socket refusal.** A restarting agent can be refused while the Backend has not yet noticed that its previous socket closed. No takeover and no timeout for a half-open socket is described.
 2. **Idle timeouts and WebSocket pings.** No application keepalive exists; whether the server stack or an intermediary sends or enforces control-frame pings or an idle limit is not stated.
-3. **How a client surfaces a pre-accept rejection.** A token the Backend does not accept is observed as close 1008 before accept; whether a given client library reports it as an HTTP status (401 or 403, or another) or as a WebSocket close is stack dependent. An agent should treat both as a rejected token.
+3. *(Resolved.)* A bad, unknown or expired token is rejected before accept: the upgrade is answered with HTTP 403 and no 1008 frame is ever seen. Only the one-agent refusal and a token revoke arrive after accept, as a `refused` frame then close 1008.
 4. **Backend-side request timeout.** The pacing wait (about 8 s) and the resend sweeps are Backend internals; the agent's 15 s device wait is the reference's choice, not a protocol constant.
 5. **Frame ordering on the console.** The terminator the device uses on result lines (CR, LF or CRLF) and the echo details are observed behaviour of the reference reader (it strips leading CRs only); the firmware's console section is authoritative.
-6. **Console size bound.** Whether the 1,600-byte bound on a console `wire` counts the 7-byte `mecon> ` prefix. This text says 1,600 bytes of `wire`; the device's line bound may include the prefix, which would make the limit 1,593. An agent that enforces the smaller number drops a request in between that the device might accept.
+6. *(Resolved.)* The console bound is 1,600 bytes of envelope after `mecon> `, not counting the ending CR or LF. A request line may carry 1,600 bytes of `wire`, and a reply line is up to 1,609 bytes with the prefix and a CRLF ending.
 7. **No-answer feedback.** There is no message to tell the Backend "this request cannot be carried" (too large, no link, device silent); the Backend learns only by its own timeout and resend.
 8. **Status field semantics.** The content of `health` and the effect of `capabilities` on the Backend's later behaviour are not exhaustively specified; only the fields the reference sends are listed.
 9. **Result size mismatch.** An upload's `message` may be up to 8,192 characters; the device interface limits one message to 4,096 bytes on a cable. The effect of a larger one is a refusal (upload) or a drop (device).
-10. **Subscriptions left behind.** An agent cannot always end the device's event subscriptions before it stops (it does not know which were started). The device ends them itself when their lifetime runs out.
+10. *(Resolved.)* An agent sends `sub.stop` only for event streams it started itself, when it stops. Streams the Backend started are the Backend's to end; the device also ends any subscription when its lifetime runs out. The USB Connector starts no subscription of its own, so it sends no `sub.stop`.
 11. **No live test.** Nothing in this contract has been run against a live Backend; section 9 is a specification, not a test result.

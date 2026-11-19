@@ -71,7 +71,7 @@
         "type": "iface_ack",
         "of": "iface_result",
         "ref": 2,
-        "outcome": "recorded"
+        "outcome": "status.get: ok"
       }
     }
   ]

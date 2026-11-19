@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from .framing import CONSOLE_MAX_LINE, CONSOLE_PREFIX, MECON_MAX_MESSAGE
+from .framing import CONSOLE_MAX_WIRE, MECON_MAX_MESSAGE
 
 
 class ConfigError(Exception):
@@ -264,9 +264,9 @@ def parse(raw: dict[str, Any]) -> Config:
     )
     errs.extend(check_selector(selector))
     stall_s = float(_get(dev, "stall_s", (int, float), 2.0, errs, "device"))
-    default_max = CONSOLE_MAX_LINE - len(CONSOLE_PREFIX) if mode == "console" else 1536
+    default_max = CONSOLE_MAX_WIRE if mode == "console" else 1536
     max_down = _get(dev, "max_downlink_bytes", int, default_max, errs, "device")
-    if mode == "console" and max_down > CONSOLE_MAX_LINE - len(CONSOLE_PREFIX):
+    if mode == "console" and max_down > CONSOLE_MAX_WIRE:
         errs.append("device.max_downlink_bytes exceeds the console line limit")
     if mode == "companion" and max_down > MECON_MAX_MESSAGE:
         errs.append("device.max_downlink_bytes exceeds the interface message limit (4096)")

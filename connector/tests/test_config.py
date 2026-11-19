@@ -80,7 +80,7 @@ def test_all_problems_reported_together():
 
 
 def test_limits_checked():
-    assert "console line limit" in problems(mod(device__mode="console", device__max_downlink_bytes=1600))
+    assert "console line limit" in problems(mod(device__mode="console", device__max_downlink_bytes=1601))
     assert "stall_s" in problems(mod(device__stall_s=30))
     assert "queues" in problems(mod(queues={"upstream_max_messages": 0}))
     assert "qos" in problems(mod(mqtt__upstream_qos=2)).lower()

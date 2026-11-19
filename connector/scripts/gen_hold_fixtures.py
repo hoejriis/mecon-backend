@@ -66,7 +66,7 @@ def build():
          {"step": "device_write", "wire": wa},
          {"step": "device_read", "text": ra},
          {"step": "send", "frame": {"type": "iface_result", "ref": 2, "message": ra}},
-         {"step": "recv", "frame": {"type": "iface_ack", "of": "iface_result", "ref": 2, "outcome": "recorded"}}])
+         {"step": "recv", "frame": {"type": "iface_ack", "of": "iface_result", "ref": 2, "outcome": "status.get: ok"}}])
     out["B-refused-second-agent.json"] = fixture(
         "B", "Refusal of a second agent",
         "The handshake succeeds, then the Backend refuses the socket and closes it 1008. The agent stops, surfaces the reason and does not reconnect.",
@@ -98,7 +98,7 @@ def build():
          {"step": "device_line", "text": "[boot] radio ready", "skipped": True},
          {"step": "device_line", "text": "mecon> " + rd, "skipped": False},
          {"step": "send", "frame": {"type": "iface_result", "ref": 2, "message": rd}},
-         {"step": "recv", "frame": {"type": "iface_ack", "of": "iface_result", "ref": 2, "outcome": "recorded"}}])
+         {"step": "recv", "frame": {"type": "iface_ack", "of": "iface_result", "ref": 2, "outcome": "hello: confirmed"}}])
     e1, e2, bad = event(12), event(13), event(14, usig="<tampered>")
     out["E-event-forwarding-ack-outcomes.json"] = fixture(
         "E", "Event forwarding, duplicate, refusal and a stream that is not forwarded",
@@ -107,7 +107,7 @@ def build():
         [HANDSHAKE_SUB, *prelude(),
          {"step": "device_read", "text": e1},
          {"step": "send", "frame": {"type": "iface_event", "ref": 2, "stream": "health", "message": e1}},
-         {"step": "recv", "frame": {"type": "iface_ack", "of": "iface_event", "ref": 2, "outcome": "recorded"}},
+         {"step": "recv", "frame": {"type": "iface_ack", "of": "iface_event", "ref": 2, "outcome": "health: stored"}},
          {"step": "device_read", "text": e2},
          {"step": "send", "frame": {"type": "iface_event", "ref": 3, "stream": "health", "message": e2}},
          {"step": "recv", "frame": {"type": "iface_ack", "of": "iface_event", "ref": 3, "outcome": "duplicate"}},

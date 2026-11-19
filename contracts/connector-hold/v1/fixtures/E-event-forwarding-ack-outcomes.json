@@ -60,7 +60,7 @@
         "type": "iface_ack",
         "of": "iface_event",
         "ref": 2,
-        "outcome": "recorded"
+        "outcome": "health: stored"
       }
     },
     {

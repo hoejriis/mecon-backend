@@ -51,7 +51,7 @@
         },
         "console": {
           "type": "object", "required": ["max_line_bytes", "accepted_prefix", "downlink"],
-          "properties": { "max_line_bytes": { "const": 1600 }, "accepted_prefix": { "const": "mecon> {" } }
+          "properties": { "max_line_bytes": { "const": 1607 }, "accepted_prefix": { "const": "mecon> {" } }
         }
       }
     },

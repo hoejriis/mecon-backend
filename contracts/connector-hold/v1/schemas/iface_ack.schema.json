@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:mecon:connector-hold:v1:iface_ack",
   "title": "iface_ack (Backend to agent)",
-  "description": "The Backend's answer to one upload. An outcome starting with refused means nothing was recorded and the bytes are not resent; duplicate is success.",
+  "description": "The Backend's answer to one upload. outcome is an informational string: success is anything not starting with refused (nothing was recorded, the bytes are not resent). Only iface_hello is answered with a fixed word, recorded; for results and events the outcome is whatever the Backend's handler returns. duplicate is success for events.",
   "type": "object",
   "required": [
     "type",
@@ -23,7 +23,8 @@
       "description": "As sent."
     },
     "outcome": {
-      "type": "string"
+      "type": "string",
+      "description": "Informational. Success unless it starts with refused."
     }
   }
 }

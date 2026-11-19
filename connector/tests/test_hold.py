@@ -122,6 +122,18 @@ def test_conf_03_rejected_token_closed_1008_after_accept_is_a_stop(tmp_path, mk)
         server.shutdown()
 
 
+@pytest.mark.parametrize("status", [403, 401])
+def test_conf_03_upgrade_answered_403_or_401_is_a_stop_never_a_retry(mk, status):
+    r = mk()
+    r.server.http_status = status  # the Backend rejects the upgrade before accept: no WebSocket frame, no 1008
+    r.wait(lambda: r.bridge.hold_stop is not None)
+    assert r.bridge.hold_stop[0] == "bad_token" and r.m("hold_connect_attempts_total", "bad_token") == 1
+    for _ in range(10):
+        r.jump(60)
+    assert r.server.handshakes == 1
+    assert r.bridge.snapshot()["hold"] == "stopped"
+
+
 def test_server_error_is_retried_not_a_stop(mk):
     r = mk()
     r.server.http_status = 503
@@ -306,16 +318,30 @@ def test_conf_08_console_refuses_cr_lf_and_over_long_wire(mk):
     base = wire_for("e1")
     for rid, w in (("cr", base[:-1] + "\r}"), ("lf", base[:-1] + "\n}")):
         req(conn, rid, w)
-    longest = wire_for("long", pad="z" * (1593 - len(wire_for("long"))))
-    assert len(longest.encode()) == 1593
+    longest = wire_for("long", pad="z" * (1600 - len(wire_for("long"))))
+    assert len(longest.encode()) == 1600
     req(conn, "long", longest)
     r.wait(lambda: len(r.dev.messages) == 1)
     assert r.dev.messages[0] == longest.encode()
     r.wait(lambda: r.bridge._slot is None)
-    req(conn, "toolong", wire_for("toolong", pad="z" * (1594 - len(wire_for("toolong")))))
+    req(conn, "toolong", wire_for("toolong", pad="z" * (1601 - len(wire_for("toolong")))))
     r.settle(60)
     assert len(r.dev.messages) == 1
     assert r.m("downlink_dropped_total", "invalid") == 2 and r.m("downlink_dropped_total", "too_large") == 1
+
+
+def test_conf_09_console_reply_of_1600_bytes_is_read_and_uploaded(mk):
+    r = mk(mode="console")
+    conn = r.up()
+    r.dev.reply_hook = lambda m: None
+    req(conn, "big1")
+    r.wait(lambda: len(r.dev.messages) == 1)
+    head = '{"v":1,"id":"big1","status":"ok","usig":"U1lO","pad":"'
+    text = head + "p" * (1600 - len(head) - 2) + '"}'
+    assert len(text) == 1600
+    r.dev.say(text.encode())  # a 1,607-byte line, 1,609 with CRLF
+    r.wait(lambda: len(frames(conn, "iface_result")) == 1)
+    assert frames(conn, "iface_result")[0]["message"] == text
 
 
 def test_conf_09_console_only_mecon_json_lines_are_interface_messages(mk):

@@ -68,7 +68,7 @@
     "console": {
       "applies_to": ["repeater", "room"],
       "line": "mecon> <message> then CR or LF",
-      "max_line_bytes": 1600,
+      "max_line_bytes": 1607,
       "max_line_includes_prefix": true,
       "accepted_prefix": "mecon> {",
       "skipped": "echo, log lines and stock CLI replies; skipped as soon as the line is known not to be an interface line, never buffered",
@@ -77,7 +77,7 @@
       "downlink": {
         "wrap": "mecon> + message + CR in one write",
         "refused": "a message containing CR or LF (it would split into several console lines)",
-        "max_message_bytes_default": 1593
+        "max_message_bytes_default": 1600
       }
     },
     "stall_s_default": 2.0,
@@ -288,7 +288,7 @@
     { "id": "frame_oversize_length", "condition": "wrapper length above 176", "behaviour": "refuse at once, rescan, count" },
     { "id": "frame_malformed", "condition": "bad count, index, body size", "behaviour": "drop the frame, count" },
     { "id": "message_oversize", "condition": "reassembled message above 4096 bytes", "behaviour": "drop, count" },
-    { "id": "console_oversize_line", "condition": "interface line above 1600 bytes", "behaviour": "discard to the terminator, count" },
+    { "id": "console_oversize_line", "condition": "interface line above 1607 bytes (a 1600-byte message after the prefix)", "behaviour": "discard to the terminator, count" },
     { "id": "stall", "condition": "partial frame, no byte for stall_s", "behaviour": "drop it, count, resynchronise" },
     { "id": "broker_unreachable", "condition": "DNS, TCP or CONNACK timeout", "behaviour": "backoff, then the next broker; queue within bounds" },
     { "id": "broker_tls_refused", "condition": "certificate does not verify", "behaviour": "fail closed, long cool-down, no publish" },

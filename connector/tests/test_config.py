@@ -47,8 +47,8 @@ def test_downlink_switch_is_gone_and_gate_limits_are_bounded():
 
 
 def test_raw_tty_path_and_wildcard_selectors_refused():
-    assert "stable id" in problems(mod(device__select={"path": "/dev/ttyUSB0"})) or True  # unknown key also reported
-    assert "unknown key" in problems(mod(device__select={"path": "/dev/ttyUSB0"}))
+    for raw_tty in ("/dev/ttyUSB0", "/dev/ttyACM3", "/dev/ttyS0", "/dev/ttyAMA0", "/dev/" "cu.synthetic"):
+        assert "kernel tty node" in problems(mod(device__select={"path": raw_tty}))
     assert "by-id" in problems(mod(device__select={"by_id": "/dev/ttyUSB0"}))
     assert "any device" in problems(mod(device__select={"by_id": "*"}))
     assert "stable id" in problems(mod(device__select={"vid": 1}))
@@ -97,3 +97,34 @@ def test_secret_is_read_live_and_stripped(tmp_path):
     assert read_secret(str(f)) == "synthetic-test-password"
     cfg = parse(mod(mqtt__brokers=[{"host": "h", "username": "u", "password_file": str(f)}]))
     assert "synthetic-test-password" not in repr(cfg)  # only the file's path is held
+
+
+# ---- explicit port path (udev symlink) ---------------------------------------------------
+
+
+def test_path_selector_accepts_a_udev_symlink():
+    c = parse(mod(device__select={"path": "/dev/bench/board0"}))
+    assert c.device.selector.path == "/dev/bench/board0" and c.device.selector.by_id is None
+
+
+@pytest.mark.parametrize(
+    "bad", ["bench/board0", "/tmp/x", "/dev/bench/*", "/dev/bench/../ttyUSB0", "/dev/bench/", "/dev/bench/a b", "/dev/b?nch/x", ""]
+)
+def test_path_selector_refuses_unsafe_paths(bad):
+    assert "device.select.path" in problems(mod(device__select={"path": bad}))
+
+
+def test_exactly_one_selector_kind():
+    assert "only one" in problems(mod(device__select={"path": "/dev/bench/x", "by_id": "usb-X-*"}))
+    assert "only one" in problems(mod(device__select={"path": "/dev/bench/x", "vid": 1, "pid": 2}))
+    assert "exactly one" in problems(mod(device__select={}))
+    assert "usb_serial needs" in problems(mod(device__select={"path": "/dev/bench/x", "usb_serial": "S"}))
+
+
+def test_event_topics_are_a_prefix_and_must_not_nest():
+    c = parse(BASE)
+    assert (c.mqtt.topic_resp, c.mqtt.topic_ev, c.mqtt.topic_req, c.mqtt.topic_status) == tuple(
+        f"{c.mqtt.topic_root}/{x}" for x in ("resp", "ev", "req", "status")
+    )
+    assert "must not be below" in problems(mod(mqtt__topics={"resp": "ev/x"}))
+    assert "must differ" in problems(mod(mqtt__topics={"req": "resp"}))

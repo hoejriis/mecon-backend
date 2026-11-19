@@ -51,7 +51,7 @@ def test_defaults_equal_contract():
     assert c.mqtt.keepalive_s == m["keepalive_s_default"]
     assert c.mqtt.hold_down_s == m["brokers"]["hold_down_s_default"]
     assert c.mqtt.connect_timeout_s == m["reconnect"]["connect_timeout_s_default"]
-    assert c.mqtt.upstream_qos == m["topics"]["up"]["qos"]
+    assert c.mqtt.upstream_qos == m["topics"]["resp"]["qos"] == m["topics"]["ev"]["qos"]
     assert c.device.stall_s == MAPPING["serial"]["stall_s_default"]
     bo = m["reconnect"]["backoff"]
     assert (c.mqtt.backoff_base_s, c.mqtt.backoff_max_s, c.mqtt.backoff_jitter) == (
@@ -65,7 +65,10 @@ def test_defaults_equal_contract():
 def test_topic_templates_equal_contract():
     c = make_cfg()
     t = MAPPING["mqtt"]["topics"]
-    for key, got in (("up", c.mqtt.topic_up), ("down", c.mqtt.topic_down), ("status", c.mqtt.topic_status)):
+    for key, got in (
+        ("resp", c.mqtt.topic_resp), ("ev", c.mqtt.topic_ev + "/{ev}"), ("req", c.mqtt.topic_req),
+        ("status", c.mqtt.topic_status),
+    ):
         assert got == t[key]["template"].replace("{topic_root}", c.mqtt.topic_root)
 
 

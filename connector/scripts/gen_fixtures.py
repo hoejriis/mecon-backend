@@ -34,8 +34,9 @@ def h(b: bytes) -> str:
     return b.hex()
 
 
-def pub(payload: bytes):
-    return {"topic": "{up}", "payload_hex": h(payload), "qos": 1, "retain": False}
+def pub(payload: bytes, topic="{resp}"):
+    """topic is "{resp}" or "{ev:<name>}": the contract's names for {topic_root}/resp and {topic_root}/ev/<name>."""
+    return {"topic": topic, "payload_hex": h(payload), "qos": 1, "retain": False}
 
 
 M1, M2 = env(1), env(2)
@@ -96,8 +97,44 @@ case("companion-firmware-framing-fixture", "The message and frames of mecon-firm
      "companion", [wrap(f) for f in fw], [pub(FW_MSG)], source="hoejriis/mecon-firmware 0a9747b090d22f3756d48dee586061ff6287327c docs/contract/fixtures/framing.json")
 
 raw_bytes = bytes([0x7B, 0x22, 0x00, 0x0D, 0x0A, 0xE2, 0x82, 0xAC, 0x20, 0x20, 0x0A, 0x7D, 0x20])
-case("companion-opaque-bytes-unchanged", "Not valid JSON, with NUL, CR, LF, UTF-8 and trailing spaces: forwarded byte for byte (the Connector never parses it).",
-     "companion", [wrap(split(raw_bytes, 1)[0])], [pub(raw_bytes)])
+case("companion-opaque-bytes-unroutable", "Not valid JSON, with NUL, CR, LF, UTF-8 and trailing spaces: it has no route, so it is dropped and counted, never published and never altered.",
+     "companion", [wrap(split(raw_bytes, 1)[0])], [], {"upstream_dropped_total/unroutable": 1})
+
+# ---- routing: the topic is chosen from the parsed envelope; the bytes published are the device's own ----
+def js(o) -> bytes:
+    return json.dumps(o, separators=(",", ":")).encode()
+
+
+E_HEALTH = js({"v": 1, "ev": "health", "epoch": 4, "seq": 1, "data": {"pad": "\u00e6 "}, "usig": "U1lO"})
+E_RADIO = js({"v": 1, "ev": "radio", "epoch": 4, "seq": 2, "data": {}, "usig": "U1lO"})
+R_STR = js({"v": 1, "id": "syn-r1", "status": "ok", "result": {}, "usig": "U1lO"})
+R_INT = js({"v": 1, "id": 7, "status": "ok", "result": {}})
+BOTH = js({"v": 1, "ev": "power", "id": "syn-x", "epoch": 4, "seq": 3})
+case("companion-event-goes-to-its-ev-topic", "A message with an `ev` member goes to {topic_root}/ev/<ev>; a response with an `id` goes to {topic_root}/resp. Bytes unchanged.",
+     "companion", [wrap(split(E_HEALTH, 1)[0]), wrap(split(R_STR, 2)[0]), wrap(split(E_RADIO, 3)[0])],
+     [pub(E_HEALTH, "{ev:health}"), pub(R_STR), pub(E_RADIO, "{ev:radio}")])
+case("companion-integer-id-is-a-response", "An integer `id` is a response too.", "companion",
+     [wrap(split(R_INT, 1)[0])], [pub(R_INT)])
+case("companion-ev-wins-over-id", "A message with both `ev` and `id` is an event.", "companion",
+     [wrap(split(BOTH, 1)[0])], [pub(BOTH, "{ev:power}")])
+UNROUTABLE = [
+    js({"v": 1, "status": "ok"}),  # neither id nor ev
+    js({"v": 1, "ev": "a/b", "seq": 1}),  # a topic separator in the name
+    js({"v": 1, "ev": "+", "seq": 1}),  # a wildcard
+    js({"v": 1, "ev": "#", "seq": 1}),
+    js({"v": 1, "ev": "", "seq": 1}),
+    js({"v": 1, "ev": 5, "seq": 1}),
+    js({"v": 1, "ev": "x" * 33, "seq": 1}),
+    js({"v": 1, "ev": "bad", "id": "syn-y"}) .replace(b'"bad"', b'"b d"'),  # an unsafe ev never falls back to resp
+    js({"v": 1, "id": ""}),
+    js({"v": 1, "id": None}),
+    js({"v": 1, "id": True}),
+    b"[1,2,3]",
+    b"not json at all",
+]
+case("companion-unroutable-dropped-and-counted", "A message with no route (no id, no safe ev, not an object) is dropped and counted as unroutable; a following routable message is unaffected.", "companion",
+     [wrap(split(m, 1 + i)[0]) for i, m in enumerate(UNROUTABLE)] + [wrap(split(R_STR, 30)[0])],
+     [pub(R_STR)], {"upstream_dropped_total/unroutable": len(UNROUTABLE)})
 
 
 def line(b: bytes, term=b"\r") -> bytes:
@@ -139,7 +176,7 @@ dn = []
 
 def dcase(cid, desc, mode, inbound, serial_hex=None, dropped=None, retain=False, written=True):
     c = {"id": cid, "description": desc, "mode": mode,
-         "inbound": {"topic": "{down}", "payload_hex": h(inbound), "retain": retain},
+         "inbound": {"topic": "{req}", "payload_hex": h(inbound), "retain": retain},
          "expect": {"serial_written_hex": serial_hex, "dropped_reason": dropped}}
     dn.append(c)
 
@@ -174,8 +211,8 @@ def gcase(cid, desc, mode, enrolment, gate_open, probe_result, then=None, upstre
 gcase("provisioned-opens", "Only result.state \"provisioned\" opens downlink; the request is a read and never goes upstream.", "companion", "provisioned", True, "provisioned")
 gcase("provisioned-opens-console", "The same on a console, as one `mecon> ` line.", "console", "provisioned", True, "provisioned")
 for st, res in (("none", "none"), ("corrupt", "corrupt"), ("refused", "refused"), ("bad_state", "malformed"), ("silent", "timeout"), ("garbage", "timeout")):
-    gcase("closed-" + st.replace("_", "-"), f"Device answer '{st}' keeps downlink closed (fails closed)." + (" Bytes that do not parse cannot be told from device traffic, so they are forwarded." if st == "garbage" else ""),
-          "companion", st, False, res, upstream=1 if st == "garbage" else 0)
+    gcase("closed-" + st.replace("_", "-"), f"Device answer '{st}' keeps downlink closed (fails closed)." + (" Bytes that do not parse have no route, so they are dropped and counted as unroutable." if st == "garbage" else ""),
+          "companion", st, False, res, upstream=0)
 gcase("unsigned-uplink-closes", "The first uplink message without usig closes downlink at once; it is still forwarded unchanged.", "companion", "provisioned", True, "provisioned",
       [{"uplink": "signed_event", "enrolment_after": None, "gate_open_after": True, "forwarded": True},
        {"uplink": "unsigned_event", "enrolment_after": "none", "gate_open_after": False, "forwarded": True}])

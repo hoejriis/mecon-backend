@@ -43,14 +43,16 @@ insecure_allow_plain = true
 enabled = false
 """
     )
-    obs = Backendish(m.port, f"{topic}/connector/status")
+    obs = Backendish(m.port, f"{topic}/status")
     p = subprocess.Popen(
         [sys.executable, "-m", "mecon_connector", "--config", str(cfg)],
         env={"PYTHONPATH": str(SRC), "PYTHONDONTWRITEBYTECODE": "1", "PATH": "/usr/bin:/bin"},
         stderr=subprocess.PIPE,
     )
     try:
-        assert until(lambda: any(json.loads(x[1])["connector"] == "online" for x in obs.on(f"{topic}/connector/status")))
+        # no device is plugged in, so the connect-time status is {"online":false}; the clean release below
+        # is a second publish of it, which the last will (sent only on an unclean close) could not be
+        assert until(lambda: len(obs.on(f"{topic}/status")) == 1)
         t0 = time.monotonic()
         p.send_signal(sig)
         rc = p.wait(timeout=20)
@@ -58,7 +60,8 @@ enabled = false
         assert rc == 0
         (timeout_s,) = re.findall(r"(?m)^TimeoutStopSec=(\d+)$", UNIT.read_text())
         assert took < int(timeout_s) / 3, f"shutdown took {took:.2f}s of a {timeout_s}s budget"
-        assert until(lambda: json.loads(obs.on(f"{topic}/connector/status")[-1][1])["connector"] == "offline", 5)
+        assert until(lambda: len(obs.on(f"{topic}/status")) == 2, 5), "no explicit offline status before the session closed"
+        assert json.loads(obs.on(f"{topic}/status")[-1][1]) == {"online": False}
     finally:
         if p.poll() is None:
             p.kill()

@@ -8,6 +8,14 @@ UP = load_fixture("upstream.json")["cases"]
 DOWN = load_fixture("downlink.json")["cases"]
 
 
+def topic_of(rig, name):
+    """The contract's topic names: {resp} and {ev:<name>}."""
+    if name == "{resp}":
+        return rig.up
+    assert name.startswith("{ev:") and name.endswith("}")
+    return f"{rig.ev}/{name[4:-1]}"
+
+
 def _runs():
     for c in UP:
         for ch in c["chunkings"]:
@@ -23,12 +31,14 @@ def test_upstream_fixture(case, chunking):
     raw = b"".join(bytes.fromhex(h) for h in case["serial_chunks_hex"])
     rig.dev.feed_bytes(raw, chunking)
     rig.step(len(raw) + 10)
-    want = [bytes.fromhex(p["payload_hex"]) for p in case["expect"]["publishes"]]
-    assert rig.published() == want
+    want = [(topic_of(rig, p["topic"]), bytes.fromhex(p["payload_hex"])) for p in case["expect"]["publishes"]]
+    got = [(r.topic, r.payload) for r in rig.net.brokers["primary"].received if r.topic != rig.status]
+    assert got == want  # topics and bytes, in the order the device sent them
     for p in case["expect"]["publishes"]:
-        assert p["topic"] == "{up}" and p["qos"] == 1 and p["retain"] is False
-    for r in rig.net.brokers["primary"].on_topic(rig.up):
-        assert r.qos == 1 and r.retain is False
+        assert p["qos"] == 1 and p["retain"] is False
+    for r in rig.net.brokers["primary"].received:
+        if r.topic != rig.status:
+            assert r.qos == 1 and r.retain is False
     for key, val in case["expect"]["metrics"].items():
         name, _, label = key.partition("/")
         assert rig.metrics.get(name, label or None) == val, key
@@ -40,7 +50,7 @@ def test_downlink_fixture(case):
     rig = Rig(cfg=make_cfg(mode=case["mode"]))
     rig.settle()
     inb = case["inbound"]
-    assert inb["topic"] == "{down}"
+    assert inb["topic"] == "{req}"
     rig.transport.deliver(rig.down, bytes.fromhex(inb["payload_hex"]), retain=inb["retain"])
     rig.step(3)
     exp = case["expect"]

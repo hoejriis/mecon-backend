@@ -18,3 +18,8 @@
 # one: leave ATTRS{serial} out only if exactly one such device is ever attached.
 #
 # SUBSYSTEM=="tty", SUBSYSTEMS=="usb", ATTRS{idVendor}=="VID", ATTRS{idProduct}=="PID", ATTRS{serial}=="SERIAL", GROUP="dialout", MODE="0660", SYMLINK+="mecon/connector-radio", ENV{ID_MM_DEVICE_IGNORE}="1"
+#
+# A bench host that names its ports explicitly (device.select.path, or --port on the command line) can use
+# one link per board instead of a by-id pattern: give the rule above SYMLINK+="bench/NAME" (NAME made up per
+# board) and select path = "/dev/bench/NAME". The link must be stable across replugs; a kernel node
+# (/dev/ttyACM0) is refused.

@@ -6,11 +6,11 @@ A small headless service that carries messages between a MECON public-firmware r
 USB radio  <-- serial framing -->  Connector  <-- MQTT 3.1.1 / TLS -->  broker  <-->  Backend
 ```
 
-**What it does not do.** It never mints or substitutes identity, holds keys, decrypts, parses or rewrites a payload, fabricates an acknowledgement, or chooses a route. A device-signed envelope leaves exactly as it arrived. MQTT accepting a message is not RF delivery and not Backend processing, and the Connector never reports it as either.
+**What it does not do.** It never mints or substitutes identity, holds keys, decrypts or rewrites a payload, fabricates an acknowledgement, or chooses a device or identity. It reads an uplink message only for its `id`, `ev`, `epoch` and `usig` members (the topic to publish to, and the enrolment gate). A device-signed envelope leaves exactly as it arrived. MQTT accepting a message is not RF delivery and not Backend processing, and the Connector never reports it as either.
 
-**Status: stages C0, C1 and the packaging of C2 of the [implementation design](../docs/USB_CONNECTOR_IMPLEMENTATION_DESIGN.md).** It passes its unit tests, fake-device tests and a real-mosquitto integration test; the install scripts run in a Debian container and the unit under real systemd on a CI VM. It has not been run on a real device, a Pi, or against the Backend. See [What is not verified](#what-is-not-verified).
+**Status: stages C0, C1 and the packaging of C2 of the [implementation design](../docs/USB_CONNECTOR_IMPLEMENTATION_DESIGN.md), and the preparation of C3 (Backend topic mapping, explicit port selection, a bench harness).** It passes its unit tests, fake-device tests and a real-mosquitto integration test; the install scripts run in a Debian container and the unit under real systemd on a CI VM. It has not been run on a real device, a Pi, or against the Backend. See [What is not verified](#what-is-not-verified).
 
-The wire contract (frames, topics, QoS, retry rules, metrics) is in [`contracts/connector/v1`](../contracts/connector/v1/README.md). Its topic names are provisional: the Backend owns the real mapping.
+The wire contract (frames, topics, QoS, retry rules, metrics) is in [`contracts/connector/v1`](../contracts/connector/v1/README.md). The topic and ACL mapping is the Backend's (relayed for stage C3); it has not yet run against a real device or Backend.
 
 ## Language and runtime
 
@@ -52,9 +52,10 @@ One TOML file, validated at start. Every problem is listed and the process exits
 | Setting | Rule |
 | --- | --- |
 | `device.mode` | `companion` or `console`. Required. Never auto-detected. |
-| `device.select` | A `/dev/serial/by-id` name pattern, or `vid` and `pid` (and optionally `usb_serial`). A raw `/dev/ttyUSB0` path or `*` is refused. A selector that matches two ports is refused, not guessed. |
+| `device.select` | Exactly one of: `path`, an explicit `/dev/...` path, normally a udev-provided stable symlink such as `/dev/bench/<name>`; a `/dev/serial/by-id` name pattern (`by_id`); or `vid` and `pid` (and optionally `usb_serial`). A raw kernel node (`/dev/ttyUSB0`, `/dev/ttyACM0`, `/dev/ttyS0`, `/dev/ttyAMA0`, `/dev/cu.*`), a path with a wildcard or `..`, or `*` is refused. A selector that matches two ports is refused, not guessed. `--port <path>` on the command line replaces the configured selector with `path` (same validation), so a bench run names its port explicitly. A `path` that does not exist yet, or is not a character device, is polled like an absent stable id. |
 | `mqtt.client_id` | Required, from the broker login. Never generated. |
-| `mqtt.topic_root` | Required. The topic root provisioned for this device. The Connector never reads it from the device. |
+| `mqtt.topic_root` | Required. `mecon/<device_id>`: the device's own 16-byte id as 32 lowercase hex digits (from `hello` or `deployment.get`), as provisioned for its broker login. The Connector never reads it from the device. |
+| `mqtt.topics` | Optional suffixes under the root: `resp` (default `resp`), `ev` (the prefix of event topics, default `ev`), `req` (default `req`), `status` (default `status`). They must differ and not nest. The defaults are the Backend's mapping. |
 | `mqtt.brokers` | One to six. First is primary, the rest are fallbacks. TLS with peer and host-name verification is the default; plain MQTT needs `insecure_allow_plain = true` and is for loopback or a closed test LAN. |
 | `*.password_file` | A file read when connecting. The value is never in the config, the logs or the metrics. Mode 600. A file that cannot be read at startup is a configuration error: one line naming the path, exit status 2. `--check-config` does the same for a file that exists but cannot be read; for an absent file it only prints a note, because installers and CI run it where a systemd or container credential is not yet present. One that becomes unreadable later is a failed connect attempt (counted as `auth`, logged, retried after the long auth back-off), never a crash. |
 | `downlink.gate` | Optional timings for the enrolment gate (below). There is no switch to turn downlink on: it opens only for an enrolled device. |
@@ -78,13 +79,13 @@ Serial to broker:
 
 - `companion` mode reads the `>` wrapper (marker, 16-bit length, at most 176 bytes), resynchronises on garbage, refuses an oversize length at once, and reassembles `0x7F` interface frames (up to 25 frames, 4096 bytes) into one message. Native Companion frames are counted and not forwarded.
 - `console` mode reads `mecon> {` lines (at most 1600 bytes with the prefix, CR or LF terminated) and skips echo and log lines without buffering them.
-- Each complete message becomes one MQTT publish of exactly those bytes, QoS 1, not retained.
+- Each complete message becomes one MQTT publish of exactly those bytes, QoS 1 (configurable to 0), not retained. The Connector parses the message only to choose the **topic**: an `ev` member that is a safe name (`A-Za-z0-9_-`, 1 to 32 characters) goes to `<root>/ev/<ev>`; otherwise an `id` that is a non-empty string or an integer goes to `<root>/resp`. A message with neither (or an unsafe `ev`, never falling back to `resp`) has no route and is dropped and counted (`upstream_dropped_total{reason="unroutable"}`). The bytes are never altered, re-serialised or signed: the device's own `usig` signature must still verify at the Backend.
 
-Broker to serial (only while the gate is open): each message on the down topic is wrapped (`0x7F` frames in `<` wrappers, or one `mecon> ` line) and written once. Retained messages are refused. An empty, oversize or (console) line-breaking message is dropped and counted, never rewritten.
+Broker to serial (only while the gate is open): each message on `<root>/req` is wrapped (`0x7F` frames in `<` wrappers, or one `mecon> ` line) and written once. Retained messages are refused. An empty, oversize or (console) line-breaking message is dropped and counted, never rewritten.
 
-On shutdown the Connector releases the device explicitly: it publishes the status `offline` and closes the broker session before it exits.
+On shutdown the Connector releases the device explicitly: it publishes the status `{"online":false}` and closes the broker session before it exits.
 
-The Connector also publishes a retained status message `{"v":1,"connector":"online|offline","serial":"up|down|unknown"}` with a last will. It is the Connector's own state, never the device's presence.
+The Connector also publishes a retained status message on `<root>/status` (QoS 0), exactly `{"online":true}` or `{"online":false}`, with the same `{"online":false}` as its last will. `online` is true only while the broker session is up and the serial port is open. It is the Connector's own state, never the device's identity, health, enrolment or radio presence; the serial state alone is in `/healthz` and `/metrics`.
 
 ## Delivery rules, in one table
 
@@ -230,12 +231,13 @@ python scripts/gen_fixtures.py      # regenerates contracts/connector/v1/fixture
 - Every fixture in `contracts/connector/v1/fixtures` runs through the real bridge at several chunkings.
 - `tests/test_integration_mosquitto.py` runs the real bridge and the real MQTT client against mosquitto: round trip, retained status, last will after a dropped connection, broker restart without duplicates, failover, return to a recovered primary (probe first, no reconnect of the backup session while the primary is down), TLS and password, and fail-closed on a wrong CA or password.
 - `tests/test_contract_matches_code.py` fails when the code and `mapping.json` disagree (metrics, limits, defaults, topic templates).
-- The mutation script breaks 27 rules (payload altered, in-doubt publish re-queued, a command written again after a reconnect, unbounded buffering, a duplicate publish on a repeated frame, silent drops and others) and requires a test failure for each.
+- `tests/test_routing_and_port.py` covers routing, the status payload and will, the ACL-shaped topic set, and explicit port selection; `tests/test_c3_harness.py` the stand-in's refusal to publish anything but two read requests and the observer's no-content rule. The C3 bench harness is described in [`scripts/c3_bench.md`](scripts/c3_bench.md); `sh scripts/c3_fake_e2e.sh` runs it end to end with the fake device.
+- The mutation script breaks 60 rules (payload altered, in-doubt publish re-queued, a command written again after a reconnect, unbounded buffering, a duplicate publish on a repeated frame, silent drops and others) and requires a test failure for each.
 
 ## What is not verified
 
 - Nothing has run with a real USB radio. Not verified: that a Companion's USB accepts `0x7F` frames on every build and before the app handshake, that boot text never precedes frames, that opening the port does not reset the board (an ESP32-S3 may reset on open, an nRF52 bridge may need DTR), and that 115200 baud is right for every board.
-- Nothing has run against the Backend or its broker policy. Topic names are provisional until the Backend confirms the mapping at stage C3. The enrolment gate has run only against a fake device that models `deployment.get`, `epoch` and `usig` from the firmware docs; the real answers, the exact place of `epoch` in them, and whether an enrolled device accepts any unsigned read that returns data the Backend alone should see are unverified. Q4 and Q6 in the contract are open.
+- Nothing has run against the Backend or its broker policy. The topic and ACL mapping is the Backend's as relayed by its coder on 2026-11-19; the Connector's routing (`id` to `resp`, `ev` to `ev/<ev>`) rests on the `ev` and `id` members that mapping names, and the real firmware's member names for responses and events are unverified until the C3 hardware run (the harness reports unroutable counts). Whether the Backend tolerates the status payload's `online` member alone, and a login with exactly the ACL in the contract, are unverified. The enrolment gate has run only against a fake device that models `deployment.get`, `epoch` and `usig` from the firmware docs; the real answers, the exact place of `epoch` in them, and whether an enrolled device accepts any unsigned read that returns data the Backend alone should see are unverified. Q4 in the contract is open (answered by the C3 hardware run); Q6 is answered.
 - No Pi measurements: resident memory, CPU at sustained traffic, reconnect time, and behaviour under UART byte loss are unknown on a Pi. CI measures a runner (labelled as such); the Pi run is the pooled owner step under "Measurements".
 - The systemd unit has run on a CI VM (Ubuntu, systemd 255) and, by hand, on Debian 12 (systemd 252) in a container; not on a Pi, and not with a real serial device, so `DeviceAllow` for `ttyACM` and `ttyUSB` and the `dialout` group on a real radio are untested. `LoadCredential=` did not populate in a nested-container test environment (a container limitation, not seen on a VM); the CI VM run is the evidence.
 - The TLS check was exercised against a synthetic CA and mosquitto 2.0.x only. Failure classification between a certificate failure and a plain network failure depends on paho's log text and is best effort; both fail closed.

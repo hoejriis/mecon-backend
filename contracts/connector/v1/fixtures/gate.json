@@ -97,14 +97,14 @@
   },
   {
    "id": "closed-garbage",
-   "description": "Device answer 'garbage' keeps downlink closed (fails closed). Bytes that do not parse cannot be told from device traffic, so they are forwarded.",
+   "description": "Device answer 'garbage' keeps downlink closed (fails closed). Bytes that do not parse have no route, so they are dropped and counted as unroutable.",
    "mode": "companion",
    "enrolment": "garbage",
    "expect": {
     "probe_request_hex": "3c2d007f0100017b2276223a312c226964223a2263672d31222c226f70223a226465706c6f796d656e742e676574227d",
     "gate_open": false,
     "probe_result": "timeout",
-    "upstream_publishes": 1
+    "upstream_publishes": 0
    },
    "then": []
   },

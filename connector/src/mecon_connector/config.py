@@ -24,9 +24,13 @@ TOPIC_NAME_RE = re.compile(r"^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$")
 BROKER_NAME_RE = re.compile(r"^[A-Za-z0-9._-]{1,32}$")
 
 
+EVENT_NAME_RE = re.compile(r"^[A-Za-z0-9_-]{1,32}$")  # an `ev` value that may become a topic level
+
+
 @dataclass(frozen=True)
 class Selector:
     by_id: str | None = None  # fnmatch pattern against a /dev/serial/by-id entry name
+    path: str | None = None  # an explicit device path, normally a udev-provided stable symlink
     vid: int | None = None
     pid: int | None = None
     usb_serial: str | None = None
@@ -57,9 +61,10 @@ class BrokerConfig:
 class MqttConfig:
     client_id: str
     topic_root: str
-    topic_up: str
-    topic_down: str
-    topic_status: str
+    topic_resp: str  # device -> broker: a response (a message with an `id`)
+    topic_ev: str  # device -> broker: events go to f"{topic_ev}/<event name>"
+    topic_req: str  # broker -> device: requests
+    topic_status: str  # the Connector's retained {"online":...} state
     upstream_qos: int
     keepalive_s: int
     brokers: tuple[BrokerConfig, ...]
@@ -127,6 +132,42 @@ def _check_unknown(d: dict[str, Any], allowed: set[str], where: str, errs: list[
             errs.append(f"unknown key {where}.{k}")
 
 
+RAW_TTY_RE = re.compile(r"^/dev/(tty(USB|ACM|AMA|S)|cu\.)")
+
+
+def check_path(path: str, where: str) -> list[str]:
+    """An explicit port path must be absolute, plain, and a stable name rather than a kernel tty node."""
+    errs: list[str] = []
+    if not path.startswith("/dev/") or path.endswith("/") or ".." in path.split("/") or re.search(r"[\s*?\[\]]", path):
+        errs.append(f"{where} must be an absolute /dev/... path with no wildcard or '..'")
+    elif RAW_TTY_RE.match(path):
+        errs.append(
+            f"{where} {path} is a kernel tty node that changes between plugs; use a udev symlink "
+            "such as /dev/bench/<name> or a /dev/serial/by-id entry"
+        )
+    return errs
+
+
+def check_selector(sel: Selector) -> list[str]:
+    errs: list[str] = []
+    n = sum(x is not None for x in (sel.by_id, sel.path)) + (1 if sel.vid is not None or sel.pid is not None else 0)
+    if n == 0 or (sel.vid is None) != (sel.pid is None):
+        errs.append(
+            "device.select needs exactly one of path, by_id, or vid and pid (a raw /dev/ttyUSB0 path is not a stable id)"
+        )
+    elif n > 1:
+        errs.append("device.select takes only one of path, by_id, or vid and pid")
+    if sel.usb_serial is not None and sel.vid is None:
+        errs.append("device.select.usb_serial needs vid and pid")
+    if sel.by_id is not None and "/" in sel.by_id:
+        errs.append("device.select.by_id is a name from /dev/serial/by-id, not a path")
+    if sel.by_id == "*":
+        errs.append("device.select.by_id '*' matches any device; name the one you mean")
+    if sel.path is not None:
+        errs.extend(check_path(sel.path, "device.select.path"))
+    return errs
+
+
 def parse(raw: dict[str, Any]) -> Config:
     errs: list[str] = []
     _check_unknown(raw, {"device", "mqtt", "downlink", "queues", "health", "log"}, "", errs)
@@ -138,19 +179,15 @@ def parse(raw: dict[str, Any]) -> Config:
         errs.append("device.mode must be 'companion' or 'console' (it is never auto-detected)")
     baud = _get(dev, "baud", int, 115200, errs, "device")
     sel = dev.get("select", {})
-    _check_unknown(sel, {"by_id", "vid", "pid", "usb_serial"}, "device.select", errs)
+    _check_unknown(sel, {"by_id", "path", "vid", "pid", "usb_serial"}, "device.select", errs)
     selector = Selector(
         by_id=_get(sel, "by_id", str, None, errs, "device.select"),
+        path=_get(sel, "path", str, None, errs, "device.select"),
         vid=_get(sel, "vid", int, None, errs, "device.select"),
         pid=_get(sel, "pid", int, None, errs, "device.select"),
         usb_serial=_get(sel, "usb_serial", str, None, errs, "device.select"),
     )
-    if selector.by_id is None and (selector.vid is None or selector.pid is None):
-        errs.append("device.select needs by_id, or vid and pid (a raw /dev/ttyUSB0 path is not a stable id)")
-    if selector.by_id is not None and "/" in selector.by_id:
-        errs.append("device.select.by_id is a name from /dev/serial/by-id, not a path")
-    if selector.by_id == "*":
-        errs.append("device.select.by_id '*' matches any device; name the one you mean")
+    errs.extend(check_selector(selector))
     stall_s = float(_get(dev, "stall_s", (int, float), 2.0, errs, "device"))
     default_max = CONSOLE_MAX_LINE - len(CONSOLE_PREFIX) if mode == "console" else 1536
     max_down = _get(dev, "max_downlink_bytes", int, default_max, errs, "device")
@@ -178,15 +215,17 @@ def parse(raw: dict[str, Any]) -> Config:
     elif root.startswith("$"):
         errs.append("mqtt.topic_root must not start with $")
     topics = m.get("topics", {})
-    _check_unknown(topics, {"up", "down", "status"}, "mqtt.topics", errs)
+    _check_unknown(topics, {"resp", "ev", "req", "status"}, "mqtt.topics", errs)
     names = {}
-    for key, default in (("up", "up"), ("down", "down"), ("status", "connector/status")):
+    for key, default in (("resp", "resp"), ("ev", "ev"), ("req", "req"), ("status", "status")):
         n = _get(topics, key, str, default, errs, "mqtt.topics")
         if not TOPIC_NAME_RE.match(n):
             errs.append(f"mqtt.topics.{key} is not a plain topic suffix")
         names[key] = n
-    if len(set(names.values())) != 3:
-        errs.append("mqtt.topics up, down and status must differ")
+    if len(set(names.values())) != 4:
+        errs.append("mqtt.topics resp, ev, req and status must differ")
+    elif any(a != b and (a.startswith(b + "/") or b.startswith(a + "/")) for a in names.values() for b in names.values()):
+        errs.append("mqtt.topics must not be below one another (ev is a prefix for event names)")
     qos = _get(m, "upstream_qos", int, 1, errs, "mqtt")
     if qos not in (0, 1):
         errs.append("mqtt.upstream_qos must be 0 or 1 (QoS 2 is not used)")
@@ -248,7 +287,8 @@ def parse(raw: dict[str, Any]) -> Config:
             )
         )
     mqtt = MqttConfig(
-        client_id, root, f"{root}/{names['up']}", f"{root}/{names['down']}", f"{root}/{names['status']}",
+        client_id, root, f"{root}/{names['resp']}", f"{root}/{names['ev']}", f"{root}/{names['req']}",
+        f"{root}/{names['status']}",
         qos, keepalive, tuple(brokers), ctimeout, base, bmax, jitter, stable, hold,
     )
 

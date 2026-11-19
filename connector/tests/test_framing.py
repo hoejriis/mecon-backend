@@ -209,3 +209,13 @@ def test_encode_console_line_limits():
     assert encode_console_line(b"{}") == b"mecon> {}\r"
     with pytest.raises(FrameEncodeError):
         encode_console_line(b"x" * (CONSOLE_MAX_LINE - 6))
+
+
+def test_assembler_keeps_trailing_nul_cr_lf_and_high_bytes():
+    # The bridge now routes only JSON envelopes, so the codec's byte transparency is checked here, directly.
+    for tail in (b"\x00", b"\x00\x00\x00", b"\r\n", b" ", b"\xff\x00", b"\x7f"):
+        for body_len in (1, 168 - len(tail), 169, 400):
+            msg = b"A" * body_len + tail
+            a = MeconAssembler()
+            got = [a.feed(f, 0.0) for f in encode_mecon_frames(7, msg)]
+            assert got[-1] == msg

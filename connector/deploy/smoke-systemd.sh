@@ -103,7 +103,7 @@ awk -v a="$START" -v b="$END" 'BEGIN { printf "stop took %.2f s\n", b - a }'
 check "stop was clean (result success, exit 0)" test "$(systemctl show -p Result --value mecon-connector)" = success -a "$(systemctl show -p ExecMainStatus --value mecon-connector)" = 0
 check "stop took under 5 s (TimeoutStopSec is 15)" awk -v a="$START" -v b="$END" 'BEGIN { exit !((b - a) < 5) }'
 check "the retained status says offline" \
-  bash -c "mosquitto_sub -h 127.0.0.1 -p $PORT -t smoke/systemd/connector/status -C 1 -W 5 | grep -qF '\"connector\":\"offline\"'"
+  bash -c "mosquitto_sub -h 127.0.0.1 -p $PORT -t smoke/systemd/status -C 1 -W 5 | grep -qxF '{\"online\":false}'"
 
 if [ "$FAILS" -ne 0 ]; then journalctl -u mecon-connector --no-pager | tail -30 || true; echo "$FAILS check(s) failed" >&2; exit 1; fi
 echo "all systemd checks passed"

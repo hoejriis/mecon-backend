@@ -155,6 +155,15 @@ test.describe('signed-in test users', () => {
     } else {
       await expect(page.getByText('Observer positions only')).toBeVisible();
       expect(calls.every((c) => c.endsWith('?scope=self')), 'every observation request is scope=self').toBe(true);
+      // When the Backend serves located observers, the Map draws them (counts only, no positions logged).
+      const listed = (await (await a.get('/api/observations/v1/authorized/observers?scope=self&limit=200')).json()) as {
+        items: Array<{ location: unknown }>;
+      };
+      const located = listed.items.filter((o) => o.location).length;
+      test.info().annotations.push({ type: 'located-observers', description: String(located) });
+      if (located > 0) {
+        await expect.poll(() => page.locator('svg.obs-map .obs-pin').count(), { message: 'located observers become pins', timeout: 15_000 }).toBeGreaterThan(0);
+      }
       // Located-only pins, and no route geometry of any kind.
       const pins = await page.locator('svg.obs-map .obs-pin').count();
       const rows = await page.locator('.obs-row').count();

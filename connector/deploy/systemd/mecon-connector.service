@@ -35,7 +35,9 @@ TimeoutStopSec=15
 Restart=on-failure
 RestartSec=10
 # Exit status 2 is a configuration error: restarting would loop forever on the same file.
-RestartPreventExitStatus=2
+# Exit status 3 is a hold that was refused or whose token the Backend rejected (hold transport): an
+# operator must act, and a restart would only repeat it.
+RestartPreventExitStatus=2 3
 
 # Resources, sized for a 512 MB Pi Zero 2 W. The expected resident size is tens of MB.
 MemoryHigh=128M

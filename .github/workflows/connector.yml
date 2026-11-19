@@ -1,10 +1,10 @@
 name: connector
 on:
   pull_request:
-    paths: ['connector/**', 'contracts/connector/**', '.github/workflows/connector.yml']
+    paths: ['connector/**', 'contracts/connector/**', 'contracts/connector-hold/**', '.github/workflows/connector.yml']
   push:
     branches: [main, 'connector/**']
-    paths: ['connector/**', 'contracts/connector/**', '.github/workflows/connector.yml']
+    paths: ['connector/**', 'contracts/connector/**', 'contracts/connector-hold/**', '.github/workflows/connector.yml']
 permissions:
   contents: read
 concurrency:
@@ -43,6 +43,8 @@ jobs:
         run: |
           python scripts/gen_fixtures.py
           git diff --exit-code -- ../contracts/connector/v1/fixtures
+      - name: Hold fixtures are in sync with their generator
+        run: python scripts/gen_hold_fixtures.py --check
       - uses: actions/upload-artifact@v4
         if: always()
         with:

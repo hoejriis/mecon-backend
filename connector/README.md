@@ -1,20 +1,21 @@
 # MECON USB Connector
 
-A small headless service that carries messages between a MECON public-firmware radio on a USB serial port and an MQTT broker. It is transport only.
+A small headless service that carries messages between a MECON public-firmware radio on a USB serial port and a Backend, over one of two transports. It is transport only.
 
 ```
-USB radio  <-- serial framing -->  Connector  <-- MQTT 3.1.1 / TLS -->  broker  <-->  Backend
+USB radio  <-- serial framing -->  Connector  <-- MQTT 3.1.1 / TLS -->  broker  <-->  Backend      (transport = "mqtt", the default)
+USB radio  <-- serial framing -->  Connector  <-- WebSocket / TLS ---------------->  Backend      (transport = "hold", recommended for a standing Connector)
 ```
 
 **What it does not do.** It never mints or substitutes identity, holds keys, decrypts or rewrites a payload, fabricates an acknowledgement, or chooses a device or identity. It reads an uplink message only for its `id`, `ev`, `epoch` and `usig` members (the topic to publish to, and the enrolment gate). A device-signed envelope leaves exactly as it arrived. MQTT accepting a message is not RF delivery and not Backend processing, and the Connector never reports it as either.
 
-**Status: stages C0, C1 and the packaging of C2 of the [implementation design](../docs/USB_CONNECTOR_IMPLEMENTATION_DESIGN.md), and the preparation of C3 (Backend topic mapping, explicit port selection, a bench harness).** It passes its unit tests, fake-device tests and a real-mosquitto integration test; the install scripts run in a Debian container and the unit under real systemd on a CI VM. It has not been run on a real device, a Pi, or against the Backend. See [What is not verified](#what-is-not-verified).
+**Status: stages C0, C1 and the packaging of C2 of the [implementation design](../docs/USB_CONNECTOR_IMPLEMENTATION_DESIGN.md), and the preparation of C3 (Backend topic mapping, explicit port selection, a bench harness).** A second transport, the WebSocket hold, is implemented against its contract and a fake Backend endpoint (see [Hold transport](#hold-transport-recommended-for-a-standing-connector)). It passes its unit tests, fake-device tests and a real-mosquitto integration test; the install scripts run in a Debian container and the unit under real systemd on a CI VM. It has not been run on a real device, a Pi, or against a live Backend. See [What is not verified](#what-is-not-verified).
 
-The wire contract (frames, topics, QoS, retry rules, metrics) is in [`contracts/connector/v1`](../contracts/connector/v1/README.md). The topic and ACL mapping is the Backend's (relayed for stage C3); it has not yet run against a real device or Backend.
+The MQTT wire contract (frames, topics, QoS, retry rules, metrics) is in [`contracts/connector/v1`](../contracts/connector/v1/README.md); the hold's is in [`contracts/connector-hold/v1`](../contracts/connector-hold/v1/README.md). The topic and ACL mapping is the Backend's (relayed for stage C3); it has not yet run against a real device or Backend.
 
 ## Language and runtime
 
-Python 3.11 or newer, two pinned dependencies (`paho-mqtt`, `pyserial`), both pure Python. The design document names no language. Python was chosen for a 512 MB Pi Zero 2 W because:
+Python 3.11 or newer, three pinned dependencies (`paho-mqtt` for the MQTT transport, `websockets` for the hold, `pyserial`), all used in their pure-Python form. The design document names no language. Python was chosen for a 512 MB Pi Zero 2 W because:
 
 - it needs no native build or prebuilt binary on arm64 or 32-bit arm (`serialport` for Node ships native code per platform);
 - the whole service is one process of a few MB plus the interpreter, with a single-threaded bridge loop plus the MQTT library's network thread;
@@ -60,12 +61,68 @@ One TOML file, validated at start. Every problem is listed and the process exits
 | `*.password_file` | A file read when connecting. The value is never in the config, the logs or the metrics. Mode 600. A file that cannot be read at startup is a configuration error: one line naming the path, exit status 2. `--check-config` does the same for a file that exists but cannot be read; for an absent file it only prints a note, because installers and CI run it where a systemd or container credential is not yet present. One that becomes unreadable later is a failed connect attempt (counted as `auth`, logged, retried after the long auth back-off), never a crash. |
 | `downlink.gate` | Optional timings for the enrolment gate (below). There is no switch to turn downlink on: it opens only for an enrolled device. |
 
-## The enrolment gate
+## Hold transport (recommended for a standing Connector)
+
+A Connector can hold its device over a Backend's WebSocket instead of an MQTT broker. This is the same hold a browser app uses to carry a device it has attached, specified as a public contract in [`contracts/connector-hold/v1`](../contracts/connector-hold/v1/README.md) so any Backend can offer it. It needs one thing from the Backend: a long-lived, device-scoped, revocable **connector token**. No broker, no broker account and no broker password sit on the Connector host. MQTT stays as the other transport: `transport = "mqtt"` is the default and nothing in that mode changes.
+
+**Status: implemented against the contract and a fake Backend endpoint** (a real WebSocket on loopback, with the fake serial device). It has not been run against a live Backend or a real device yet.
+
+```toml
+transport = "hold"
+
+[device]
+mode = "companion"
+select = { by_id = "usb-REPLACE_WITH_YOUR_DEVICE_ID-*" }
+
+[hold]
+base_url = "https://backend.example.invalid"
+token_file = "/run/credentials/mecon-connector.service/hold-token"
+```
+
+[`deploy/config.hold.example.toml`](deploy/config.hold.example.toml) is the annotated file. With systemd the token is handed to the service as a credential, exactly like the broker password in MQTT mode. Install the drop-in [`deploy/systemd/mecon-connector-hold.conf.example`](deploy/systemd/mecon-connector-hold.conf.example), which clears the packaged unit's broker-password credential and loads the token instead:
+
+```sh
+sudo install -m 0600 -o root -g root /dev/null /etc/mecon-connector/credentials/hold-token
+sudoedit /etc/mecon-connector/credentials/hold-token    # the token and nothing else; check the mode is still 0600
+sudo install -D -m 0644 deploy/systemd/mecon-connector-hold.conf.example /etc/systemd/system/mecon-connector.service.d/hold.conf
+sudo install -m 0640 -o root -g mecon-connector deploy/config.hold.example.toml /etc/mecon-connector/config.toml   # then edit it
+sudo -u mecon-connector /opt/mecon-connector/bin/mecon-connector --check-config --config /etc/mecon-connector/config.toml
+sudo systemctl daemon-reload && sudo systemctl enable --now mecon-connector
+```
+
+(`install.sh --enable` is for the MQTT transport: it requires a broker password. For a hold, install without `--enable`, then do the steps above.)
+
+| Setting | Rule |
+| --- | --- |
+| `transport` | `mqtt` (default) or `hold`. A `[hold]` table needs `transport = "hold"`, and `[mqtt]` is refused with it, so nothing is silently ignored. |
+| `hold.base_url` | Required. `https://host[:port][/prefix]` (or `wss://`); the Connector adds `/gateway/ws`. No credentials, query or fragment. Plain `http://` or `ws://` is refused unless `insecure_allow_plain = true` (loopback or a closed test LAN only); that flag is meaningless with TLS and refused there. TLS verifies the peer and host name; `ca_file` names a private CA. |
+| `hold.token_file` | Required, an absolute path. Read each time a connection starts; the value is never in the config, the logs, the metrics, an exception text or the URL. Refused when any user can read it (mode bit `o+r`); group access is allowed so a root-owned 0640 file works, and a systemd credential is 0400. An unreadable file at startup is a configuration error (exit 2; `--check-config` only notes an absent one). One that becomes unreadable later is a failed attempt, retried on the backoff. |
+| `hold.token_presentation` | `header` (default): `Authorization: Bearer <token>`. `subprotocol`: offers `mecon-bridge` and `bearer.<token>`, for a path where a proxy strips the header. The token is never put in the query string. |
+| `hold.request_timeout_s` | 15 (2-30). How long one relayed request may wait for the device before it is abandoned. |
+| `hold.ping_interval_s` | 20 (0 or 5-120). WebSocket control pings, so a dead path is noticed. |
+| `hold.connect_timeout_s` | 10 (1-60). |
+
+**What it does.**
+
+- It opens the socket only when the device link is up, the device has answered the Connector's own unsigned `hello`, and the enrolment gate (below) is open. Right after every connect it sends `iface_relay`, then `iface_hello` carrying the hello result object. The hello is read again after a device reboot and sent again.
+- It relays each `iface_req` `wire` to the device byte for byte in the active framing (`0x7F` frames of at most 168 bytes for a Companion, up to 4,096 bytes; for a console one bare CR per link, then `mecon> ` + wire + CR, no CR or LF in the wire). The wire is never parsed, re-serialised, signed or given an `auth`.
+- **One request at a time**, with a wait for the device (15 s) and then it is abandoned, never written again. A request that arrives while another is in flight waits in a short queue (at most `queues.downlink_max_messages`, each at most `queues.downlink_ttl_s`), and is dropped and counted if it waits too long; the Backend resends. A request whose `id` is already in flight is ignored.
+- A device message that answers a relayed `id` goes up as `iface_result`, and an event as `iface_event` with `stream` = its `ev`, both with the device's exact text. An `ev` that does not match `^[a-z][a-z_]{0,31}$`, or is `result`, is dropped and counted. The Connector's own `hello` and `deployment.get` and their answers are consumed, never uploaded. Nothing is queued while the socket is down: the message is dropped and counted.
+- `iface_ack` outcomes are counted. An outcome starting `refused` means the Backend recorded nothing: counted and never resent. `duplicate` is success.
+- **Reconnect** on 1, 2, 4, 8, then 15 s, and `iface_relay` again each time. The hold is closed with 1000 when the device link drops and when the Connector stops.
+- **A stop is not a retry.** A `refused` frame (another agent holds the device, or the token was revoked) and a close 1008 or an HTTP 401 or 403 on the handshake without one (a token the Backend does not accept) stop the hold. The Connector logs the reason, reports it in `/healthz` (`"hold": "stopped"`, `hold_stop`, `hold_stop_detail`) and exits with status **3**, which the unit lists in `RestartPreventExitStatus` so systemd does not loop on it. The operator fixes the cause (a second agent, a revoked or mistyped token) and restarts the service.
+- Frames of unknown type, invalid JSON and binary frames from the Backend are ignored and counted; the socket stays open.
+
+**The enrolment gate in hold mode.** The gate is kept, with the same meaning: relayed requests are written to the device only while the device answers `deployment.get` with `provisioned`; it closes at once on the first uplink interface message without `usig`, on a new epoch, and when the link is lost; closed means requests are refused and counted, never held. Two things differ because a hold is one socket and not a topic: the socket is not opened until the gate has opened, and a gate that stays closed after the device has answered "not enrolled" (or has not answered) releases the hold with 1000 so the Backend routes elsewhere; a gate that is only re-asking (after an unsigned message or a new epoch) keeps the socket. The Backend signing its requests does not make the gate redundant: a signature protects a request in transit from the Backend, not the device from an unsigned first-provisioning or reset message arriving over the cable, and the Connector cannot tell either from the other without reading `wire`, which it never does. The gate also keeps the transports behaving alike. First enrolment of a device stays a hand-on-cable act.
+
+**Exit status.** 0 a clean stop; 2 a configuration error; 3 a stopped hold. Hold-specific metrics (all under `mecon_connector_`): `hold_connected`, `hold_stopped`, `hold_connect_attempts_total{result}`, `hold_disconnects_total`, `hold_relay_declared_total`, `hold_uploads_total{kind}`, `hold_acks_total{outcome}`, `hold_request_timeouts_total`, `hold_frames_ignored_total{reason}`, `hold_hello_total{result}`, beside the serial, gate and `downlink_*` counters it shares with the MQTT transport (`downlink_*` there means requests relayed to the device). Hold mode has no broker series. `ready` in `/healthz` means the serial port is open and the hold is connected.
+
+## The enrolment gate (MQTT transport)
 
 The firmware treats a USB cable caller as local, and a device with no Deployment record accepts unsigned requests from it, including first provisioning and resets. Anything the Connector wrote from the broker would arrive as that caller. So broker messages reach the device **only while the device itself says it is enrolled**; an unenrolled device gets uplink only. The state is never taken from configuration.
 
 - **How it asks.** The Connector sends the device `{"v":1,"id":"cg-<n>","op":"deployment.get"}`, an unsigned read, in the active framing (`0x7F` frames in `companion` mode, one `mecon> ` line in `console` mode). Downlink opens only when the answer is `status` `ok` with `result.state` `"provisioned"`. `none`, `corrupt`, a `refused`, an answer that does not parse, no answer within 8 s, or anything else means closed.
-- **When.** When the serial port opens, when a broker session is (re)established, on a new `epoch` (a reboot), every 10 minutes while open, and every 30 s while closed. The two intervals and the timeout are `downlink.gate` settings with bounds.
+- **When.** When the serial port opens, when a broker session is (re)established, on a new `epoch` (a reboot), every 10 minutes while open, and every 30 s while closed. The two intervals and the timeout are `downlink.gate` settings with bounds (they apply to the hold transport too).
 - **Close at once.** While a record exists, every interface event and result carries `usig`. The first uplink interface message without it closes downlink immediately (that is what follows a `deployment.reset`), the message is still forwarded unchanged, and downlink reopens only after a fresh `deployment.get` says `provisioned`.
 - **What it reads.** Only its own reply (matched by the reserved id prefix `cg-`), whether a top-level `usig` member is present, and an epoch (`epoch`, `result.epoch` or `usig_boot`). Uplink is never altered and always forwarded, except the device's answer to the Connector's own request, which is the Connector's traffic: neither the request nor its answer is published upstream.
 - **While closed,** broker messages are dropped and counted (`downlink_closed_total`), never held and never replayed after the gate reopens.
@@ -78,7 +135,7 @@ The firmware treats a USB cable caller as local, and a device with no Deployment
 Serial to broker:
 
 - `companion` mode reads the `>` wrapper (marker, 16-bit length, at most 176 bytes), resynchronises on garbage, refuses an oversize length at once, and reassembles `0x7F` interface frames (up to 25 frames, 4096 bytes) into one message. Native Companion frames are counted and not forwarded.
-- `console` mode reads `mecon> {` lines (at most 1600 bytes with the prefix, CR or LF terminated) and skips echo and log lines without buffering them.
+- `console` mode reads `mecon> {` lines (at most 1600 bytes of message after the prefix, so 1607 with it, CR or LF terminated) and skips echo and log lines without buffering them.
 - Each complete message becomes one MQTT publish of exactly those bytes, QoS 1 (configurable to 0), not retained. The Connector parses the message only to choose the **topic**: an `ev` member that is a safe name (`A-Za-z0-9_-`, 1 to 32 characters) goes to `<root>/ev/<ev>`; otherwise an `id` that is a non-empty string or an integer goes to `<root>/resp`. A message with neither (or an unsafe `ev`, never falling back to `resp`) has no route and is dropped and counted (`upstream_dropped_total{reason="unroutable"}`). The bytes are never altered, re-serialised or signed: the device's own `usig` signature must still verify at the Backend.
 
 Broker to serial (only while the gate is open): each message on `<root>/req` is wrapped (`0x7F` frames in `<` wrappers, or one `mecon> ` line) and written once. Retained messages are refused. An empty, oversize or (console) line-breaking message is dropped and counted, never rewritten.
@@ -232,9 +289,12 @@ python scripts/gen_fixtures.py      # regenerates contracts/connector/v1/fixture
 - `tests/test_integration_mosquitto.py` runs the real bridge and the real MQTT client against mosquitto: round trip, retained status, last will after a dropped connection, broker restart without duplicates, failover, return to a recovered primary (probe first, no reconnect of the backup session while the primary is down), TLS and password, and fail-closed on a wrong CA or password.
 - `tests/test_contract_matches_code.py` fails when the code and `mapping.json` disagree (metrics, limits, defaults, topic templates).
 - `tests/test_routing_and_port.py` covers routing, the status payload and will, the ACL-shaped topic set, and explicit port selection; `tests/test_c3_harness.py` the stand-in's refusal to publish anything but two read requests and the observer's no-content rule. The C3 bench harness is described in [`scripts/c3_bench.md`](scripts/c3_bench.md); `sh scripts/c3_fake_e2e.sh` runs it end to end with the fake device.
-- The mutation script breaks 60 rules (payload altered, in-doubt publish re-queued, a command written again after a reconnect, unbounded buffering, a duplicate publish on a repeated frame, silent drops and others) and requires a test failure for each.
+- `tests/test_hold.py` runs the hold transport against a fake Backend endpoint (a real WebSocket on loopback) and the fake serial device, one test per conformance item of the hold contract plus the token canary, the gate and the stop rules; `tests/test_hold_main.py` the hold configuration, exit status 3, `/healthz` and the unit's restart rule; `tests/test_hold_contract_fixtures.py` replays fixtures A-E of `contracts/connector-hold/v1` through the real bridge. `python3 scripts/gen_hold_fixtures.py --check` fails if the fixture files drift from the generator.
+- The mutation script breaks the transport and packaging rules and the hold's rules (`h1`-`h34`: the wire re-serialised, no `iface_relay` after a reconnect, a retry after `refused`, the token in a log line, the Connector's own probe answer uploaded, a second request before the first is answered, and others) and requires a test failure for each. The MQTT part breaks 60 rules (payload altered, in-doubt publish re-queued, a command written again after a reconnect, unbounded buffering, a duplicate publish on a repeated frame, silent drops and others) and requires a test failure for each.
 
 ## What is not verified
+
+- The hold transport has run only against the contract's fixtures and an in-process fake endpoint (a real WebSocket on loopback, plain and with a synthetic CA) and the fake serial device. Not verified: any live Backend (the connector token kind, `iface_ack` outcomes and the exact `iface_hello` object a real Backend wants), a real device over the hold, how a real Backend or intermediary surfaces a rejected token (an HTTP 401 or 403, or a 1008 close; both stop the hold), idle timeouts through a real proxy,.
 
 - Nothing has run with a real USB radio. Not verified: that a Companion's USB accepts `0x7F` frames on every build and before the app handshake, that boot text never precedes frames, that opening the port does not reset the board (an ESP32-S3 may reset on open, an nRF52 bridge may need DTR), and that 115200 baud is right for every board.
 - Nothing has run against the Backend or its broker policy. The topic and ACL mapping is the Backend's as relayed by its coder on 2026-11-19; the Connector's routing (`id` to `resp`, `ev` to `ev/<ev>`) rests on the `ev` and `id` members that mapping names, and the real firmware's member names for responses and events are unverified until the C3 hardware run (the harness reports unroutable counts). Whether the Backend tolerates the status payload's `online` member alone, and a login with exactly the ACL in the contract, are unverified. The enrolment gate has run only against a fake device that models `deployment.get`, `epoch` and `usig` from the firmware docs; the real answers, the exact place of `epoch` in them, and whether an enrolled device accepts any unsigned read that returns data the Backend alone should see are unverified. Q4 in the contract is open (answered by the C3 hardware run); Q6 is answered.

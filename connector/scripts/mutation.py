@@ -149,11 +149,101 @@ MUTANTS = [
       ('        self._close_gate("serial_lost", now)\n', "")]),
 ]
 
+# Mutants of the WebSocket hold transport (hold.py, hold_transport.py, the hold config and exit status). They can
+# only change what the hold tests cover, so each runs just those files.
+HOLD_TESTS = ["tests/test_hold.py", "tests/test_hold_main.py", "tests/test_hold_contract_fixtures.py", "tests/test_hold_tls.py"]
+HOLD_MUTANTS = [
+    ("h1", "the wire is re-serialised before it reaches the device", "hold.py",
+     [("if self._write_request(r.wire, now):", "if self._write_request(json.dumps(json.loads(r.wire)).encode(), now):")]),
+    ("h1b", "the wire is stripped before it reaches the device", "hold.py",
+     [("if self._write_request(r.wire, now):", "if self._write_request(r.wire.strip(), now):")]),
+    ("h2", "no iface_relay after a reconnect", "hold.py",
+     [('        if self._send({"type": "iface_relay"}):\n', '        if self.m.get("hold_connect_attempts_total", "ok") <= 1 and self._send({"type": "iface_relay"}):\n')]),
+    ("h3", "the agent reconnects after refused", "hold.py",
+     [('            self._stop_hold("refused", self._refused)  # never a takeover, never a retry', "            pass"),
+      ("        if self._refused is not None:\n            self._end_session()", "        if False:\n            self._end_session()"),
+      ("        elif code == 1008:", "        elif code == 1008 and self._refused is None:")]),
+    ("h4", "a rejected token (close 1008, or a 401/403 handshake) is retried", "hold.py",
+     [('        if kind == "bad_token":\n            self._stop_hold', '        if False:\n            self._stop_hold'),
+      ("        elif code == 1008:", "        elif False:")]),
+    ("h4b", "an HTTP 403 on the upgrade is retried", "hold_transport.py",
+     [('"bad_token" if e.response.status_code in (401, 403) else "http"', '"http"')]),
+    ("h35", "the console wire bound is 1,593 again (prefix counted inside 1,600)", "framing.py",
+     [("CONSOLE_MAX_WIRE = 1600  #", "CONSOLE_MAX_WIRE = 1593  #")]),
+    ("h5", "the token appears in a log line", "hold_transport.py",
+     [("        threading.Thread(target=self._run, args=(session, token)", '        __import__("sys").stderr.write("hold connect with " + token + "\\n")\n        threading.Thread(target=self._run, args=(session, token)')]),
+    ("h6", "the Connector's own probe answer is uploaded", "hold.py",
+     [("never uploaded\n            return", 'never uploaded\n            self._upload_text(payload, "iface_result", "result", {})\n            return')]),
+    ("h7", "a second request is sent before the first is answered", "hold.py",
+     [("            if now < s.deadline:\n                return", "            if now < s.deadline:\n                self._dispatch_relay(now)\n                return")]),
+    ("h8", "a request is never abandoned (no device wait)", "hold.py",
+     [('self._slot = _Slot("relay", r.id, now + self.hc.request_timeout_s)', 'self._slot = _Slot("relay", r.id, now + 1e9)')]),
+    ("h9", "a duplicate id in flight is not ignored", "hold.py",
+     [("        elif (self._slot is not None and self._slot.kind == \"relay\" and self._slot.id == rid) or any(\n            q.id == rid for q in self._queue\n        ):", "        elif False:")]),
+    ("h10", "a refused acknowledgement makes the agent send the same frame again", "hold.py",
+     [('        if not self._send({"type": typ, "ref": self._ref, **extra}):', '        self._last = {"type": typ, "ref": self._ref, **extra}\n        if not self._send({"type": typ, "ref": self._ref, **extra}):'),
+      ('self.log.warn("hold_ack_refused", of=of, outcome=outcome)', 'self.log.warn("hold_ack_refused", of=of, outcome=outcome)\n            self._send(self._last)')]),
+    ("h11", "a duplicate acknowledgement is not told from an accepted one", "hold.py",
+     [('        elif outcome == "duplicate":', "        elif False:")]),
+    ("h12", "an event whose stream is `result` is forwarded", "hold.py",
+     [('STREAM_RE.match(name) and name != "result":', "STREAM_RE.match(name):")]),
+    ("h12b", "any event name is forwarded as a stream", "hold.py",
+     [('isinstance(name, str) and STREAM_RE.match(name) and name != "result":', 'isinstance(name, str) and name != "result":')]),
+    ("h13", "the socket stays open when the device link drops", "hold.py",
+     [('        self._close_hold("device_link_lost")\n        self._close_gate("serial_lost", now)', '        self._close_gate("serial_lost", now)'),
+      ("            if not keep:\n                self._close_hold", "            if False:\n                self._close_hold")]),
+    ("h14", "the socket opens without a device link, a hello or an open gate", "hold.py",
+     [("        want = keep and self._gate_open", "        want = True")]),
+    ("h15", "the hold is closed with a code other than 1000 on stop", "hold.py",
+     [('        self._stopped = True\n        self.transport.close(1000, "stopped")', '        self._stopped = True\n        self.transport.close(1001, "stopped")')]),
+    ("h16", "the console's bare CR is written before every request", "hold.py",
+     [('if self.cfg.device.mode == "console" and not self._console_primed:', 'if self.cfg.device.mode == "console":')]),
+    ("h16b", "the console's bare CR is never written", "hold.py",
+     [('if self.cfg.device.mode == "console" and not self._console_primed:', 'if False:')]),
+    ("h17", "a console wire with CR or LF is written", "hold.py",
+     [('elif self.cfg.device.mode == "console" and (b"\\r" in data or b"\\n" in data):', "elif False:")]),
+    ("h18", "an over-long wire is written", "hold.py",
+     [("        elif len(data) > self._max_wire:", "        elif False:")]),
+    ("h19", "an unsigned uplink message does not close the gate", "hold.py",
+     [('        if self._gate_open and (obj is None or "usig" not in obj):', "        if False:")]),
+    ("h20", "the gate opens on a device with no record", "hold.py",
+     [('        elif state == "provisioned":\n            self.m.inc("downlink_gate_probes_total", 1, "provisioned")', '        elif state in ("provisioned", "none"):\n            self.m.inc("downlink_gate_probes_total", 1, "provisioned")')]),
+    ("h21", "the gate opens when the device does not answer", "hold.py",
+     [('            self._gate_result(False, "probe_failed", now)', '            self._gate_result(True, "", now)')]),
+    ("h22", "the token is sent in the URL query", "hold_transport.py",
+     [("                c.ws_url,\n", '                c.ws_url + "?access_token=" + kw.get("additional_headers", {}).get("Authorization", "x x").split(" ")[1],\n')]),
+    ("h23", "the subprotocol form leaves out mecon-bridge", "hold_transport.py",
+     [('kw["subprotocols"] = [SUBPROTOCOL, f"bearer.{token}"]', 'kw["subprotocols"] = [f"bearer.{token}"]')]),
+    ("h24", "a world-readable token file is accepted", "config.py",
+     [("if os.stat(path).st_mode & 0o004:", "if os.stat(path).st_mode & 0o000:")]),
+    ("h25", "a stopped hold exits 0", "__main__.py",
+     [("        return EXIT_HOLD_STOPPED", "        return 0")]),
+    ("h26", "systemd restarts a hold that was refused (exit status 3)", "../../deploy/systemd/mecon-connector.service",
+     [("RestartPreventExitStatus=2 3", "RestartPreventExitStatus=2")]),
+    ("h27", "an uploaded text is re-serialised", "hold.py",
+     [('            text = payload.decode("utf-8")', '            text = json.dumps(json.loads(payload.decode("utf-8")))')]),
+    ("h28", "iface_hello is not sent after the relay", "hold.py",
+     [("        self._upload_hello()\n\n    def _on_failed", "\n    def _on_failed")]),
+    ("h29", "an unknown frame type closes the socket", "hold.py",
+     [('            self._ignored("unknown_type")  # a Backend may send other types; they are ignored, never a close', '            self._ignored("unknown_type")\n            self.transport.close(1000, "x")')]),
+    ("h30", "the backoff is not 1, 2, 4, 8, 15", "hold.py",
+     [("BACKOFF_S = (1.0, 2.0, 4.0, 8.0, 15.0)", "BACKOFF_S = (1.0, 2.0, 4.0, 8.0, 16.0)")]),
+    ("h31", "the backoff counter is not reset when a socket opens", "hold.py",
+     [("        self._attempt = 0\n        self._refused = None", "        self._refused = None")]),
+    ("h32", "an event is dropped without a count when the hold is down", "hold.py",
+     [('            self.m.inc("upstream_dropped_total", 1, "socket_down")\n            return\n        try:', "            return\n        try:")]),
+    ("h33", "the Backend's refusal text is not shown to the operator", "hold.py",
+     [('            self._refused = reason if isinstance(reason, str) else "refused"', '            self._refused = "refused"')]),
+    ("h34", "a late answer to a request that was not asked is uploaded", "hold.py",
+     [('            else:\n                self.m.inc("upstream_dropped_total", 1, "unmatched")', '            else:\n                self._upload_text(payload, "iface_result", "result", {})')]),
+]
 
-def run_tests():
+
+def run_tests(files=None):
     env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1")
-    p = subprocess.run([sys.executable, "-m", "pytest", "-q", "-x", "-p", "no:cacheprovider", "--deselect",
-                        "tests/test_integration_mosquitto.py"], cwd=ROOT, capture_output=True, text=True, env=env)
+    args = list(files) if files else ["--deselect", "tests/test_integration_mosquitto.py"]
+    p = subprocess.run([sys.executable, "-m", "pytest", "-q", "-x", "-p", "no:cacheprovider", *args],
+                       cwd=ROOT, capture_output=True, text=True, env=env)
     return p.returncode, p.stdout + p.stderr
 
 
@@ -163,7 +253,11 @@ def main():
         print("baseline fails; fix the tests first\n" + out[-2000:])
         return 2
     survivors = []
-    for mid, desc, fname, edits in MUTANTS:
+    only = set(sys.argv[1:])  # optional: run only these mutant ids, for example `h3 h5`
+    todo = [(m, None) for m in MUTANTS] + [(m, HOLD_TESTS) for m in HOLD_MUTANTS]
+    if only:
+        todo = [(m, f) for m, f in todo if m[0] in only]
+    for (mid, desc, fname, edits), files in todo:
         path = SRC / fname
         original = path.read_text()
         try:
@@ -176,7 +270,7 @@ def main():
                 text = text.replace(old, new)
             else:
                 path.write_text(text)
-                rc, out = run_tests()
+                rc, out = run_tests(files)
                 failed = [ln for ln in out.splitlines() if ln.startswith("FAILED")]
                 if rc == 0:
                     survivors.append(mid)
@@ -188,7 +282,8 @@ def main():
             path.write_text(original)
     rc, _ = run_tests()
     print("restored; baseline " + ("passes" if rc == 0 else "FAILS"))
-    print(f"{len(MUTANTS) - len(survivors)} of {len(MUTANTS)} mutants killed")
+    total = len(todo)
+    print(f"{total - len(survivors)} of {total} mutants killed ({len(MUTANTS)} transport and packaging, {len(HOLD_MUTANTS)} hold)")
     return 1 if survivors or rc != 0 else 0
 
 

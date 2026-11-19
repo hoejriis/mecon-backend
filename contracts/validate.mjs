@@ -6,6 +6,7 @@ import { dirname, join, resolve } from 'node:path';
 import { parse } from 'yaml';
 import Ajv2020 from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
+import { validateHold } from './validate-hold.mjs';
 
 const docs = ['reader-api/v1/openapi.yaml', 'observations/v1/openapi.yaml'];
 // Privacy: no observation fixture or schema may carry these fields (see the contract's description).
@@ -98,5 +99,9 @@ for (const docPath of docs) {
     }
   }
 }
+// The WebSocket hold contract: frame schemas, fixtures A-E, rejected frames, and the README's references.
+const hold = validateHold();
+checked += hold.checked;
+failures += hold.failures;
 console.log(`${checked} fixtures checked, ${failures} failures`);
 process.exit(failures ? 1 : 0);

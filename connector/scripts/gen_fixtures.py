@@ -156,13 +156,13 @@ def sized(total, tag):
     return head + b"y" * (total - 7 - len(head) - len(tail)) + tail
 
 
-at_limit = sized(1600, b"syn-lim")
-assert 7 + len(at_limit) == 1600
-case("console-line-at-limit", "A 1600-byte line (prefix included) is accepted.", "console", [line(at_limit)], [pub(at_limit)],
+at_limit = sized(1607, b"syn-lim")
+assert len(at_limit) == 1600
+case("console-line-at-limit", "A 1600-byte message after the prefix (a 1607-byte line) is accepted.", "console", [line(at_limit)], [pub(at_limit)],
      chunkings=("whole", 7, 500))
-over = sized(1601, b"syn-over")
-assert 7 + len(over) == 1601
-case("console-line-over-limit", "A 1601-byte line is refused without buffering it; the next line is read normally.", "console",
+over = sized(1608, b"syn-over")
+assert len(over) == 1601
+case("console-line-over-limit", "A 1601-byte message after the prefix is refused without buffering it; the next line is read normally.", "console",
      [line(over) + line(C1)], [pub(C1)], {"serial_anomalies_total/console_oversize_line": 1}, chunkings=("whole", 7, 500))
 case("console-unterminated-flood", "A long run with no terminator never grows the buffer; recovery on the next line.", "console",
      [b"mecon> {" + b"z" * 5000 + b"\r" + line(C1)], [pub(C1)], {"serial_anomalies_total/console_oversize_line": 1},

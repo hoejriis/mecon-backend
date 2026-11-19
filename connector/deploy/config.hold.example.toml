@@ -1,0 +1,29 @@
+# MECON USB Connector: configuration for the WebSocket hold transport. Every value is a placeholder.
+# Use with deploy/systemd/mecon-connector-hold.conf.example. Validate after editing:
+#   sudo -u mecon-connector /opt/mecon-connector/bin/mecon-connector --check-config --config /etc/mecon-connector/config.toml
+# No broker, no broker password: the only credential is the device-scoped connector token.
+transport = "hold"
+
+[device]
+mode = "companion"
+baud = 115200
+select = { by_id = "usb-REPLACE_WITH_YOUR_DEVICE_ID-*" }
+
+[hold]
+# The Backend's base URL; the Connector adds /gateway/ws. https (or wss) only: plain http/ws is refused
+# unless insecure_allow_plain = true, which is for loopback or a closed test LAN.
+base_url = "https://backend.example.invalid"
+# systemd places the credential here (LoadCredential= in the drop-in). Create the source file
+# /etc/mecon-connector/credentials/hold-token (root, 0600) holding the token and nothing else.
+token_file = "/run/credentials/mecon-connector.service/hold-token"
+# "header" sends Authorization: Bearer <token> (default). "subprotocol" offers `mecon-bridge` and
+# `bearer.<token>` instead, for a path where a proxy strips the header.
+token_presentation = "header"
+# ca_file = "/etc/mecon-connector/ca.pem"   # only for a Backend behind a private CA
+# request_timeout_s = 15                    # how long one relayed request may wait for the device
+# ping_interval_s = 20                      # WebSocket control pings; 0 turns them off
+
+[health]
+enabled = true
+bind = "127.0.0.1"
+port = 9464

@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mecon:connector-hold:v1:fixtures",
+  "title": "WebSocket hold fixtures (synthetic)",
+  "oneOf": [{ "$ref": "#/$defs/scenario" }, { "$ref": "#/$defs/invalidSet" }],
+  "$defs": {
+    "contract": { "type": "string", "pattern": "^mecon-connector-hold/\\d+\\.\\d+\\.\\d+(-draft\\.\\d+)?$" },
+    "hex": { "type": "string", "pattern": "^([0-9a-f]{2})*$" },
+    "scenario": {
+      "type": "object",
+      "required": ["contract", "synthetic", "id", "title", "description", "link", "steps"],
+      "additionalProperties": false,
+      "properties": {
+        "contract": { "$ref": "#/$defs/contract" },
+        "synthetic": { "const": true },
+        "id": { "enum": ["A", "B", "C", "D", "E"] },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "link": { "enum": ["companion", "console", "none"] },
+        "steps": { "type": "array", "minItems": 1, "items": { "oneOf": [
+          { "$ref": "#/$defs/handshake" }, { "$ref": "#/$defs/send" }, { "$ref": "#/$defs/recv" },
+          { "$ref": "#/$defs/deviceWrite" }, { "$ref": "#/$defs/deviceRead" }, { "$ref": "#/$defs/deviceLine" }, { "$ref": "#/$defs/close" }
+        ] } }
+      }
+    },
+    "handshake": {
+      "type": "object", "required": ["step", "presentation", "offered", "selected"], "additionalProperties": false,
+      "properties": {
+        "step": { "const": "handshake" },
+        "presentation": { "enum": ["header", "subprotocol"] },
+        "offered": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+        "selected": { "type": ["string", "null"] }
+      }
+    },
+    "send": {
+      "type": "object", "required": ["step", "frame"], "additionalProperties": false,
+      "properties": { "step": { "const": "send" }, "frame": { "type": "object", "required": ["type"] } }
+    },
+    "recv": {
+      "type": "object", "required": ["step", "frame"], "additionalProperties": false,
+      "properties": { "step": { "const": "recv" }, "frame": { "type": "object", "required": ["type"] }, "ignored": { "const": true } }
+    },
+    "deviceWrite": {
+      "type": "object", "required": ["step"], "additionalProperties": false,
+      "properties": {
+        "step": { "const": "device_write" },
+        "wire": { "type": "string", "minLength": 1 },
+        "hex": { "$ref": "#/$defs/hex" },
+        "xid": { "type": "integer", "minimum": 0, "maximum": 255 },
+        "frames_hex": { "type": "array", "minItems": 1, "maxItems": 25, "items": { "$ref": "#/$defs/hex" } },
+        "note": { "type": "string" }
+      },
+      "oneOf": [{ "required": ["wire"] }, { "required": ["hex"] }]
+    },
+    "deviceRead": {
+      "type": "object", "required": ["step", "text"], "additionalProperties": false,
+      "properties": { "step": { "const": "device_read" }, "text": { "type": "string", "minLength": 1 }, "not_sent": { "const": true } }
+    },
+    "deviceLine": {
+      "type": "object", "required": ["step", "text", "skipped"], "additionalProperties": false,
+      "properties": { "step": { "const": "device_line" }, "text": { "type": "string" }, "skipped": { "type": "boolean" } }
+    },
+    "close": {
+      "type": "object", "required": ["step", "by", "code"], "additionalProperties": false,
+      "properties": { "step": { "const": "close" }, "by": { "enum": ["agent", "backend"] }, "code": { "type": "integer" }, "reason": { "type": "string" } }
+    },
+    "invalidSet": {
+      "type": "object", "required": ["contract", "synthetic", "id", "title", "description", "cases"], "additionalProperties": false,
+      "properties": {
+        "contract": { "$ref": "#/$defs/contract" }, "synthetic": { "const": true }, "id": { "const": "invalid" },
+        "title": { "type": "string" }, "description": { "type": "string" },
+        "cases": { "type": "array", "minItems": 1, "items": {
+          "type": "object", "required": ["direction", "why", "frame"], "additionalProperties": false,
+          "properties": { "direction": { "enum": ["agent_to_backend", "backend_to_agent"] }, "why": { "type": "string" }, "frame": { "type": "object" } }
+        } }
+      }
+    }
+  }
+}

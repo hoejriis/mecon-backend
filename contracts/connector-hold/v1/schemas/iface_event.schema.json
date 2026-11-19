@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mecon:connector-hold:v1:iface_event",
+  "title": "iface_event (agent to Backend)",
+  "description": "A device event exactly as the device sent it, with its ev value as the stream.",
+  "type": "object",
+  "required": [
+    "type",
+    "ref",
+    "stream",
+    "message"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "type": {
+      "const": "iface_event"
+    },
+    "ref": {
+      "description": "Any JSON value, echoed."
+    },
+    "stream": {
+      "type": "string",
+      "pattern": "^[a-z][a-z_]{0,31}$",
+      "not": {
+        "const": "result"
+      }
+    },
+    "message": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 8192
+    }
+  }
+}

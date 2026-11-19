@@ -1,0 +1,10 @@
+# Drop-in for the hold transport (transport = "hold" in config.toml). Install with:
+#   sudo systemctl edit mecon-connector      (paste this), or
+#   sudo install -D -m 0644 mecon-connector-hold.conf.example /etc/systemd/system/mecon-connector.service.d/hold.conf
+# The packaged unit loads a broker password for the MQTT transport; the first line below clears it so the
+# service starts with no broker credential at all. The second hands the connector token to the service
+# as a systemd credential: a root-owned mode 0600 file that appears only under
+# /run/credentials/mecon-connector.service/ for this service. In config.toml point token_file there.
+[Service]
+LoadCredential=
+LoadCredential=hold-token:/etc/mecon-connector/credentials/hold-token

@@ -4,6 +4,7 @@ import pytest
 
 from mecon_connector.framing import (
     CONSOLE_MAX_LINE,
+    CONSOLE_MAX_WIRE,
     ConsoleLineReader,
     FrameEncodeError,
     MAX_FRAME_SIZE,
@@ -180,8 +181,8 @@ def test_console_every_split_point():
 
 
 def test_console_limit_boundary():
-    ok = b"{" + b"a" * (CONSOLE_MAX_LINE - 7 - 2) + b"}"
-    assert 7 + len(ok) == CONSOLE_MAX_LINE
+    ok = b"{" + b"a" * (CONSOLE_MAX_WIRE - 2) + b"}"
+    assert len(ok) == CONSOLE_MAX_WIRE == 1600 and 7 + len(ok) == CONSOLE_MAX_LINE
     r = ConsoleLineReader()
     assert r.feed(b"mecon> " + ok + b"\r") == [ok]
     r = ConsoleLineReader()
@@ -208,7 +209,7 @@ def test_console_non_interface_line_not_buffered():
 def test_encode_console_line_limits():
     assert encode_console_line(b"{}") == b"mecon> {}\r"
     with pytest.raises(FrameEncodeError):
-        encode_console_line(b"x" * (CONSOLE_MAX_LINE - 6))
+        encode_console_line(b"x" * (CONSOLE_MAX_WIRE + 1))
 
 
 def test_assembler_keeps_trailing_nul_cr_lf_and_high_bytes():

@@ -1,0 +1,93 @@
+{
+  "contract": "mecon-connector-hold/1.0.0-draft.1",
+  "synthetic": true,
+  "id": "D",
+  "title": "The console request and result lines",
+  "description": "A bare CR once per link, then mecon> + wire + CR. The device echoes the prefix (skipped: it does not start with mecon> {) and answers on a line of its own.",
+  "link": "console",
+  "steps": [
+    {
+      "step": "handshake",
+      "presentation": "header",
+      "offered": [
+        "Authorization: Bearer <token>"
+      ],
+      "selected": null
+    },
+    {
+      "step": "send",
+      "frame": {
+        "type": "iface_relay"
+      }
+    },
+    {
+      "step": "send",
+      "frame": {
+        "type": "iface_hello",
+        "ref": 1,
+        "hello": {
+          "epoch": 1,
+          "node_public_key_hex": "<pubkey>"
+        }
+      }
+    },
+    {
+      "step": "recv",
+      "frame": {
+        "type": "iface_ack",
+        "of": "iface_hello",
+        "ref": 1,
+        "outcome": "recorded"
+      }
+    },
+    {
+      "step": "recv",
+      "frame": {
+        "type": "iface_req",
+        "id": "j8",
+        "wire": "{\"mecon_auth\":1,\"issuer\":\"<issuer>\",\"sig\":\"<sig>\",\"body\":\"{\\\"v\\\":1,\\\"id\\\":\\\"j8\\\",\\\"op\\\":\\\"hello\\\"}\"}"
+      }
+    },
+    {
+      "step": "device_write",
+      "hex": "0d",
+      "note": "the bare CR, first request on the link only"
+    },
+    {
+      "step": "device_write",
+      "wire": "{\"mecon_auth\":1,\"issuer\":\"<issuer>\",\"sig\":\"<sig>\",\"body\":\"{\\\"v\\\":1,\\\"id\\\":\\\"j8\\\",\\\"op\\\":\\\"hello\\\"}\"}"
+    },
+    {
+      "step": "device_line",
+      "text": "mecon> ",
+      "skipped": true
+    },
+    {
+      "step": "device_line",
+      "text": "[boot] radio ready",
+      "skipped": true
+    },
+    {
+      "step": "device_line",
+      "text": "mecon> {\"v\":1,\"id\":\"j8\",\"op\":\"hello\",\"status\":\"ok\",\"result\":{},\"usig\":\"<sig>\"}",
+      "skipped": false
+    },
+    {
+      "step": "send",
+      "frame": {
+        "type": "iface_result",
+        "ref": 2,
+        "message": "{\"v\":1,\"id\":\"j8\",\"op\":\"hello\",\"status\":\"ok\",\"result\":{},\"usig\":\"<sig>\"}"
+      }
+    },
+    {
+      "step": "recv",
+      "frame": {
+        "type": "iface_ack",
+        "of": "iface_result",
+        "ref": 2,
+        "outcome": "hello: confirmed"
+      }
+    }
+  ]
+}

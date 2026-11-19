@@ -1,0 +1,28 @@
+{
+  "contract": "mecon-connector-hold/1.0.0-draft.1",
+  "synthetic": true,
+  "id": "C",
+  "title": "Framing a 400-byte wire for a Companion (3 frames)",
+  "description": "Bytes 0..167, 168..335 and 336..399 of the wire become three frames 7F xid index count chunk. xid 05 is an example; any single byte, the same for all three frames.",
+  "link": "companion",
+  "steps": [
+    {
+      "step": "recv",
+      "frame": {
+        "type": "iface_req",
+        "id": "j9",
+        "wire": "{\"mecon_auth\":1,\"issuer\":\"<issuer>\",\"sig\":\"<sig>\",\"body\":\"{\\\"v\\\":1,\\\"id\\\":\\\"j9\\\",\\\"op\\\":\\\"status.get\\\",\\\"pad\\\":\\\"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\"}\"}"
+      }
+    },
+    {
+      "step": "device_write",
+      "wire": "{\"mecon_auth\":1,\"issuer\":\"<issuer>\",\"sig\":\"<sig>\",\"body\":\"{\\\"v\\\":1,\\\"id\\\":\\\"j9\\\",\\\"op\\\":\\\"status.get\\\",\\\"pad\\\":\\\"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\\"}\"}",
+      "xid": 5,
+      "frames_hex": [
+        "7f0500037b226d65636f6e5f61757468223a312c22697373756572223a223c6973737565723e222c22736967223a223c7369673e222c22626f6479223a227b5c22765c223a312c5c2269645c223a5c226a395c222c5c226f705c223a5c227374617475732e6765745c222c5c227061645c223a5c2278787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878",
+        "7f050103787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878",
+        "7f05020378787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878785c227d227d"
+      ]
+    }
+  ]
+}

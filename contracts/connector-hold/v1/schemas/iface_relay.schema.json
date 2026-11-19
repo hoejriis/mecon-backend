@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mecon:connector-hold:v1:iface_relay",
+  "title": "iface_relay (agent to Backend)",
+  "description": "Declares that the agent carries the Backend's v1 requests. Sent after every connect.",
+  "type": "object",
+  "required": [
+    "type"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "type": {
+      "const": "iface_relay"
+    }
+  }
+}

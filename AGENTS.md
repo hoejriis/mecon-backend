@@ -7,7 +7,7 @@ Human contributor detail lives in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
 
 - `reader/`: the MECON Reader web app (React, TypeScript, Vite).
 - `connector/`: the standalone USB serial-to-MQTT Connector (Python). See `connector/README.md`.
-- `contracts/`: versioned API contracts (OpenAPI; the USB Connector's JSON Schema contract in `contracts/connector/v1`) and synthetic fixtures.
+- `contracts/`: versioned API contracts (OpenAPI; the USB Connector's JSON Schema contract in `contracts/connector/v1`, and the WebSocket hold in `contracts/connector-hold/v1`) and synthetic fixtures.
 - `deploy/`: Caddy config and security headers shared by the container image and static hosts.
 - `docs/`: product, architecture and protocol documentation. `docs/ARCHITECTURE_DECISIONS.md` is the decision register; read it before changing behaviour it covers.
 
@@ -28,7 +28,7 @@ docker build -f reader/Dockerfile .                     # from the repo root
 - **Strict CSP:** no inline scripts or styles (this includes React `style` attributes). Keep `deploy/reader-headers.caddy` and `preview.headers` in `reader/vite.config.ts` in sync.
 - **Truthful UI:** never simulate an unavailable capability or invent data. Show unavailable, forbidden, offline and unknown states as such.
 - **Send safety:** BLE and Backend are separate, explicit send paths. An attempt is sent at most once; an uncertain outcome is `unknown` and is never resent automatically or rerouted. A retry is a new user action with a new attempt id.
-- **Connector transparency:** the Connector forwards device-signed envelopes byte for byte, holds no keys or identity, never fabricates an acknowledgement, and never writes a device command twice, relays broker messages only while the device reports an enrolled Deployment record (fail closed), and never resends a publish whose outcome is unknown. Every drop is counted. Changes to those rules need the mutation check (`python connector/scripts/mutation.py`).
+- **Connector transparency:** the Connector forwards device-signed envelopes byte for byte, holds no keys or identity, never fabricates an acknowledgement, and never writes a device command twice, relays broker messages or hold requests only while the device reports an enrolled Deployment record (fail closed), and never resends a publish whose outcome is unknown. Every drop is counted. Changes to those rules need the mutation check (`python connector/scripts/mutation.py`).
 - **Keys:** the Reader never stores or exports MeshCore private keys.
 - **Map:** show only real observer locations; never infer transmitter positions or RF routes. No pin for a null location, no line or path between observers, no tile provider or third-party script (the CSP forbids it; tiles need a CSP and privacy decision).
 - **Licensing:** Apache-2.0, original code only. Do not copy GPL-licensed client code or protected artwork. Use the official MeshContinuum brand SVGs in `reader/public/brand/` unmodified; never draw a substitute logo.

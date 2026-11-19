@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mecon:connector-hold:v1:iface_req",
+  "title": "iface_req (Backend to agent)",
+  "description": "A v1 request. wire is the exact request text (at most 4096 bytes for a Companion, 1600 for a console); the agent writes its UTF-8 bytes unchanged. Extra members are ignored.",
+  "type": "object",
+  "required": [
+    "type",
+    "id",
+    "wire"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "type": {
+      "const": "iface_req"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[0-9A-Za-z._:-]{1,32}$"
+    },
+    "wire": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    }
+  }
+}

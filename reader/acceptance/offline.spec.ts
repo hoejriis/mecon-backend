@@ -87,7 +87,8 @@ test.describe('offline cache with a Backend lease, signed in as test user A', ()
       const conversations = await first.waitFor({ timeout: 15_000 }).then(() => true, () => false);
       test.skip(!conversations, 'test user A has no conversation to cache (count: 0)');
       await first.click();
-      await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toBeVisible();
+      // The message list, not the composer: with sending off and no device the Reader shows no composer.
+      await expect(page.getByRole('list', { name: 'Messages' })).toBeVisible();
       await page.waitForTimeout(2000); // the cache write is debounced
       await page.evaluate(() => navigator.serviceWorker.ready.then(() => undefined));
 
@@ -104,7 +105,9 @@ test.describe('offline cache with a Backend lease, signed in as test user A', ()
       await expect(leaseLine).toContainText(shown);
       expect(await page.locator('.conv-list button').count(), 'cached conversations').toBeGreaterThan(0);
       await page.locator('.conv-list button').first().click();
-      expect(await page.getByRole('list', { name: 'Cached messages' }).locator('li').count(), 'cached messages').toBeGreaterThan(0);
+      const cachedMsgs = page.getByRole('list', { name: 'Cached messages' }).locator('li');
+      await expect(cachedMsgs.first(), 'a cached message is shown').toBeVisible({ timeout: 10_000 });
+      expect(await cachedMsgs.count(), 'cached messages').toBeGreaterThan(0);
       await expect(page.getByTestId('read-only')).toHaveCount(0); // valid lease
       expect(apiResponsesOffline, 'responses from /api/ while offline').toBe(0);
       test.info().annotations.push({ type: 'api-attempts-offline', description: String(apiAttemptsOffline) });

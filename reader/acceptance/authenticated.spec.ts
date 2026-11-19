@@ -122,14 +122,23 @@ test.describe('signed-in test users', () => {
     await context.addCookies([{ name: COOKIE_NAME, value: A!, url: BASE_URL, secure: true, httpOnly: true }]);
     const page = await context.newPage();
     await page.goto(`/chats/c/${encodeURIComponent(list.items[0]!.id)}`);
+    await expect(page.getByRole('list', { name: 'Messages' })).toBeVisible();
     const sp = page.getByTestId('send-path');
+    if (session.capabilities.send !== 'available') {
+      // Sending off and no device: an honest unavailable state, no composer, no path, no Send button.
+      await expect(page.getByText('Sending is not available')).toBeVisible();
+      await expect(sp).toHaveCount(0);
+      await expect(page.getByRole('radio', { name: /Bluetooth|USB/ })).toHaveCount(0);
+      await expect(page.getByRole('button', { name: 'Send', exact: true })).toHaveCount(0);
+      await context.close();
+      return;
+    }
     await expect(sp.first()).toBeVisible();
     // No radio choice is shown (a choice needs two paths), and neither device path is offered.
     await expect(sp.getByRole('radio')).toHaveCount(0);
     await expect(sp.getByRole('radio', { name: /Bluetooth|USB/ })).toHaveCount(0);
     const text = (await sp.first().innerText()).replace(/\s+/g, ' ');
-    if (session.capabilities.send === 'available') expect(text).toContain('Sent through the Backend');
-    else expect(text).toContain('No send path is available'); // honest: nothing replaces it
+    expect(text).toContain('Sent through the Backend');
     // Nothing is typed or sent: the Send button stays disabled with an empty message.
     await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeDisabled();
     await context.close();

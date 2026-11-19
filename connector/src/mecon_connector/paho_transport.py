@@ -34,36 +34,12 @@ class PahoTransport:
 
     def connect(self, broker: BrokerConfig, will: Will, subscriptions: list[tuple[str, int]]) -> int:
         self.disconnect()
-        pw = None
-        if broker.username and broker.password_file:
-            # Read before any client exists: a credential that became unreadable after startup is a
-            # failed attempt (the bridge counts and logs it), never an exception out of the bridge loop.
-            try:
-                pw = read_secret(broker.password_file)
-            except ConfigError as e:
-                raise TransportError(e.problems[0]) from None
+        c = self._new_client(self._client_id, broker)
         with self._lock:
             self._session += 1
             session = self._session
         self._tls_failed = False
         self._connected = False
-        c = mqtt.Client(
-            mqtt.CallbackAPIVersion.VERSION2,
-            client_id=self._client_id,
-            protocol=mqtt.MQTTv311,
-            clean_session=True,
-        )
-        # No library-side retry: the bridge decides when and where to reconnect.
-        c.reconnect_delay_set(min_delay=3600, max_delay=3600)
-        c.max_inflight_messages_set(64)
-        if broker.username:
-            c.username_pw_set(broker.username, pw)
-        if broker.tls:
-            ctx = ssl.create_default_context(cafile=broker.ca_file)
-            ctx.check_hostname = True
-            ctx.verify_mode = ssl.CERT_REQUIRED
-            ctx.minimum_version = ssl.TLSVersion.TLSv1_2
-            c.tls_set_context(ctx)
         c.will_set(will.topic, will.payload, will.qos, will.retain)
 
         def on_connect(cl, _ud, _flags, rc, _props):  # type: ignore[no-untyped-def]
@@ -107,6 +83,82 @@ class PahoTransport:
         c.loop_start()
         return session
 
+    @staticmethod
+    def _new_client(client_id: str, broker: BrokerConfig) -> mqtt.Client:
+        """A fresh client with the broker's auth and TLS settings. Shared by sessions and probes."""
+        pw = None
+        if broker.username and broker.password_file:
+            # Read before any client exists: a credential that became unreadable after startup is a
+            # failed attempt (the bridge counts and logs it), never an exception out of the bridge loop.
+            try:
+                pw = read_secret(broker.password_file)
+            except ConfigError as e:
+                raise TransportError(e.problems[0]) from None
+        c = mqtt.Client(
+            mqtt.CallbackAPIVersion.VERSION2,
+            client_id=client_id,
+            protocol=mqtt.MQTTv311,
+            clean_session=True,
+        )
+        # No library-side retry: the bridge decides when and where to reconnect.
+        c.reconnect_delay_set(min_delay=3600, max_delay=3600)
+        c.max_inflight_messages_set(64)
+        if broker.username:
+            c.username_pw_set(broker.username, pw)
+        if broker.tls:
+            ctx = ssl.create_default_context(cafile=broker.ca_file)
+            ctx.check_hostname = True
+            ctx.verify_mode = ssl.CERT_REQUIRED
+            ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+            c.tls_set_context(ctx)
+        return c
+
+    def probe(self, broker: BrokerConfig, timeout_s: float) -> ConnectResult:
+        """Can `broker` be reached and does it accept our login? Uses a separate client with its own
+        client id (never the live one: the broker would drop the working session) and a clean
+        session. It sets no will, subscribes to nothing and publishes nothing."""
+        try:
+            c = self._new_client(self._client_id + "-probe", broker)
+        except TransportError:
+            return ConnectResult(False, "auth")
+        done = threading.Event()
+        out: list[ConnectResult] = []
+        tls_failed = [False]
+
+        def finish(r: ConnectResult) -> None:
+            if not out:
+                out.append(r)
+            done.set()
+
+        def on_connect(_cl, _ud, _flags, rc, _props):  # type: ignore[no-untyped-def]
+            finish(ConnectResult(True) if not rc.is_failure
+                   else ConnectResult(False, "auth" if rc.value in _AUTH_RC else "refused"))
+
+        def on_connect_fail(_cl, _ud):  # type: ignore[no-untyped-def]
+            finish(ConnectResult(False, "tls" if tls_failed[0] else "network"))
+
+        def on_log(_cl, _ud, _level, buf):  # type: ignore[no-untyped-def]
+            if "CERTIFICATE_VERIFY_FAILED" in buf or "certificate verify failed" in buf.lower():
+                tls_failed[0] = True
+
+        c.on_connect, c.on_connect_fail, c.on_log = on_connect, on_connect_fail, on_log
+        try:
+            c.connect_async(broker.host, broker.port, self._keepalive)
+            c.loop_start()
+            if not done.wait(timeout_s):
+                finish(ConnectResult(False, "timeout"))
+        finally:
+            self._close(c)
+        return out[0]
+
+    @staticmethod
+    def _close(c: mqtt.Client) -> None:
+        try:
+            c.disconnect()
+        except Exception:  # noqa: BLE001
+            pass
+        c.loop_stop()
+
     def publish(self, topic: str, payload: bytes, qos: int, retain: bool) -> int:
         c = self._client
         if c is None or not self._connected:
@@ -122,8 +174,4 @@ class PahoTransport:
             self._session += 1  # callbacks of the old client no longer match
         self._connected = False
         if c is not None:
-            try:
-                c.disconnect()
-            except Exception:  # noqa: BLE001
-                pass
-            c.loop_stop()
+            self._close(c)

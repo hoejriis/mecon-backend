@@ -53,6 +53,7 @@ class FakeTransport:
         self._subs: list[tuple[str, int]] = []
         self.live = False
         self.connect_calls: list[str] = []
+        self.probe_calls: list[str] = []
         self.pending_acks: list[int] = []
         self._mid = 0
 
@@ -73,6 +74,16 @@ class FakeTransport:
             self.live = True
             self.callbacks.on_connected(s, ConnectResult(True))
         return s
+
+    def probe(self, broker: BrokerConfig, timeout_s: float) -> ConnectResult:
+        """A separate throwaway connection: no session, no will, no publish, no effect on `live`."""
+        self.probe_calls.append(broker.name)
+        b = self.net.brokers[broker.name]
+        if not b.up:
+            return ConnectResult(False, "network")
+        if b.accept != "ok":
+            return ConnectResult(False, b.accept)
+        return ConnectResult(True)
 
     def publish(self, topic: str, payload: bytes, qos: int, retain: bool) -> int:
         if not self.live or self._broker is None:

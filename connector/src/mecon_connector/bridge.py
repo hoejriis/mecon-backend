@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import random
 import re
+import threading
 import time
 from collections import deque
 from dataclasses import dataclass
@@ -64,6 +65,13 @@ def status_payload(online: bool, serial_up: bool | None) -> bytes:
     ).encode()
 
 
+SETTLE_S = 5.0  # most a switch to a better broker waits for in-flight publishes to be acknowledged
+
+
+def _run_in_thread(fn: Callable[[], None]) -> None:
+    threading.Thread(target=fn, name="broker-probe", daemon=True).start()
+
+
 class Bridge:
     def __init__(
         self,
@@ -74,6 +82,7 @@ class Bridge:
         log: Log | None = None,
         clock: Callable[[], float] = time.monotonic,
         rng: Callable[[], float] = random.random,
+        probe_runner: Callable[[Callable[[], None]], None] | None = None,
     ) -> None:
         self.cfg = cfg
         self.transport = transport
@@ -85,6 +94,8 @@ class Bridge:
         self.rng = rng
         self._started = clock()
         self._events: deque[tuple] = deque()
+        # A probe blocks for up to its timeout, so it runs off the loop thread (tests run it inline).
+        self._probe_runner = probe_runner or _run_in_thread
 
         # serial side
         self._link: SerialLink | None = None
@@ -109,6 +120,10 @@ class Bridge:
         self._connect_started = 0.0
         self._connected_at = 0.0
         self._stopped = False
+        # Return to a better broker: probe it, then settle in-flight, then switch (make before break).
+        self._probe_token = 0
+        self._probe_active: tuple[int, int, float] | None = None  # (token, broker index, deadline)
+        self._settle_since: float | None = None
 
         # queues
         self._up: deque[_Entry] = deque()
@@ -203,6 +218,8 @@ class Bridge:
                 self._on_connected(now, ev[2])
             elif kind == "disconnected":
                 self._on_disconnected(now)
+            elif kind == "probe":
+                self._on_probe_result(now, ev[2], ev[3], ev[4])
             elif kind == "acked":
                 self._status_pending.discard(ev[2])
                 if self._inflight.pop(ev[2], None) is not None:
@@ -284,6 +301,8 @@ class Bridge:
         return d * (1 + c.backoff_jitter * (2 * self.rng() - 1))
 
     def _end_session(self) -> None:
+        self._probe_active = None
+        self._settle_since = None
         self.transport.disconnect()
         self._state = "idle"
         self._active = -1
@@ -310,15 +329,71 @@ class Bridge:
             if now - self._connect_started >= c.connect_timeout_s:
                 self._attempt_failed(now, "timeout")
         elif self._state == "connected" and self._active > 0:
-            better = any(self._cool[i] <= now for i in range(self._active))
-            if better and now - self._connected_at >= c.hold_down_s:
-                # Return to a higher-priority broker, at most once per hold-down.
-                self.log.info("broker_return_to_better", broker=c.brokers[self._active].name)
-                self._publish_status(online=False)
-                self.m.inc("broker_disconnects_total")
-                self.m.inc("upstream_uncertain_total", len(self._inflight))
-                self._inflight.clear()
-                self._end_session()
+            self._return_step(now)
+
+    def _return_step(self, now: float) -> None:
+        """Back to a higher-priority broker without ever ending a working session blind.
+
+        The better broker is probed first with a separate short-lived connection. Only a successful
+        probe leads to a switch, and the switch first stops taking new publishes and waits (bounded)
+        for the in-flight ones to be acknowledged.
+        """
+        c = self.cfg.mqtt
+        if self._settle_since is not None:
+            if not self._inflight or now - self._settle_since >= SETTLE_S:
+                self._switch_now(now)
+            return
+        if self._probe_active is not None:
+            token, i, deadline = self._probe_active
+            if now >= deadline:
+                # The probe thread has not come back in time; whatever it reports later is ignored.
+                self._on_probe_result(now, token, i, ConnectResult(False, "timeout"))
+            return
+        if now - self._connected_at < c.hold_down_s:
+            return
+        for i in range(self._active):
+            if self._cool[i] <= now:
+                self._start_probe(now, i)  # at most one probe per cool-down of the better broker
+                break
+
+    def _start_probe(self, now: float, i: int) -> None:
+        self._probe_token += 1
+        token, session, b = self._probe_token, self._session, self.cfg.mqtt.brokers[i]
+        timeout = self.cfg.mqtt.connect_timeout_s
+        self._probe_active = (token, i, now + timeout + 2.0)
+
+        def work() -> None:
+            try:
+                r = self.transport.probe(b, timeout)
+            except Exception:  # noqa: BLE001  a probe can only fail; it never takes the bridge down
+                r = ConnectResult(False, "network")
+            self._events.append(("probe", session, token, i, r))
+
+        self._probe_runner(work)
+
+    def _on_probe_result(self, now: float, token: int, i: int, result: ConnectResult) -> None:
+        if self._probe_active is None or self._probe_active[0] != token or self._state != "connected":
+            return  # stale: the session it was started for is gone, or the probe already timed out
+        self._probe_active = None
+        name = self.cfg.mqtt.brokers[i].name
+        if not result.ok:
+            # A failed attempt on that broker: its backoff grows. The working session is untouched.
+            self._fails[i] += 1
+            self._cool[i] = now + self._delay(result.kind, self._fails[i])
+            self.m.inc("broker_connect_attempts_total", 1, "probe")
+            self.log.info("broker_probe_failed", broker=name, kind=result.kind, failures=self._fails[i])
+            return
+        self.log.info("broker_probe_ok", broker=name)
+        self._settle_since = now  # from here no new upstream publish is taken
+
+    def _switch_now(self, now: float) -> None:
+        c = self.cfg.mqtt
+        self.log.info("broker_return_to_better", broker=c.brokers[self._active].name)
+        self._publish_status(online=False)
+        self.m.inc("broker_disconnects_total")
+        self.m.inc("upstream_uncertain_total", len(self._inflight))  # still unsettled at the bound
+        self._inflight.clear()
+        self._end_session()
 
     def _start_connect(self, now: float, i: int, b: BrokerConfig) -> None:
         c = self.cfg.mqtt
@@ -368,7 +443,7 @@ class Bridge:
             e = self._up.popleft()
             self._up_bytes -= len(e.payload)
             self.m.inc("upstream_dropped_total", 1, "ttl")
-        if self._state != "connected":
+        if self._state != "connected" or self._settle_since is not None:
             return
         qos = self.cfg.mqtt.upstream_qos
         while self._up and (qos == 0 or len(self._inflight) < self.cfg.queues.upstream_max_inflight):

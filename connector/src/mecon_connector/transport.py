@@ -79,3 +79,8 @@ class BrokerTransport(Protocol):
 
     def disconnect(self) -> None:
         """Ends the session and discards the client object. Idempotent."""
+
+    def probe(self, broker: BrokerConfig, timeout_s: float) -> ConnectResult:
+        """Checks that `broker` accepts a connection, on a separate short-lived client with its own
+        client id and a clean session, then disconnects. Never publishes or subscribes, never touches
+        the live session. Blocks up to timeout_s; the bridge calls it off its loop thread."""

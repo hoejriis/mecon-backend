@@ -64,3 +64,114 @@ jobs:
           test "$(docker run --rm mecon-connector:ci --version)" = "0.1.0"
           test "$(docker run --rm --entrypoint id mecon-connector:ci -u)" != "0"
           docker run --rm -v "$PWD/connector/config.example.toml:/c.toml:ro" mecon-connector:ci --check-config --config /c.toml
+      - name: Read-only root filesystem, no capabilities, as in the compose example
+        run: |
+          docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges --user 10001:10001 \
+            -v "$PWD/connector/config.example.toml:/c.toml:ro" mecon-connector:ci --check-config --config /c.toml
+      - name: Compose example is valid
+        run: docker compose -f connector/deploy/docker-compose.example.yml config -q
+
+  # Packaging. Shell scripts, the systemd unit, the udev template.
+  deploy-static:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck
+        run: shellcheck -x connector/deploy/*.sh connector/scripts/*.sh
+      - name: systemd-analyze verify (the unit)
+        run: |
+          systemd-analyze --version | head -1
+          # verify wants the ExecStart binary to exist; a stand-in is enough for the syntax check
+          sudo mkdir -p /opt/mecon-connector/bin
+          sudo install -m 0755 /bin/true /opt/mecon-connector/bin/mecon-connector
+          sudo mkdir -p /etc/mecon-connector && sudo touch /etc/mecon-connector/config.toml
+          cp connector/deploy/systemd/mecon-connector.service /tmp/mecon-connector.service
+          systemd-analyze verify /tmp/mecon-connector.service
+      - name: systemd-analyze security (the unit, offline; informational score, gate at 3.0)
+        run: |
+          out=$(systemd-analyze security --offline=true --no-pager /tmp/mecon-connector.service | tee /dev/stderr | tail -1)
+          score=$(printf '%s' "$out" | sed -n 's/.*exposure level for .*: \([0-9.]*\) .*/\1/p')
+          test -n "$score"
+          awk -v s="$score" 'BEGIN { exit !(s <= 3.0) }'
+      - name: udev template with placeholders filled (udevadm verify)
+        run: |
+          sed -e 's/^# SUBSYSTEM==/SUBSYSTEM==/' -e 's/"VID"/"abcd"/' -e 's/"PID"/"1234"/' -e 's/"SERIAL"/"TEST0001"/' \
+            connector/deploy/udev/99-mecon-connector.rules > /tmp/99-test.rules
+          grep -c '^SUBSYSTEM==' /tmp/99-test.rules
+          udevadm verify /tmp/99-test.rules
+      - name: Install test is executable
+        run: test -x connector/deploy/install.sh && test -x connector/deploy/uninstall.sh && test -x connector/deploy/test-install.sh
+
+  # Real systemd (a VM, not a container): install, start with the hardening on, check, stop, uninstall.
+  systemd-run:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install mosquitto and clients (the script starts its own throwaway broker)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends mosquitto mosquitto-clients
+          sudo systemctl disable --now mosquitto || true
+          # the packaged AppArmor profile confines /usr/sbin/mosquitto and breaks a config under /tmp
+          sudo apparmor_parser -R /etc/apparmor.d/usr.sbin.mosquitto 2>/dev/null || sudo apparmor_parser -R /etc/apparmor.d/mosquitto 2>/dev/null || true
+      - name: Smoke test under real systemd
+        run: sudo connector/deploy/smoke-systemd.sh
+
+  install-test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install and uninstall in a Debian bookworm container (the Raspberry Pi OS base)
+        run: |
+          docker run --rm -v "$PWD/connector:/connector:ro" \
+            debian:bookworm-slim@sha256:734a72b3d6142a71993b4bc580ca01d8ca687f77a2c422d96a961d3376b179bc \
+            bash /connector/deploy/test-install.sh /connector
+      - name: Mutation check of the packaging rules (config overwrite, secrets, root)
+        run: |
+          docker run --rm -v "$PWD/connector:/connector:ro" \
+            debian:bookworm-slim@sha256:734a72b3d6142a71993b4bc580ca01d8ca687f77a2c422d96a961d3376b179bc \
+            bash -c 'apt-get update -qq >/dev/null && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends python3 python3-venv mosquitto >/dev/null \
+                     && python3 -m venv /dev-venv && /dev-venv/bin/pip install -q --require-hashes --no-deps -r /connector/requirements-dev.lock \
+                     && /dev-venv/bin/python /connector/scripts/mutation_deploy.py'
+
+  # Measurements on the runner. NOT a Pi: the label in the report says so.
+  measure:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04-arm, ubuntu-24.04]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies (hash-pinned) and mosquitto
+        run: |
+          pip install --require-hashes --no-deps -r connector/requirements.lock
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends mosquitto
+          sudo systemctl disable --now mosquitto || true
+          sudo apparmor_parser -R /etc/apparmor.d/mosquitto || true
+      - name: Measure for 60 s (runner, not a Pi)
+        run: python connector/scripts/measure.py --seconds 60 --out measure-report.json
+      - name: Summary
+        if: always()
+        run: |
+          python - <<'EOF' >> "$GITHUB_STEP_SUMMARY"
+          import json, pathlib
+          p = pathlib.Path("measure-report.json")
+          if p.exists():
+              r = json.loads(p.read_text())
+              print(f"### Connector measurements: {r['label']} ({r['host']['machine']}, {r['host']['cpus']} cpus)\n")
+              print("```json")
+              print(json.dumps({k: r[k] for k in ("memory", "cpu", "upstream_latency_ms", "shutdown")}, indent=1))
+              print("```")
+              print("Reconnect after broker restart (listening to ready, s):", [o["listening_to_ready_s"] for o in r["broker_restarts"]["runs"]])
+          EOF
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: connector-measure-${{ matrix.runner }}
+          path: measure-report.json
+          if-no-files-found: ignore

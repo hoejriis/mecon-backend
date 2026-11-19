@@ -1,0 +1,84 @@
+# MECON USB Connector: hardened systemd unit.
+# Installed by connector/deploy/install.sh to /etc/systemd/system/. Change it with a drop-in
+# (systemctl edit mecon-connector), not by editing this file; an upgrade replaces it.
+#
+# Secrets: the broker password is a root-owned mode 0600 file that systemd hands to the service
+# through LoadCredential=. It appears only under /run/credentials/mecon-connector.service/ for
+# this service; never in this unit, never in the environment, never in the config file.
+# In config.toml point password_file at /run/credentials/mecon-connector.service/broker-password.
+[Unit]
+Description=MECON USB Connector (serial to MQTT)
+Documentation=https://github.com/hoejriis/mecon-backend/blob/main/connector/README.md
+After=network-online.target
+Wants=network-online.target
+# A missing config is a setup error, not a crash loop.
+ConditionPathExists=/etc/mecon-connector/config.toml
+# No start-rate limit: the service backs off by itself (RestartSec) and must come back
+# unattended after a long outage. A configuration error (exit status 2) is never restarted.
+StartLimitIntervalSec=0
+
+[Service]
+Type=exec
+User=mecon-connector
+Group=mecon-connector
+# The serial device (ttyACM/ttyUSB) is owned by group dialout on Debian and Raspberry Pi OS.
+SupplementaryGroups=dialout
+ExecStart=/opt/mecon-connector/bin/mecon-connector --config /etc/mecon-connector/config.toml
+LoadCredential=broker-password:/etc/mecon-connector/credentials/broker-password
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+
+# SIGTERM makes the Connector publish status "offline", close the broker session and the port
+# (about a second). 15 s is generous; after that systemd sends SIGKILL.
+KillSignal=SIGTERM
+TimeoutStopSec=15
+Restart=on-failure
+RestartSec=10
+# Exit status 2 is a configuration error: restarting would loop forever on the same file.
+RestartPreventExitStatus=2
+
+# Resources, sized for a 512 MB Pi Zero 2 W. The expected resident size is tens of MB.
+MemoryHigh=128M
+MemoryMax=192M
+TasksMax=64
+LimitNOFILE=256
+LimitCORE=0
+
+# State is the only writable place.
+StateDirectory=mecon-connector
+StateDirectoryMode=0700
+ReadWritePaths=/var/lib/mecon-connector
+
+# Sandbox
+NoNewPrivileges=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+ProtectProc=invisible
+ProcSubset=pid
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RemoveIPC=true
+UMask=0077
+# Serial needs no sockets of its own; AF_UNIX is for the journal.
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+# Only USB serial devices (the standard pseudo devices stay allowed by the closed policy).
+DevicePolicy=closed
+DeviceAllow=char-ttyACM rw
+DeviceAllow=char-ttyUSB rw
+
+[Install]
+WantedBy=multi-user.target

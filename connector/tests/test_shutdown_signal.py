@@ -1,0 +1,66 @@
+"""The real entry point, as a subprocess, against a real mosquitto and no serial device: SIGTERM must
+publish status offline, close the session and exit 0 well inside the unit's TimeoutStopSec."""
+
+import json
+import pathlib
+import re
+import shutil
+import signal
+import subprocess
+import sys
+import time
+
+import pytest
+
+from test_integration_mosquitto import Backendish, Mosq, until
+
+pytestmark = pytest.mark.skipif(shutil.which("mosquitto") is None, reason="mosquitto not installed")
+
+UNIT = pathlib.Path(__file__).resolve().parents[1] / "deploy" / "systemd" / "mecon-connector.service"
+SRC = pathlib.Path(__file__).resolve().parents[1] / "src"
+
+
+@pytest.mark.parametrize("sig", [signal.SIGTERM, signal.SIGINT])
+def test_signal_releases_the_session_and_exits_cleanly_within_the_stop_timeout(tmp_path, sig):
+    m = Mosq(tmp_path).start()
+    topic = "test/shutdown"
+    cfg = tmp_path / "c.toml"
+    cfg.write_text(
+        f"""
+[device]
+mode = "companion"
+select = {{ by_id = "usb-NOT_PRESENT-*" }}
+[mqtt]
+client_id = "shutdown-test"
+topic_root = "{topic}"
+[[mqtt.brokers]]
+name = "l"
+host = "127.0.0.1"
+port = {m.port}
+tls = false
+insecure_allow_plain = true
+[health]
+enabled = false
+"""
+    )
+    obs = Backendish(m.port, f"{topic}/connector/status")
+    p = subprocess.Popen(
+        [sys.executable, "-m", "mecon_connector", "--config", str(cfg)],
+        env={"PYTHONPATH": str(SRC), "PYTHONDONTWRITEBYTECODE": "1", "PATH": "/usr/bin:/bin"},
+        stderr=subprocess.PIPE,
+    )
+    try:
+        assert until(lambda: any(json.loads(x[1])["connector"] == "online" for x in obs.on(f"{topic}/connector/status")))
+        t0 = time.monotonic()
+        p.send_signal(sig)
+        rc = p.wait(timeout=20)
+        took = time.monotonic() - t0
+        assert rc == 0
+        (timeout_s,) = re.findall(r"(?m)^TimeoutStopSec=(\d+)$", UNIT.read_text())
+        assert took < int(timeout_s) / 3, f"shutdown took {took:.2f}s of a {timeout_s}s budget"
+        assert until(lambda: json.loads(obs.on(f"{topic}/connector/status")[-1][1])["connector"] == "offline", 5)
+    finally:
+        if p.poll() is None:
+            p.kill()
+        obs.close()
+        m.stop()

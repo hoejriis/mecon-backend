@@ -238,7 +238,7 @@
     { "name": "downlink_written_total", "type": "counter", "labels": {} },
     { "name": "downlink_dropped_total", "type": "counter", "labels": { "reason": ["queue_full", "ttl", "serial_down", "retained", "invalid", "too_large", "shutdown"] } },
     { "name": "downlink_write_failed_total", "type": "counter", "labels": {} },
-    { "name": "broker_connect_attempts_total", "type": "counter", "labels": { "result": ["ok", "network", "tls", "auth", "refused", "timeout"] } },
+    { "name": "broker_connect_attempts_total", "type": "counter", "labels": { "result": ["ok", "network", "tls", "auth", "refused", "timeout", "probe"] } },
     { "name": "broker_disconnects_total", "type": "counter", "labels": {} },
     { "name": "broker_failovers_total", "type": "counter", "labels": {} }
   ],

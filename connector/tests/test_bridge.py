@@ -369,6 +369,138 @@ def test_fallback_when_primary_is_down_and_return_after_hold_down():
     assert rig.published("backup") == [b"via-backup"]  # nothing was sent twice
 
 
+# ---- return to a better broker: probe first, settle, then switch (make before break) ------
+
+
+def _status_publishes(rig, broker):
+    return len(rig.net.brokers[broker].on_topic(rig.status))
+
+
+def test_dead_primary_over_ten_hold_downs_leaves_the_backup_session_alone():
+    rig = Rig(brokers=("primary", "backup"))
+    rig.net.brokers["primary"].up = False
+    rig.step(5)
+    assert rig.bridge.snapshot()["broker_name"] == "backup"
+    rig.dev.feed_bytes(wire(b"one"))
+    rig.step(5)
+    backup_connects = rig.net.brokers["backup"].connects
+    rig.step(int(10 * 60 / 0.05) + 100, dt=0.05)  # 10 hold-downs (60 s each)
+    assert rig.metrics.get("broker_disconnects_total") == 0
+    assert rig.metrics.get("upstream_uncertain_total") == 0
+    assert rig.net.brokers["backup"].connects == backup_connects  # one session, never re-made
+    assert _status_publishes(rig, "backup") == 1  # online once; no offline/online flaps
+    assert json.loads(rig.net.brokers["backup"].retained[rig.status])["connector"] == "online"
+    assert len(rig.transport.probe_calls) >= 10 and set(rig.transport.probe_calls) == {"primary"}
+    assert rig.net.brokers["primary"].connects == 1  # only the first startup attempt; probes are not sessions
+    assert rig.metrics.get("broker_connect_attempts_total", "probe") == len(rig.transport.probe_calls)
+    assert rig.bridge._fails[0] >= 10
+    rig.dev.feed_bytes(wire(b"two"))
+    rig.step(5)
+    assert rig.published("backup") == [b"one", b"two"]
+    assert rig.bridge.accounting_gap() == 0
+
+
+def test_failed_probes_back_off_with_the_better_brokers_failure_count():
+    rig = Rig(brokers=("primary", "backup"))
+    rig.net.brokers["primary"].up = False
+    rig.step(5)
+    rig.step(int(600 / 0.05), dt=0.05)
+    # 10 minutes: backoff doubles to its 60 s cap, so far fewer probes than one per second
+    assert 5 <= len(rig.transport.probe_calls) <= 20
+    assert rig.metrics.get("broker_connect_attempts_total", "probe") == len(rig.transport.probe_calls)
+
+
+def test_primary_returning_switches_within_one_hold_down_without_duplicate_or_loss():
+    rig = Rig(brokers=("primary", "backup"))
+    rig.net.brokers["primary"].up = False
+    rig.step(5)
+    rig.dev.feed_bytes(wire(b"before"))
+    rig.step(5)
+    rig.step(int(200 / 0.05), dt=0.05)  # several failed probes
+    assert rig.bridge.snapshot()["broker_name"] == "backup"
+    rig.net.brokers["primary"].up = True
+    rig.step(int(61 / 0.05), dt=0.05)  # one hold-down
+    assert rig.bridge.snapshot()["broker_name"] == "primary"
+    rig.dev.feed_bytes(wire(b"after"))
+    rig.step(5)
+    assert rig.published("backup") == [b"before"] and rig.published("primary") == [b"after"]
+    assert rig.metrics.get("upstream_uncertain_total") == 0
+    assert rig.metrics.get("broker_disconnects_total") == 1  # the one deliberate switch
+    assert rig.bridge.accounting_gap() == 0
+
+
+def _backup_with_primary_returned(rig):
+    rig.net.brokers["primary"].up = False
+    rig.step(5)
+    rig.net.brokers["primary"].up = True
+
+
+def test_switch_waits_for_in_flight_publishes_to_settle():
+    rig = Rig(brokers=("primary", "backup"))
+    _backup_with_primary_returned(rig)
+    rig.net.brokers["backup"].next_publish = ["hold"]
+    rig.dev.feed_bytes(wire(b"in-flight"))
+    rig.step(5)
+    (mid,) = rig.transport.pending_acks
+    for _ in range(int(70 / 0.05)):  # the hold-down passes, the probe succeeds, the bridge settles
+        if rig.bridge._settle_since is not None:
+            break
+        rig.step(dt=0.05)
+    assert rig.bridge._settle_since is not None
+    assert rig.bridge.snapshot()["broker_name"] == "backup"  # still on the working session
+    rig.dev.feed_bytes(wire(b"new-while-settling"))
+    rig.step(20, dt=0.05)
+    assert rig.published("backup") == [b"in-flight"]  # no new upstream publish is taken while settling
+    rig.transport.ack(mid)
+    rig.step(10, dt=0.05)
+    assert rig.bridge.snapshot()["broker_name"] == "primary"
+    assert rig.metrics.get("upstream_uncertain_total") == 0
+    rig.step(5)
+    assert rig.published("primary") == [b"new-while-settling"]  # held in the queue, sent once, on the better broker
+    assert rig.bridge.accounting_gap() == 0
+
+
+def test_unsettled_publish_at_the_bound_is_counted_uncertain_not_resent():
+    rig = Rig(brokers=("primary", "backup"))
+    _backup_with_primary_returned(rig)
+    rig.net.brokers["backup"].next_publish = ["hold"]
+    rig.dev.feed_bytes(wire(b"never-acked"))
+    rig.step(5)
+    rig.step(int(80 / 0.05), dt=0.05)
+    assert rig.bridge.snapshot()["broker_name"] == "primary"
+    assert rig.metrics.get("upstream_uncertain_total") == 1
+    assert rig.published("backup") == [b"never-acked"] and rig.published("primary") == []
+    assert rig.bridge.accounting_gap() == 0
+
+
+def test_the_switch_ends_the_session_no_sooner_than_the_settle_bound():
+    rig = Rig(brokers=("primary", "backup"))
+    _backup_with_primary_returned(rig)
+    rig.net.brokers["backup"].next_publish = ["hold"]
+    rig.dev.feed_bytes(wire(b"slow"))
+    rig.step(5)
+    until = 0
+    while rig.bridge._settle_since is None and until < 5000:
+        rig.step(dt=0.05)
+        until += 1
+    assert rig.bridge._settle_since is not None
+    start = rig.clock.t
+    while rig.bridge.snapshot()["broker_name"] == "backup" and rig.clock.t - start < 30:
+        rig.step(dt=0.05)
+    assert 4.9 <= rig.clock.t - start <= 5.5
+
+
+def test_failed_probe_does_not_touch_the_working_session():
+    rig = Rig(brokers=("primary", "backup"))
+    rig.net.brokers["primary"].accept = "auth"
+    rig.step(5)
+    sessions = rig.net.brokers["backup"].connects
+    rig.step(int(130 / 0.05), dt=0.05)
+    assert rig.net.brokers["backup"].connects == sessions
+    assert rig.metrics.get("broker_connect_attempts_total", "probe") >= 1
+    assert rig.metrics.get("broker_disconnects_total") == 0
+
+
 def test_only_one_session_at_a_time():
     rig = Rig(brokers=("primary", "backup"))
     rig.settle()

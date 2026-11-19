@@ -50,8 +50,8 @@ def until(pred, timeout=15.0, step=0.05):
 class Mosq:
     """A mosquitto process with its own port, config and log."""
 
-    def __init__(self, tmp, tls=None, password=None, persistent=False):
-        self.tmp, self.port, self.tls, self.proc = tmp, free_port(), tls, None
+    def __init__(self, tmp, tls=None, password=None, persistent=False, port=None):
+        self.tmp, self.port, self.tls, self.proc = tmp, port or free_port(), tls, None
         conf = [f"listener {self.port} 127.0.0.1", "persistence false", f"log_dest file {tmp}/mosq-{self.port}.log"]
         if persistent:
             # Subscriptions and queued messages of a durable client survive a restart of this broker.
@@ -367,6 +367,47 @@ def test_failover_to_second_broker(tmp, procs):
     finally:
         live.close()
         obs.close()
+
+
+def test_return_to_primary_is_probe_first_then_switch(tmp, procs):
+    backup = Mosq(tmp).start()
+    procs.append(backup)
+    dead = free_port()  # nothing listens here yet
+    obs_backup = Backendish(backup.port, f"{ROOT}/up", f"{ROOT}/connector/status")
+    live = Live([plain(dead, "primary"), plain(backup.port, "backup")])
+    status = f"{ROOT}/connector/status"
+    obs_primary = None
+    try:
+        assert until(lambda: live.bridge.snapshot()["broker_name"] == "backup", 20)
+        assert until(lambda: live.bridge.snapshot()["ready"])
+        t0 = time.time()
+        # about 3 hold-downs (3 s each in the test config) with the primary dead
+        assert until(lambda: live.metrics.get("broker_connect_attempts_total", "probe") >= 3 and time.time() - t0 >= 9.5, 30)
+        assert live.metrics.get("broker_disconnects_total") == 0
+        assert live.metrics.get("upstream_uncertain_total") == 0
+        assert live.metrics.get("broker_connect_attempts_total", "ok") == 1  # the backup session was made once
+        assert live.bridge.snapshot()["broker_name"] == "backup"
+        assert len(obs_backup.on(status)) == 1  # online once: no offline/online flap
+        # the working session carries data throughout
+        live.feed(live.dev.wire(b'{"id":"on-backup"}'))
+        assert until(lambda: [m for m in obs_backup.on(f"{ROOT}/up") if m[1] == b'{"id":"on-backup"}'])
+        # the primary comes back on the same port: the Connector probes it, then switches
+        primary = Mosq(tmp, port=dead).start()
+        procs.append(primary)
+        obs_primary = Backendish(primary.port, f"{ROOT}/up")
+        assert until(lambda: live.bridge.snapshot()["broker_name"] == "primary" and live.bridge.snapshot()["ready"], 20)
+        live.feed(live.dev.wire(b'{"id":"on-primary"}'))
+        assert until(lambda: [m for m in obs_primary.on(f"{ROOT}/up") if m[1] == b'{"id":"on-primary"}'])
+        assert until(lambda: live.metrics.get("upstream_acked_total") == 2)
+        assert live.metrics.get("upstream_uncertain_total") == 0
+        assert [m[1] for m in obs_backup.on(f"{ROOT}/up")] == [b'{"id":"on-backup"}']  # nothing twice, nothing rerouted
+        assert [m[1] for m in obs_primary.on(f"{ROOT}/up")] == [b'{"id":"on-primary"}']
+        assert live.bridge.accounting_gap() == 0
+    finally:
+        live.close()
+        obs_backup.close()
+        if obs_primary:
+            obs_primary.close()
 
 
 def test_tls_with_password_ok_and_wrong_ca_or_password_fail_closed(tmp, procs):

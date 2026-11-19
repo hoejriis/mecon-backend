@@ -38,7 +38,7 @@ REGISTRY: dict[str, tuple[str, str, tuple[str, ...]]] = {
     "downlink_written_total": ("counter", "Messages written to the serial port", ()),
     "downlink_dropped_total": ("counter", "Downlink messages dropped before writing", ("reason",)),
     "downlink_write_failed_total": ("counter", "Serial writes that failed; outcome unknown, never retried", ()),
-    "broker_connect_attempts_total": ("counter", "Broker connection attempts", ("result",)),
+    "broker_connect_attempts_total": ("counter", "Broker connection attempts; result=probe counts a failed probe of a better broker", ("result",)),
     "broker_disconnects_total": ("counter", "Established broker sessions that ended", ()),
     "broker_failovers_total": ("counter", "Switches to a different broker profile", ()),
 }
@@ -56,7 +56,7 @@ REASONS = {
         "oversize_length", "empty_frame", "malformed_frame", "duplicate_frame",
         "incomplete_discarded", "oversize_message", "console_oversize_line",
     },
-    "broker_connect_attempts_total": {"ok", "network", "tls", "auth", "refused", "timeout"},
+    "broker_connect_attempts_total": {"ok", "network", "tls", "auth", "refused", "timeout", "probe"},
 }
 _LABEL_KEY = {
     "serial_discarded_bytes_total": "reason",

@@ -57,7 +57,8 @@ class Rig:
         self.clock = Clock()
         self.metrics = Metrics()
         self.bridge = Bridge(
-            self.cfg, self.transport, self.opener, self.metrics, clock=self.clock, rng=lambda: 0.5
+            self.cfg, self.transport, self.opener, self.metrics, clock=self.clock, rng=lambda: 0.5,
+            probe_runner=lambda fn: fn(),  # the fake probe is instant: run it inline, deterministically
         )
         self.up = self.cfg.mqtt.topic_up
         self.down = self.cfg.mqtt.topic_down

@@ -87,3 +87,64 @@ def test_library_reconnect_is_held_off_and_clean_session_set(tr):
     c = StubClient.instances[-1]
     assert c.k["clean_session"] is True and c.k["protocol"] == pt.mqtt.MQTTv311
     assert "reconnect_delay_set" in c.calls
+
+
+class _Rc:
+    def __init__(self, failure=False, value=0):
+        self.is_failure, self.value = failure, value
+
+
+class ProbeStub(StubClient):
+    """Answers connect_async at once, the way a reachable broker would."""
+
+    answer = "ok"  # ok | refused | network | silent
+
+    def connect_async(self, host, port, keepalive):
+        self.calls.append("connect_async")
+        a = ProbeStub.answer
+        if a == "ok":
+            self.on_connect(self, None, None, _Rc(), None)
+        elif a == "refused":
+            self.on_connect(self, None, None, _Rc(True, 5), None)
+        elif a == "network":
+            self.on_connect_fail(self, None)
+
+
+@pytest.fixture
+def ptr(monkeypatch):
+    StubClient.instances = []
+    ProbeStub.answer = "ok"
+    monkeypatch.setattr(pt.mqtt, "Client", ProbeStub)
+    t = pt.PahoTransport("cid", 30)
+    t.callbacks = Rec()
+    return t
+
+
+def test_probe_is_a_separate_client_with_its_own_id_and_never_publishes_or_subscribes(ptr):
+    live = ptr.connect(BROKER, WILL, [("t/down", 0)])
+    live_client = StubClient.instances[-1]
+    ptr.callbacks.ev.clear()  # the live connect's own callback
+    r = ptr.probe(BROKER, 1.0)
+    assert r.ok
+    probe_client = StubClient.instances[-1]
+    assert probe_client is not live_client
+    assert probe_client.k["client_id"] == "cid-probe" != live_client.k["client_id"]  # never the live id: that would take the session over
+    assert probe_client.k["clean_session"] is True
+    for forbidden in ("publish", "subscribe", "will_set"):
+        assert forbidden not in probe_client.calls
+    assert "disconnect" in probe_client.calls and "loop_stop" in probe_client.calls
+    # the live session is untouched: same client, same session number, no callbacks
+    assert ptr._client is live_client and ptr._session == live
+    assert "disconnect" not in live_client.calls
+    assert ptr.callbacks.ev == []
+
+
+def test_probe_reports_refusal_unreachable_and_timeout(ptr):
+    ProbeStub.answer = "refused"
+    assert ptr.probe(BROKER, 1.0).kind == "auth"
+    ProbeStub.answer = "network"
+    assert ptr.probe(BROKER, 1.0).kind == "network"
+    ProbeStub.answer = "silent"
+    r = ptr.probe(BROKER, 0.05)
+    assert (r.ok, r.kind) == (False, "timeout")
+    assert "loop_stop" in StubClient.instances[-1].calls  # a silent broker leaves no thread behind

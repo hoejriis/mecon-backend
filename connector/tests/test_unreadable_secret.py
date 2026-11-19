@@ -46,8 +46,8 @@ def unreadable(tmp_path, kind):
 KINDS = ["directory", "absent", "mode000"]
 
 
-@pytest.mark.parametrize("kind", KINDS)
-@pytest.mark.parametrize("flags", [["--check-config"], []])
+@pytest.mark.parametrize("kind,flags", [(k, f) for k in KINDS for f in (["--check-config"], [])
+                                         if not (k == "absent" and f)])
 def test_startup_and_check_config_exit_2_with_one_line_naming_the_path(tmp_path, capsys, kind, flags):
     p = unreadable(tmp_path, kind)
     rc = main(["--config", str(write_config(tmp_path, p))] + flags)
@@ -55,6 +55,14 @@ def test_startup_and_check_config_exit_2_with_one_line_naming_the_path(tmp_path,
     assert rc == 2
     assert len(err) == 1 and str(p) in err[0] and err[0].startswith("config error:")
     assert "Traceback" not in err[0] and SECRET not in err[0]
+
+
+def test_check_config_tolerates_a_credential_that_only_exists_at_run_time(tmp_path, capsys):
+    """Installers and CI run --check-config where a systemd or container credential is not present."""
+    p = tmp_path / "later-credential"
+    assert main(["--config", str(write_config(tmp_path, p)), "--check-config"]) == 0
+    cap = capsys.readouterr()
+    assert cap.out.strip() == "config ok" and str(p) in cap.err and "note:" in cap.err
 
 
 def test_readable_password_file_still_passes_check_config(tmp_path, capsys):

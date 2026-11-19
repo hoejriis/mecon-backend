@@ -37,12 +37,14 @@ def main(argv: list[str] | None = None) -> int:
         ap.error("--config is required")
     try:
         cfg = load(a.config)
-        check_secrets(cfg)
+        notes = check_secrets(cfg, missing_ok=a.check_config)
     except ConfigError as e:
         for p in e.problems:
             print(f"config error: {p}", file=sys.stderr)
         return 2
     if a.check_config:
+        for n in notes:
+            print(f"note: {n}", file=sys.stderr)
         print("config ok")
         return 0
 

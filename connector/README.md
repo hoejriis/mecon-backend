@@ -56,7 +56,7 @@ One TOML file, validated at start. Every problem is listed and the process exits
 | `mqtt.client_id` | Required, from the broker login. Never generated. |
 | `mqtt.topic_root` | Required. The topic root provisioned for this device. The Connector never reads it from the device. |
 | `mqtt.brokers` | One to six. First is primary, the rest are fallbacks. TLS with peer and host-name verification is the default; plain MQTT needs `insecure_allow_plain = true` and is for loopback or a closed test LAN. |
-| `*.password_file` | A file read when connecting. The value is never in the config, the logs or the metrics. Mode 600. A file that cannot be read at startup or under `--check-config` is a configuration error: one line naming the path, exit status 2. One that becomes unreadable later is a failed connect attempt (counted as `auth`, logged, retried after the long auth back-off), never a crash. |
+| `*.password_file` | A file read when connecting. The value is never in the config, the logs or the metrics. Mode 600. A file that cannot be read at startup is a configuration error: one line naming the path, exit status 2. `--check-config` does the same for a file that exists but cannot be read; for an absent file it only prints a note, because installers and CI run it where a systemd or container credential is not yet present. One that becomes unreadable later is a failed connect attempt (counted as `auth`, logged, retried after the long auth back-off), never a crash. |
 | `downlink.gate` | Optional timings for the enrolment gate (below). There is no switch to turn downlink on: it opens only for an enrolled device. |
 
 ## The enrolment gate

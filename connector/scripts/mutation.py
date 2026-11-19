@@ -81,7 +81,7 @@ MUTANTS = [
     ("q2", "unreadable password_file at reconnect escapes the transport and crashes the bridge", "paho_transport.py",
      [("            except ConfigError as e:\n                raise TransportError(e.problems[0]) from None", "            except ConfigError as e:\n                raise")]),
     ("q3", "startup does not check the password_file", "__main__.py",
-     [("        check_secrets(cfg)\n", "")]),
+     [("        notes = check_secrets(cfg, missing_ok=a.check_config)\n", "        notes = []\n")]),
     ("f4", "command held across an unplug and written after replug", "bridge.py",
      [("            if self._link is None:\n                # A command is never held", "            if self._link is None and False:\n                # A command is never held"),
       ('        self._close_gate("serial_lost", now)\n', "")]),

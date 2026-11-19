@@ -14,7 +14,9 @@ export async function apiRouted(ctx: APIRequestContext): Promise<boolean> {
 export async function sessionContext(value: string): Promise<APIRequestContext> {
   return request.newContext({
     baseURL: BASE_URL,
-    extraHTTPHeaders: { Cookie: `${COOKIE_NAME}=${value}`, Accept: 'application/json' },
+    // Origin as a browser sends it: the host refuses a state-changing request whose Origin is
+    // missing or not its own, on top of the CSRF header.
+    extraHTTPHeaders: { Cookie: `${COOKIE_NAME}=${value}`, Accept: 'application/json', Origin: new URL(BASE_URL).origin },
   });
 }
 

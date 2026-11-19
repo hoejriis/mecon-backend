@@ -108,7 +108,7 @@ fi
 # 5. systemd, when it is running (a container or chroot has none)
 if [ -d /run/systemd/system ]; then
   systemctl daemon-reload
-  command -v udevadm >/dev/null && udevadm control --reload || true
+  if command -v udevadm >/dev/null; then udevadm control --reload || true; fi
   if [ "$ENABLE" -eq 1 ]; then
     if [ "$FRESH" -eq 1 ] || grep -q 'example\.invalid\|REPLACE' "$CONF_DIR/config.toml"; then
       die "not enabling: $CONF_DIR/config.toml still has example placeholders"

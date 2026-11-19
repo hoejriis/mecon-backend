@@ -37,7 +37,7 @@ rm -rf "$PREFIX"
 if [ -d /run/systemd/system ]; then
   systemctl daemon-reload
   systemctl reset-failed "$SVC.service" 2>/dev/null || true
-  command -v udevadm >/dev/null && udevadm control --reload || true
+  if command -v udevadm >/dev/null; then udevadm control --reload || true; fi
 fi
 
 if [ "$PURGE" -eq 1 ]; then

@@ -421,8 +421,14 @@ class Backendish_tls(Backendish):
         self.c.on_message = lambda _c, _u, mm: self.msgs.append((mm.topic, bytes(mm.payload), mm.qos, mm.retain))
         self.c.username_pw_set("syn-user", "synthetic-test-password")
         self.c.tls_set(ca_certs=ca)
+        subacked = set()
+        self.c.on_subscribe = lambda _c, _u, mid, _rc, _p: subacked.add(mid)
         self.c.connect("localhost", m.port)
         self.c.loop_start()
+        mids = []
         for t in topics:
-            self.c.subscribe(t, 1)
-        time.sleep(0.3)
+            rc, mid = self.c.subscribe(t, 1)
+            assert rc == mqtt.MQTT_ERR_SUCCESS
+            mids.append(mid)
+        # Wait for SUBACK, not a fixed sleep: under load the TLS handshake alone can outlast 0.3 s.
+        assert until(lambda: subacked.issuperset(mids), 15), "broker never acknowledged the TLS observer's subscription"

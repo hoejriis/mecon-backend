@@ -10,15 +10,16 @@ const SECRET_TEXT = 'Hello from the peer';
 async function addAuthenticator(page: Page, context: BrowserContext, hasPrf = true) {
   const cdp = await context.newCDPSession(page);
   await cdp.send('WebAuthn.enable');
-  await cdp.send('WebAuthn.addVirtualAuthenticator', {
+  const added = (await cdp.send('WebAuthn.addVirtualAuthenticator', {
     options: { protocol: 'ctap2', transport: 'internal', hasResidentKey: true, hasUserVerification: true, isUserVerified: true, automaticPresenceSimulation: true, hasPrf } as never,
-  });
+  })) as { authenticatorId: string };
+  return { cdp, authenticatorId: added.authenticatorId };
 }
 
 async function signedInAndCached(page: Page, context: BrowserContext, lease: Parameters<typeof mockLeaseBackend>[1] = {}) {
-  await addAuthenticator(page, context);
+  const auth = await addAuthenticator(page, context);
   const msg = await mockMessagingBackend(page);
-  const be = Object.assign(await mockLeaseBackend(page, lease), { msg });
+  const be = Object.assign(await mockLeaseBackend(page, lease), { msg, auth });
   await page.goto(`${ORIGIN}/settings`);
   await page.getByRole('button', { name: 'Set up with a passkey' }).click();
   await expect(page.getByText('Unlocked with a passkey')).toBeVisible({ timeout: 15_000 });
@@ -192,5 +193,43 @@ test.describe('offline cache and lease (Backend simulated)', () => {
     await page.waitForTimeout(7000);
     expect(be.msg.posts).toHaveLength(1);
     expect(be.msg.posts[0]!.body.client_attempt_id).toBe(attemptId);
+  });
+
+  test('a removed passkey credential: the cache stays locked and shows no content; offline, no request reaches /api/ (SIMULATED Backend)', async ({ page, context }) => {
+    const be = await signedInAndCached(page, context);
+    // Counts only, never content: responses that came back from /api/ while the browser was offline.
+    let apiResponses = 0;
+    let apiAttempts = 0;
+    page.on('response', (r) => {
+      if (new URL(r.url()).pathname.startsWith('/api/')) apiResponses += 1;
+    });
+    page.on('request', (r) => {
+      if (new URL(r.url()).pathname.startsWith('/api/')) apiAttempts += 1;
+    });
+    await goOffline(page, context, be);
+    await page.getByRole('button', { name: 'Unlock with passkey' }).click();
+    await expect(page.getByTestId('lease-line')).toContainText('Offline lease valid until');
+    await page.getByRole('button', { name: /Demo Peer \(merged pair\)/ }).click();
+    await expect(page.getByText(SECRET_TEXT)).toBeVisible();
+    expect(apiResponses).toBe(0);
+    expect(be.leaseRequests).toBe(1); // no new lease request while offline
+    test.info().annotations.push({ type: 'api-attempts-offline', description: String(apiAttempts) });
+
+    await page.getByRole('button', { name: 'Lock', exact: true }).click();
+    await expect(page.getByText(SECRET_TEXT)).toHaveCount(0);
+
+    // Remove the credential from the authenticator, reload, and try to unlock.
+    await page.reload();
+    await expect(page.getByRole('button', { name: 'Unlock with passkey' })).toBeVisible();
+    const { cdp, authenticatorId } = be.auth;
+    const creds = ((await cdp.send('WebAuthn.getCredentials', { authenticatorId })) as { credentials: Array<{ credentialId: string }> }).credentials;
+    expect(creds.length).toBeGreaterThan(0);
+    for (const c of creds) await cdp.send('WebAuthn.removeCredential', { authenticatorId, credentialId: c.credentialId });
+    await page.getByRole('button', { name: 'Unlock with passkey' }).click();
+    await expect(page.getByRole('button', { name: 'Unlock with passkey' })).toBeVisible();
+    await expect(page.getByTestId('lease-line')).toHaveCount(0);
+    await expect(page.getByText('Demo Peer')).toHaveCount(0);
+    await expect(page.getByText(SECRET_TEXT)).toHaveCount(0);
+    expect(apiResponses).toBe(0);
   });
 });

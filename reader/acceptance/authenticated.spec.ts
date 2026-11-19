@@ -2,6 +2,7 @@
 // for two test users. Values are read from the environment only: never logged, never
 // asserted with a message that includes them, and trace/video/screenshots are off.
 // No message is sent by this suite: sending transmits over radio and is a manual row.
+import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type APIRequestContext } from '@playwright/test';
 import { API, apiRouted, BASE_URL, COOKIE_NAME, sessionContext, type SessionBody } from './api';
 
@@ -45,6 +46,38 @@ test.describe('signed-in test users', () => {
       await expect(page.locator('.cap-list li').filter({ hasText: name }).first()).toContainText(state);
     }
     await context.close();
+  });
+
+  test('signed-in tabs pass axe in light and dark at phone and desktop sizes, with no CSP violation', async ({ browser }) => {
+    test.setTimeout(180_000);
+    const tabs = ['/chats', '/nodes', '/map', '/tools', '/settings'];
+    const sizes = [{ width: 390, height: 844 }, { width: 1280, height: 800 }];
+    let checked = 0;
+    for (const colorScheme of ['light', 'dark'] as const) {
+      for (const viewport of sizes) {
+        const context = await browser.newContext({ colorScheme, viewport });
+        await context.addCookies([{ name: COOKIE_NAME, value: A!, url: BASE_URL, secure: true, httpOnly: true }]);
+        const page = await context.newPage();
+        await page.addInitScript(() => {
+          (window as unknown as { __csp: number }).__csp = 0;
+          document.addEventListener('securitypolicyviolation', () => { (window as unknown as { __csp: number }).__csp++; });
+        });
+        for (const tab of tabs) {
+          await page.goto(tab);
+          await expect(page.getByRole('navigation', { name: 'Main' })).toBeVisible();
+          // Not 'networkidle': the signed-in shell holds an SSE stream open. Let the screen settle instead.
+          await page.waitForTimeout(1000);
+          const r = await new AxeBuilder({ page }).analyze();
+          const bad = r.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical');
+          // Rule ids only: never node HTML, which can hold names or message text.
+          expect(bad.map((v) => v.id), `axe serious/critical on ${tab}, ${colorScheme}, ${viewport.width}px`).toEqual([]);
+          expect(await page.evaluate(() => (window as unknown as { __csp: number }).__csp), `CSP violations on ${tab}`).toBe(0);
+          checked++;
+        }
+        await context.close();
+      }
+    }
+    test.info().annotations.push({ type: 'screens-checked', description: String(checked) });
   });
 
   test('/devices of A never includes a device of B, and the reverse', async () => {

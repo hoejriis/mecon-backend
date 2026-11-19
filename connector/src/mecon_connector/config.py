@@ -311,5 +311,25 @@ def load(path: str | Path) -> Config:
 
 
 def read_secret(path: str) -> str:
-    """Reads a secret file at connect time. The value is never logged or stored in config."""
-    return Path(path).read_text(encoding="utf-8").rstrip("\r\n")
+    """Reads a secret file at connect time. The value is never logged or stored in config.
+
+    An unreadable file (absent, wrong owner or mode, a directory, not UTF-8) raises ConfigError naming the
+    path and the error class only, never the content or the OS message.
+    """
+    try:
+        return Path(path).read_text(encoding="utf-8").rstrip("\r\n")
+    except (OSError, UnicodeDecodeError) as e:
+        raise ConfigError([f"cannot read password_file {path}: {type(e).__name__}"]) from e
+
+
+def check_secrets(cfg: Config) -> None:
+    """Startup check: every configured password_file must be readable now. Raises ConfigError."""
+    problems: list[str] = []
+    for b in cfg.mqtt.brokers:
+        if b.username and b.password_file:
+            try:
+                read_secret(b.password_file)
+            except ConfigError as e:
+                problems.extend(e.problems)
+    if problems:
+        raise ConfigError(problems)

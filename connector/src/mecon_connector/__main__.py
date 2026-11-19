@@ -9,7 +9,7 @@ import threading
 
 from . import __version__
 from .bridge import Bridge
-from .config import ConfigError, load
+from .config import ConfigError, check_secrets, load
 from .health import make_server, serve_in_thread
 from .logutil import Log
 from .metrics import Metrics
@@ -37,6 +37,7 @@ def main(argv: list[str] | None = None) -> int:
         ap.error("--config is required")
     try:
         cfg = load(a.config)
+        check_secrets(cfg)
     except ConfigError as e:
         for p in e.problems:
             print(f"config error: {p}", file=sys.stderr)

@@ -85,11 +85,12 @@ def _is_int(v: object) -> bool:
 
 
 def _epoch_of(obj: dict) -> int | None:
-    res = obj.get("result")
-    for cand in (obj.get("epoch"), res.get("epoch") if isinstance(res, dict) else None, obj.get("usig_boot")):
-        if _is_int(cand):
-            return cand
-    return None
+    """The device's boot epoch: the envelope's top-level `epoch`, carried on every result and event and
+    incremented on every boot (device interface contract). Never `result.epoch` (inside an answer it means
+    something else, e.g. a Deployment authority epoch) and never `usig_boot` (a separate signing counter):
+    mixing them made the gate see a reboot that did not happen."""
+    cand = obj.get("epoch")
+    return cand if _is_int(cand) else None
 
 
 class HoldBridge:

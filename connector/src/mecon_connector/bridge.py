@@ -717,11 +717,10 @@ class Bridge:
             return
         epoch = None
         if obj is not None:
-            res = obj.get("result")
-            for cand in (obj.get("epoch"), res.get("epoch") if isinstance(res, dict) else None, obj.get("usig_boot")):
-                if isinstance(cand, int) and not isinstance(cand, bool):
-                    epoch = cand
-                    break
+            # The boot epoch is the envelope's top-level `epoch` only (see hold._epoch_of).
+            cand = obj.get("epoch")
+            if isinstance(cand, int) and not isinstance(cand, bool):
+                epoch = cand
         if epoch is not None:
             if self._epoch is not None and epoch != self._epoch:
                 self._epoch = epoch

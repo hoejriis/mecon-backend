@@ -208,6 +208,23 @@ def test_hello_is_read_again_after_a_reboot_and_the_new_object_goes_up(mk):
     assert r.m("downlink_gate_closes_total", "epoch_changed") == 1
 
 
+def test_issue_91_no_reboot_seen_when_only_result_epoch_authority_epoch_or_usig_boot_differ(mk):
+    # The standing bench Connector closed its gate 4 s after start: an answer's `result.epoch` (or another
+    # counter) differed from the events' boot epoch. Only the envelope's top-level `epoch` counts.
+    r = mk()
+    conn = r.up()
+    e = r.dev.epoch
+    r.dev.say(json.dumps({"v": 1, "id": "x-1", "status": "ok", "epoch": e, "usig_boot": e + 40, "usig_seq": 5,
+                          "result": {"epoch": e + 7, "authority_epoch": e + 3}, "usig": "x"}).encode())
+    r.dev.say(json.dumps({"v": 1, "id": "x-2", "status": "ok", "usig_boot": e + 40, "usig_seq": 6,
+                          "result": {"epoch": e + 7}, "usig": "x"}).encode())  # no top-level epoch at all
+    r.dev.say(r.dev.event("health"))
+    for _ in range(4):
+        r.step(1)
+    assert r.m("downlink_gate_closes_total", "epoch_changed") == 0
+    assert len(frames(conn, "iface_hello")) == 1
+
+
 def test_socket_opens_only_when_the_device_link_is_up(mk):
     r = mk(plugged=False)
     for _ in range(5):

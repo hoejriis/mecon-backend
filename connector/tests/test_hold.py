@@ -547,6 +547,63 @@ def test_events_while_the_hold_is_down_are_dropped_and_counted(mk):
     r.wait(lambda: r.m("upstream_dropped_total", "socket_down") == 1)
 
 
+def _uploads(r):
+    return sum(r.m("hold_uploads_total", k) for k in ("hello", "result", "event"))
+
+
+def _settled(r):
+    return sum(r.m("hold_acks_total", k) for k in ("accepted", "duplicate", "refused", "malformed"))
+
+
+def test_uploads_unacked_when_the_socket_closes_are_counted_uncertain_and_not_resent(mk):
+    # The standing bench Connector lost two sessions to a Backend deploy; uploads sent on them and never
+    # acknowledged were counted nowhere, so uploads != acks + drops and an operator could not account for them.
+    r = mk()
+    conn = r.up()
+    for i in range(3):
+        r.dev.say(r.dev.event("health"))
+    r.wait(lambda: len(frames(conn, "iface_event")) == 3)
+    ack(conn, "iface_event", frames(conn, "iface_event")[0]["ref"], "kept")
+    r.wait(lambda: r.m("hold_acks_total", "accepted") == 1)
+    pending = _uploads(r) - _settled(r)
+    assert pending == 3  # the hello and two events
+    sent = len(conn.frames)
+    conn.close(1011, "")
+    r.wait(lambda: r.bridge._state != "connected")
+    assert r.m("hold_uploads_uncertain_total") == pending
+    assert _uploads(r) == _settled(r) + r.m("hold_uploads_uncertain_total")
+    r.jump(2)
+    second = r.up()
+    assert second is not conn
+    # The new session uploads its own hello and nothing from the old one, and counts nothing extra.
+    assert [f["type"] for f in second.parsed()] == ["iface_relay", "iface_hello"]
+    assert r.m("hold_uploads_uncertain_total") == pending
+    assert len(conn.frames) == sent
+
+
+def test_uploads_unacked_when_the_backend_refuses_the_session_are_counted_uncertain(mk):
+    r = mk()
+    conn = r.up()
+    r.dev.say(r.dev.event("health"))
+    r.wait(lambda: len(frames(conn, "iface_event")) == 1)
+    pending = _uploads(r) - _settled(r)
+    assert pending == 2
+    conn.send({"type": "refused", "reason": "token revoked"})
+    r.wait(lambda: r.bridge.hold_stop is not None)
+    assert r.m("hold_uploads_uncertain_total") == pending
+
+
+def test_uploads_unacked_at_an_explicit_stop_are_counted_uncertain(mk):
+    r = mk()
+    conn = r.up()
+    r.dev.say(r.dev.event("health"))
+    r.wait(lambda: len(frames(conn, "iface_event")) == 1)
+    pending = _uploads(r) - _settled(r)
+    assert pending == 2
+    r.bridge.stop()
+    assert r.m("hold_uploads_uncertain_total") == pending
+
+
 # ---- liveness, reconnect, stop (3, 14, 15, 16, 17) --------------------------------------------
 
 

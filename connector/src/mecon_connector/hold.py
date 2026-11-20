@@ -200,6 +200,7 @@ class HoldBridge:
         if self._state != "stopped":
             self._state = "idle"
         self._session = -1
+        self._forget_pending()
         if self._link is not None:
             self._link.close()
             self._link = None
@@ -233,7 +234,7 @@ class HoldBridge:
         self._state = "connected"
         self._attempt = 0
         self._refused = None
-        self._pending_refs.clear()
+        self._forget_pending()  # normally empty: every way a session ends already settled them
         self.m.inc("hold_connect_attempts_total", 1, "ok")
         self.log.info("hold_connected", subprotocol=subprotocol)
         # Declare first: until iface_relay is sent the Backend never sends a request on this socket.
@@ -275,11 +276,17 @@ class HoldBridge:
         """Forget the session. Requests queued for it are dropped; a request already on the device runs on."""
         self._state = "idle"
         self._session = 0
-        self._pending_refs.clear()
+        self._forget_pending()
         n = len(self._queue)
         self._queue.clear()
         self.m.inc("downlink_dropped_total", n, "socket_down")
         self.m.set("hold_connected", 0)
+
+    def _forget_pending(self) -> None:
+        """Uploads sent on a session that ended before their ack: the Backend may or may not have them.
+        Counted as uncertain and never resent, like a publish the MQTT transport lost its PUBACK for."""
+        self.m.inc("hold_uploads_uncertain_total", len(self._pending_refs))
+        self._pending_refs.clear()
 
     def _stop_hold(self, reason: str, detail: str) -> None:
         if self.hold_stop is not None:
@@ -291,6 +298,7 @@ class HoldBridge:
         self.transport.close(1000, "stopped")
         self._state = "stopped"
         self._session = -1
+        self._forget_pending()
         n = len(self._queue)
         self._queue.clear()
         self.m.inc("downlink_dropped_total", n, "socket_down")

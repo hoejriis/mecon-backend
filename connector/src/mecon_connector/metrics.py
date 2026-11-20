@@ -88,6 +88,7 @@ HOLD_REGISTRY: dict[str, tuple[str, str, tuple[str, ...]]] = {
     "hold_relay_declared_total": ("counter", "iface_relay frames sent (one per connection)", ()),
     "hold_uploads_total": ("counter", "Frames uploaded on the hold, by kind", ("kind",)),
     "hold_acks_total": ("counter", "iface_ack frames by outcome class", ("outcome",)),
+    "hold_uploads_uncertain_total": ("counter", "Uploads whose session ended before their ack; never resent", ()),
     "hold_request_timeouts_total": ("counter", "Relayed requests abandoned after the device wait; never resent", ()),
     "hold_frames_ignored_total": ("counter", "Backend frames ignored, by reason", ("reason",)),
     "hold_hello_total": ("counter", "The Connector's own hello requests by outcome", ("result",)),

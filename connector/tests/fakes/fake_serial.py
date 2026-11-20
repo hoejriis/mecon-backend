@@ -161,7 +161,7 @@ class FakeSerialDevice:
         self.say(json.dumps(base, separators=(",", ":")).encode())
 
     def _answer_hello(self, rid: str) -> None:
-        base = {"v": 1, "id": rid, "op": "hello", "status": "ok", "result": dict(self.hello_result)}
+        base = {"v": 1, "id": rid, "op": "hello", "status": "ok", "epoch": self.epoch, "result": dict(self.hello_result)}
         if self.signed and self.enrolment in ("provisioned", "corrupt"):
             base.update({"usig_boot": self.epoch, "usig_seq": self._next_seq(), "usig": "U1lOVEhFVElD"})
         self.say(json.dumps(base, separators=(",", ":")).encode())

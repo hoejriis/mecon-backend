@@ -160,12 +160,28 @@ def test_a_new_epoch_closes_and_re_checks():
     assert len(rig.dev.probe_writes) == before + 1 and gate_open(rig)
 
 
-def test_epoch_read_from_a_result_envelope_too():
+def test_epoch_read_from_a_result_envelopes_top_level_too():
     rig = Rig()
     rig.settle()
-    rig.dev.say(json.dumps({"v": 1, "id": "r-1", "status": "ok", "result": {"epoch": 9}, "usig": "x"}).encode())
+    rig.dev.say(json.dumps({"v": 1, "id": "r-1", "status": "ok", "epoch": 9, "result": {}, "usig": "x"}).encode())
     rig.step(2)
     assert rig.metrics.get("downlink_gate_closes_total", "epoch_changed") == 1
+
+
+def test_only_the_top_level_epoch_counts_not_result_epoch_authority_epoch_or_usig_boot():
+    # Issue 91: inside an answer `result.epoch` / `authority_epoch` mean something else and `usig_boot` is a
+    # separate signing counter. Differing values there, with the envelope's own `epoch` unchanged, are no reboot.
+    rig = Rig()
+    rig.settle()
+    e = rig.dev.epoch
+    rig.dev.say(json.dumps({"v": 1, "id": "r-1", "status": "ok", "epoch": e, "usig_boot": e + 40, "usig_seq": 3,
+                            "result": {"epoch": e + 7, "authority_epoch": e + 3}, "usig": "x"}).encode())
+    # and an answer carrying no top-level epoch at all: nothing in it may be taken as the boot epoch
+    rig.dev.say(json.dumps({"v": 1, "id": "r-2", "status": "ok", "usig_boot": e + 40, "usig_seq": 4,
+                            "result": {"epoch": e + 7}, "usig": "x"}).encode())
+    rig.dev.say(rig.dev.event(epoch=e))
+    rig.step(2)
+    assert rig.metrics.get("downlink_gate_closes_total", "epoch_changed") == 0 and gate_open(rig)
 
 
 def test_periodic_recheck_keeps_it_open_while_provisioned():

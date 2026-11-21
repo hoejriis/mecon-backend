@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: MECON Reader API
-  version: 1.0.0-draft.8
+  version: 1.0.0-draft.9
   summary: Interface between the MECON Reader and an authorized MECON Backend.
   description: |
     Machine-readable form of docs/READER_API_CONTRACT.md. Target specification,
@@ -85,6 +85,11 @@ paths:
               schema: { $ref: '#/components/schemas/LoginStarted' }
               examples:
                 started: { externalValue: fixtures/login-started.json }
+        '403':
+          description: Origin not on the allowlist (code `origin_rejected`)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
         '422': { $ref: '#/components/responses/Invalid' }
         '429': { $ref: '#/components/responses/Throttled' }
 
@@ -527,6 +532,11 @@ paths:
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '422':
+          description: The request carried a body (code `invalid`)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
         '429': { $ref: '#/components/responses/Throttled' }
         '503': { $ref: '#/components/responses/Unavailable' }
 

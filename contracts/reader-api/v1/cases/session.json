@@ -1,5 +1,5 @@
 {
-  "contract": "mecon-reader-api/1.0.0-draft.8",
+  "contract": "mecon-reader-api/1.0.0-draft.9",
   "synthetic": true,
   "group": "session",
   "cases": [
@@ -50,6 +50,7 @@
     { "id": "session-13", "title": "Logout from a foreign Origin is refused", "world": "two-fleets", "steps": [
       { "action": "sign-in", "args": { "client": "alice", "user": "alice" } },
       { "as": "alice", "request": { "operation": "logout", "origin": "foreign" }, "expect": { "status": 403, "schema": "Error", "body": { "/code": "origin_rejected" } } },
-      { "as": "alice", "request": { "operation": "getSession" }, "expect": { "status": 200, "schema": "Session" } } ] }
+      { "as": "alice", "request": { "operation": "getSession" }, "expect": { "status": 200, "schema": "Session" } } ] },
+    {"id": "session-14", "title": "A login from a foreign Origin is refused", "world": "two-fleets", "steps": [{"request": {"operation": "startLogin", "origin": "foreign", "body": {"email": "alice@example.test"}}, "expect": {"status": 403, "schema": "Error", "body": {"/code": "origin_rejected"}}}]}
   ]
 }

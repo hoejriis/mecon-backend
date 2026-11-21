@@ -1,5 +1,5 @@
 {
-  "contract": "mecon-reader-api/1.0.0-draft.8",
+  "contract": "mecon-reader-api/1.0.0-draft.9",
   "synthetic": true,
   "group": "leases",
   "cases": [
@@ -44,6 +44,7 @@
         "match": [ { "at": "/keys", "where": { "/key_id": "${old_kid}" }, "count": 0 } ] } } ] },
     { "id": "leases-08", "title": "Leases and their keys need a session", "world": "two-fleets", "steps": [
       { "request": { "operation": "createLease" }, "expect": { "status": 401, "schema": "Error", "body": { "/code": "unauthenticated" } } },
-      { "request": { "operation": "listLeaseKeys" }, "expect": { "status": 401, "schema": "Error", "body": { "/code": "unauthenticated" } } } ] }
+      { "request": { "operation": "listLeaseKeys" }, "expect": { "status": 401, "schema": "Error", "body": { "/code": "unauthenticated" } } } ] },
+    {"id": "leases-09", "title": "A lease request with a body is refused: the Backend decides every field", "world": "two-fleets", "steps": [{"action": "sign-in", "args": {"client": "alice", "user": "alice"}}, {"as": "alice", "request": {"operation": "createLease", "body": {"expires_at": "2099-01-01T00:00:00Z"}, "invalid": true}, "expect": {"status": 422, "schema": "Error", "body": {"/code": "invalid"}}}]}
   ]
 }

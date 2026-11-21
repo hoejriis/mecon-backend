@@ -968,6 +968,15 @@ export interface operations {
                     "application/json": components["schemas"]["LoginStarted"];
                 };
             };
+            /** @description Origin not on the allowlist (code `origin_rejected`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             422: components["responses"]["Invalid"];
             429: components["responses"]["Throttled"];
         };
@@ -1388,6 +1397,15 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            /** @description The request carried a body (code `invalid`) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             429: components["responses"]["Throttled"];
             503: components["responses"]["Unavailable"];
         };

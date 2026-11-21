@@ -1,0 +1,17 @@
+{
+  "contract": "mecon-reader-api/1.0.0-draft.8",
+  "synthetic": true,
+  "group": "devices",
+  "cases": [
+    { "id": "devices-01", "title": "A user sees their own assigned Companion and no other fleet's", "world": "two-fleets", "steps": [
+      { "action": "sign-in", "args": { "client": "alice", "user": "alice" } },
+      { "as": "alice", "request": { "operation": "listDevices" }, "expect": { "status": 200, "schema": "DeviceList", "match": [
+        { "at": "/items", "where": { "/label": "Alice companion (synthetic)" }, "count": 1 },
+        { "at": "/items", "where": { "/label": "Carol companion (synthetic)" }, "count": 0 } ] } } ] },
+    { "id": "devices-02", "title": "A user with no devices gets an empty list", "world": "two-fleets", "steps": [
+      { "action": "sign-in", "args": { "client": "dora", "user": "dora" } },
+      { "as": "dora", "request": { "operation": "listDevices" }, "expect": { "status": 200, "schema": "DeviceList", "body": { "/items": [] } } } ] },
+    { "id": "devices-03", "title": "Devices need a session", "world": "two-fleets", "steps": [
+      { "request": { "operation": "listDevices" }, "expect": { "status": 401, "schema": "Error", "body": { "/code": "unauthenticated" } } } ] }
+  ]
+}

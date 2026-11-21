@@ -1,0 +1,35 @@
+{
+  "contract": "mecon-reader-api/1.0.0-draft.8",
+  "synthetic": true,
+  "group": "events",
+  "cases": [
+    { "id": "events-01", "title": "A send shows up as an attempt_status event for its sender and not for another fleet", "world": "two-fleets", "steps": [
+      { "action": "sign-in", "args": { "client": "alice", "user": "alice" } },
+      { "action": "sign-in", "args": { "client": "carol", "user": "carol" } },
+      { "action": "events-checkpoint", "capture": "cp" },
+      { "as": "alice", "request": { "operation": "listIdentities" }, "expect": { "status": 200, "schema": "IdentityList" }, "capture": { "me": "/items/0/id" } },
+      { "as": "alice", "request": { "operation": "listContacts" }, "expect": { "status": 200, "schema": "ContactList" },
+        "capture": { "bob": { "at": "/items", "where": { "/display_name": "Bob (synthetic)" }, "field": "/id" } } },
+      { "as": "alice", "request": { "operation": "createSendAttempt", "headers": { "Idempotency-Key": "att_synthetic_ev" },
+        "body": { "client_draft_id": "drf_synthetic_ev", "client_attempt_id": "att_synthetic_ev", "identity_id": "${me}", "target": { "kind": "contact", "id": "${bob}" }, "content": { "kind": "text", "text": "evented (synthetic)" } } },
+        "expect": { "status": 201, "schema": "SendAttempt" }, "capture": { "att": "/id" } },
+      { "as": "alice", "request": { "operation": "streamEvents", "query": { "cursor": "${cp}" } }, "expect": { "status": 200, "schema": "EventEnvelope", "stream": { "match": [
+        { "at": "", "where": { "/kind": "attempt_status", "/resource_id": "${att}" }, "at_least": 1 } ] } } },
+      { "as": "carol", "request": { "operation": "streamEvents", "query": { "cursor": "${cp}" } }, "expect": { "status": 200, "schema": "EventEnvelope", "stream": { "match": [
+        { "at": "", "where": { "/resource_id": "${att}" }, "count": 0 } ] } } } ] },
+    { "id": "events-02", "title": "An expired cursor is 410 cursor_expired before the stream starts", "world": "two-fleets", "steps": [
+      { "action": "sign-in", "args": { "client": "alice", "user": "alice" } },
+      { "action": "events-checkpoint", "capture": "old" },
+      { "action": "age-out-events" },
+      { "as": "alice", "request": { "operation": "streamEvents", "query": { "cursor": "${old}" } }, "expect": { "status": 410, "schema": "Error", "body": { "/code": "cursor_expired" } } },
+      { "as": "alice", "request": { "operation": "streamEvents", "headers": { "Last-Event-ID": "${old}" } }, "expect": { "status": 410, "schema": "Error", "body": { "/code": "cursor_expired" } } } ] },
+    { "id": "events-03", "title": "Last-Event-ID wins over the cursor parameter", "world": "two-fleets", "steps": [
+      { "action": "sign-in", "args": { "client": "alice", "user": "alice" } },
+      { "action": "events-checkpoint", "capture": "old" },
+      { "action": "age-out-events" },
+      { "action": "events-checkpoint", "capture": "cp" },
+      { "as": "alice", "request": { "operation": "streamEvents", "query": { "cursor": "${old}" }, "headers": { "Last-Event-ID": "${cp}" } }, "expect": { "status": 200, "schema": "EventEnvelope", "stream": {} } } ] },
+    { "id": "events-04", "title": "The stream needs a session", "world": "two-fleets", "steps": [
+      { "request": { "operation": "streamEvents" }, "expect": { "status": 401, "schema": "Error", "body": { "/code": "unauthenticated" } } } ] }
+  ]
+}

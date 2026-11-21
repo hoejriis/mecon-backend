@@ -1,0 +1,63 @@
+{
+  "contract": "mecon-reader-api/1.0.0-draft.8",
+  "synthetic": true,
+  "group": "send",
+  "cases": [
+    { "id": "send-01", "title": "With sending switched off a send is 403 sending_disabled and the session says so", "world": "two-fleets", "steps": [
+      { "action": "set-switch", "args": { "switch": "sending", "value": "off" } },
+      { "action": "sign-in", "args": { "client": "alice", "user": "alice" } },
+      { "as": "alice", "request": { "operation": "createSendAttempt", "headers": { "Idempotency-Key": "att_synthetic_off" },
+        "body": { "client_draft_id": "drf_synthetic_off", "client_attempt_id": "att_synthetic_off", "identity_id": "idn_any_synthetic", "target": { "kind": "contact", "id": "cnt_any_synthetic" }, "content": { "kind": "text", "text": "not sent (synthetic)" } } },
+        "expect": { "status": 403, "schema": "Error", "body": { "/code": "sending_disabled", "/retryable": false } } },
+      { "as": "alice", "request": { "operation": "getSession" }, "expect": { "status": 200, "schema": "Session", "body": { "/capabilities/send": "unavailable" } } } ] },
+    { "id": "send-02", "title": "A send is created once, replays the same attempt, and refuses a changed body", "world": "two-fleets", "steps": [
+      { "action": "sign-in", "args": { "client": "alice", "user": "alice" } },
+      { "as": "alice", "request": { "operation": "listIdentities" }, "expect": { "status": 200, "schema": "IdentityList" }, "capture": { "me": "/items/0/id" } },
+      { "as": "alice", "request": { "operation": "listContacts" }, "expect": { "status": 200, "schema": "ContactList" },
+        "capture": { "bob": { "at": "/items", "where": { "/display_name": "Bob (synthetic)" }, "field": "/id" } } },
+      { "as": "alice", "request": { "operation": "createSendAttempt", "headers": { "Idempotency-Key": "att_synthetic_1" },
+        "body": { "client_draft_id": "drf_synthetic_1", "client_attempt_id": "att_synthetic_1", "identity_id": "${me}", "target": { "kind": "contact", "id": "${bob}" }, "content": { "kind": "text", "text": "hello bob (synthetic)" } } },
+        "expect": { "status": 201, "schema": "SendAttempt", "body": { "/client_attempt_id": "att_synthetic_1", "/path": "backend", "/identity_id": "${me}" } }, "capture": { "att": "/id" } },
+      { "as": "alice", "request": { "operation": "createSendAttempt", "headers": { "Idempotency-Key": "att_synthetic_1" },
+        "body": { "client_draft_id": "drf_synthetic_1", "client_attempt_id": "att_synthetic_1", "identity_id": "${me}", "target": { "kind": "contact", "id": "${bob}" }, "content": { "kind": "text", "text": "hello bob (synthetic)" } } },
+        "expect": { "status": 200, "schema": "SendAttempt", "body": { "/id": "${att}" } } },
+      { "as": "alice", "request": { "operation": "createSendAttempt", "headers": { "Idempotency-Key": "att_synthetic_1" },
+        "body": { "client_draft_id": "drf_synthetic_1", "client_attempt_id": "att_synthetic_1", "identity_id": "${me}", "target": { "kind": "contact", "id": "${bob}" }, "content": { "kind": "text", "text": "a different text (synthetic)" } } },
+        "expect": { "status": 409, "schema": "Error" } },
+      { "as": "alice", "request": { "operation": "getSendAttempt", "path": { "attempt_id": "${att}" } }, "expect": { "status": 200, "schema": "SendAttempt", "body": { "/id": "${att}", "/client_attempt_id": "att_synthetic_1" } } } ] },
+    { "id": "send-03", "title": "A first send to a channel is created", "world": "two-fleets", "steps": [
+      { "action": "sign-in", "args": { "client": "alice", "user": "alice" } },
+      { "as": "alice", "request": { "operation": "listIdentities" }, "expect": { "status": 200, "schema": "IdentityList" }, "capture": { "me": "/items/0/id" } },
+      { "as": "alice", "request": { "operation": "listChannels" }, "expect": { "status": 200, "schema": "ChannelList" },
+        "capture": { "pub": { "at": "/items", "where": { "/name": "Public (synthetic)" }, "field": "/id" } } },
+      { "as": "alice", "request": { "operation": "createSendAttempt", "headers": { "Idempotency-Key": "att_synthetic_ch" },
+        "body": { "client_draft_id": "drf_synthetic_ch", "client_attempt_id": "att_synthetic_ch", "identity_id": "${me}", "target": { "kind": "channel", "id": "${pub}" }, "content": { "kind": "text", "text": "hello public (synthetic)" } } },
+        "expect": { "status": 201, "schema": "SendAttempt", "body": { "/path": "backend" } } } ] },
+    { "id": "send-04", "title": "A send body that fails validation is 422", "world": "two-fleets", "steps": [
+      { "action": "sign-in", "args": { "client": "alice", "user": "alice" } },
+      { "as": "alice", "request": { "operation": "createSendAttempt", "headers": { "Idempotency-Key": "att_synthetic_bad" },
+        "body": { "client_draft_id": "drf_synthetic_bad", "client_attempt_id": "att_synthetic_bad", "identity_id": "idn_any_synthetic", "target": { "kind": "contact", "id": "cnt_any_synthetic" }, "content": { "kind": "text", "text": "" } }, "invalid": true },
+        "expect": { "status": 422, "schema": "Error" } } ] },
+    { "id": "send-05", "title": "A send without the CSRF token or from a foreign Origin is refused", "world": "two-fleets", "steps": [
+      { "action": "sign-in", "args": { "client": "alice", "user": "alice" } },
+      { "as": "alice", "request": { "operation": "createSendAttempt", "csrf": "absent", "headers": { "Idempotency-Key": "att_synthetic_csrf" },
+        "body": { "client_draft_id": "drf_synthetic_csrf", "client_attempt_id": "att_synthetic_csrf", "identity_id": "idn_any_synthetic", "target": { "kind": "contact", "id": "cnt_any_synthetic" }, "content": { "kind": "text", "text": "x" } } },
+        "expect": { "status": 403, "schema": "Error", "body": { "/code": "csrf_failed" } } },
+      { "as": "alice", "request": { "operation": "createSendAttempt", "origin": "foreign", "headers": { "Idempotency-Key": "att_synthetic_origin" },
+        "body": { "client_draft_id": "drf_synthetic_origin", "client_attempt_id": "att_synthetic_origin", "identity_id": "idn_any_synthetic", "target": { "kind": "contact", "id": "cnt_any_synthetic" }, "content": { "kind": "text", "text": "x" } } },
+        "expect": { "status": 403, "schema": "Error", "body": { "/code": "origin_rejected" } } } ] },
+    { "id": "send-06", "title": "An unknown attempt, and another user's attempt, are 404", "world": "two-fleets", "steps": [
+      { "action": "sign-in", "args": { "client": "alice", "user": "alice" } },
+      { "as": "alice", "request": { "operation": "listIdentities" }, "expect": { "status": 200, "schema": "IdentityList" }, "capture": { "me": "/items/0/id" } },
+      { "as": "alice", "request": { "operation": "listContacts" }, "expect": { "status": 200, "schema": "ContactList" },
+        "capture": { "bob": { "at": "/items", "where": { "/display_name": "Bob (synthetic)" }, "field": "/id" } } },
+      { "as": "alice", "request": { "operation": "createSendAttempt", "headers": { "Idempotency-Key": "att_synthetic_6" },
+        "body": { "client_draft_id": "drf_synthetic_6", "client_attempt_id": "att_synthetic_6", "identity_id": "${me}", "target": { "kind": "contact", "id": "${bob}" }, "content": { "kind": "text", "text": "mine (synthetic)" } } },
+        "expect": { "status": 201, "schema": "SendAttempt" }, "capture": { "att": "/id" } },
+      { "as": "alice", "request": { "operation": "getSendAttempt", "path": { "attempt_id": "att_unknown_synthetic" } }, "expect": { "status": 404, "schema": "Error", "body": { "/code": "not_found" } } },
+      { "action": "sign-in", "args": { "client": "carol", "user": "carol" } },
+      { "as": "carol", "request": { "operation": "getSendAttempt", "path": { "attempt_id": "${att}" } }, "expect": { "status": 404, "schema": "Error", "body": { "/code": "not_found" } } } ] },
+    { "id": "send-07", "title": "Sends need a session", "world": "two-fleets", "steps": [
+      { "request": { "operation": "getSendAttempt", "path": { "attempt_id": "att_unknown_synthetic" } }, "expect": { "status": 401, "schema": "Error", "body": { "/code": "unauthenticated" } } } ] }
+  ]
+}

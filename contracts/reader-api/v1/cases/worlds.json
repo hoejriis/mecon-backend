@@ -1,5 +1,5 @@
 {
-  "contract": "mecon-reader-api/1.0.0-draft.9",
+  "contract": "mecon-reader-api/1.0.0-draft.10",
   "synthetic": true,
   "worlds": {
     "two-fleets": {
@@ -168,12 +168,6 @@
         "value"
       ],
       "description": "`sending`: on or off (the operator's Reader sending switch). `lease_signing`: on, off (leases offered, signing key unusable) or absent (leases not offered at all). An implementation that always offers leases cannot express `absent`: it reports the cases that use it as not applicable, never as passed."
-    },
-    "throttle": {
-      "args": [
-        "operation"
-      ],
-      "description": "Put the request source over this operation's rate limit."
     },
     "events-checkpoint": {
       "args": [],

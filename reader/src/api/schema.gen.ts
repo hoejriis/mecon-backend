@@ -35,7 +35,9 @@ export interface paths {
          *     the browser that opened it. The Reader that asked polls
          *     `GET /login/{request_id}` and receives the session cookie on the
          *     winning poll. Pre-session, so no CSRF token: protected by the Origin
-         *     allowlist and per-source rate limits.
+         *     allowlist and per-source rate limits. Over a limit the answer is the
+         *     same 202 and no mail is sent: throttling is never visible to the
+         *     caller, so it cannot reveal which addresses have accounts.
          */
         post: operations["startLogin"];
         delete?: never;
@@ -978,7 +980,6 @@ export interface operations {
                 };
             };
             422: components["responses"]["Invalid"];
-            429: components["responses"]["Throttled"];
         };
     };
     pollLogin: {

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: MECON Reader API
-  version: 1.0.0-draft.9
+  version: 1.0.0-draft.10
   summary: Interface between the MECON Reader and an authorized MECON Backend.
   description: |
     Machine-readable form of docs/READER_API_CONTRACT.md. Target specification,
@@ -70,7 +70,9 @@ paths:
         the browser that opened it. The Reader that asked polls
         `GET /login/{request_id}` and receives the session cookie on the
         winning poll. Pre-session, so no CSRF token: protected by the Origin
-        allowlist and per-source rate limits.
+        allowlist and per-source rate limits. Over a limit the answer is the
+        same 202 and no mail is sent: throttling is never visible to the
+        caller, so it cannot reveal which addresses have accounts.
       security: []
       requestBody:
         required: true
@@ -91,7 +93,6 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
         '422': { $ref: '#/components/responses/Invalid' }
-        '429': { $ref: '#/components/responses/Throttled' }
 
   /login/{request_id}:
     get:

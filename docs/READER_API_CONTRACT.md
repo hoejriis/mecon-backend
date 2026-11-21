@@ -8,6 +8,7 @@ This public contract defines the interface between the MECON Reader and an autho
 - Use the Backend's authenticated session with secure HttpOnly cookies, same-origin by default, CSRF protection for writes and explicit CORS allowlisting for separate Reader origins. SSE uses the same authenticated session; never put credentials in query strings.
 - Every request is scoped by server-side account/identity authorization. Device ownership and administrative role never grant another user's private-message read rights.
 - Error format: `{code, message, request_id, retryable}`; 401 unauthenticated, 403 unauthorized, 404 unavailable/not found without existence disclosure, 409 conflict, 422 invalid request, 429 throttled, 503 temporarily unavailable. Unsupported capabilities are explicitly reported, not simulated.
+- Login (`POST /login`) is throttled silently: over a limit it answers the same 202 and sends no mail, so throttling never reveals which addresses have accounts. It never answers 429.
 - Public contract schema uses OpenAPI 3.1 with synthetic, non-sensitive fixtures.
 
 ## REST resources

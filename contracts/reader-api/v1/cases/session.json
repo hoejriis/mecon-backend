@@ -1,5 +1,5 @@
 {
-  "contract": "mecon-reader-api/1.0.0-draft.9",
+  "contract": "mecon-reader-api/1.0.0-draft.10",
   "synthetic": true,
   "group": "session",
   "cases": [
@@ -14,9 +14,6 @@
       { "request": { "operation": "pollLogin", "path": { "request_id": "${req}" } }, "expect": { "status": 200, "schema": "LoginState", "body": { "/state": "pending" } } } ] },
     { "id": "session-04", "title": "A login body that fails validation is 422", "world": "two-fleets", "steps": [
       { "request": { "operation": "startLogin", "body": { "email": "alice@example.test", "remember": true }, "invalid": true }, "expect": { "status": 422, "schema": "Error", "body": { "/retryable": false } } } ] },
-    { "id": "session-05", "title": "A throttled login is 429 with Retry-After", "world": "two-fleets", "steps": [
-      { "action": "throttle", "args": { "operation": "startLogin" } },
-      { "request": { "operation": "startLogin", "body": { "email": "alice@example.test" } }, "expect": { "status": 429, "schema": "Error", "headers": { "Retry-After": "present" } } } ] },
     { "id": "session-06", "title": "An approved login sets the cookie on exactly one poll, then reads delivered", "world": "two-fleets", "steps": [
       { "as": "reader", "request": { "operation": "startLogin", "body": { "email": "alice@example.test" } }, "expect": { "status": 202, "schema": "LoginStarted" }, "capture": { "req": "/request_id" } },
       { "action": "approve-login", "args": { "request_id": "${req}" } },

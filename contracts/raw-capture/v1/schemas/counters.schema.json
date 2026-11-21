@@ -2,17 +2,17 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "raw-capture/v1/counters",
   "title": "Capture counters",
-  "description": "Totals since the archive started, per source and over all. Every capture handed to the archive ends in exactly one of committed, rejected, or still in flight (buffered).",
+  "description": "Totals since the archive started, except buffered, a level. At every instant received = committed + rejected + buffered + dropped.",
   "type": "object",
   "additionalProperties": false,
   "required": ["received", "committed", "rejected", "unavailable_batches", "buffered", "dropped"],
   "properties": {
-    "received": { "type": "integer", "minimum": 0 },
+    "received": { "type": "integer", "minimum": 0, "description": "Captures in appends the archive accepted, counted at acceptance." },
     "committed": { "type": "integer", "minimum": 0 },
     "rejected": { "type": "integer", "minimum": 0 },
     "unavailable_batches": { "type": "integer", "minimum": 0, "description": "Appends answered storage unavailable." },
-    "buffered": { "type": "integer", "minimum": 0, "description": "Captures accepted for append and not yet committed." },
-    "dropped": { "type": "integer", "minimum": 0, "description": "Captures lost without a commit (a full buffer that drops, a crash recovered from). A conforming archive that never drops reports 0." },
+    "buffered": { "type": "integer", "minimum": 0, "description": "A level: captures accepted and not yet answered, now." },
+    "dropped": { "type": "integer", "minimum": 0, "description": "Captures accepted and lost while the archive kept running (a buffer shed under pressure). A crash's loss is not counted: counters start at zero; the producer sees no result. A conforming archive that never drops reports 0." },
     "oldest_buffered_ms": { "type": ["integer", "null"], "minimum": 0, "description": "How long the oldest buffered capture has waited: the lag." }
   }
 }

@@ -55,21 +55,23 @@ A producer never learns "committed" for a capture that was not.
 
 ## 4. Counters
 
-`schemas/counters.schema.json`, since the archive started:
-- `received`: captures the archive took responsibility for, which is every capture of a batch answered `available`. A batch answered `unavailable` stays with the caller and is not counted.
-- `committed`, `rejected`.
-- `unavailable_batches`.
-- `buffered`: received, not yet committed.
-- `dropped`: lost without a commit.
-- `oldest_buffered_ms`: the lag.
+`schemas/counters.schema.json`. These are totals since the archive started, except `buffered`, which is a level:
+- `received`: counted when the archive **accepts** an append, before it answers, so every capture of every batch it accepts is counted.
+  - An append the archive cannot take (storage unavailable) is answered `unavailable`, is never accepted, and stays with the caller: it counts in `unavailable_batches`, not in `received`.
+- `committed` and `rejected`: counted when the archive answers `available` for the batch.
+- `buffered`: **the number** of captures accepted and not yet answered, at this instant. It rises at acceptance and falls at the answer.
+- `dropped`: captures accepted and then lost while the archive kept running, for example by an archive that sheds its buffer under pressure. A conforming archive that never drops reports `dropped` 0.
+- `oldest_buffered_ms`: how long the oldest buffered capture has waited, which is the lag. It is null when nothing is buffered.
 
-Every received capture is committed, rejected, buffered or dropped: `received = committed + rejected + buffered + dropped`. A conforming archive that never drops reports `dropped` 0.
+At **every instant**, `received = committed + rejected + buffered + dropped`.
+
+Counters start at zero with the archive, so a crash's loss is never counted in them. A capture lost to a crash was accepted but never answered, and the producer sees that as an append with no result, which it treats like `unavailable`: it still holds the batch.
 
 ## 5. The fixtures' rules
 
 The validator checks:
 - **A to C:** each result is consistent with section 3, and with its own request: the right `batch_id`, and exactly the captures that fail the schema or the fixture's `max_payload_bytes` rejected, with the right reasons.
-- **D:** the counters equal what results A to C add up to under section 4.
+- **D:** the counters after A to C have all been answered (nothing in flight, so `buffered` 0) equal what their results add up to under section 4, and the identity holds.
 
 ## 6. Budgets
 

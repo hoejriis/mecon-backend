@@ -3,7 +3,7 @@
   "synthetic": true,
   "group": "events",
   "cases": [
-    { "id": "events-01", "title": "A send shows up as an attempt_status event for its sender and not for another fleet", "world": "two-fleets", "steps": [
+    { "id": "events-01", "title": "Each sender sees its own attempt_status events and never another fleet's", "world": "two-fleets", "steps": [
       { "action": "sign-in", "args": { "client": "alice", "user": "alice" } },
       { "action": "sign-in", "args": { "client": "carol", "user": "carol" } },
       { "action": "events-checkpoint", "capture": "cp" },
@@ -15,7 +15,14 @@
         "expect": { "status": 201, "schema": "SendAttempt" }, "capture": { "att": "/id" } },
       { "as": "alice", "request": { "operation": "streamEvents", "query": { "cursor": "${cp}" } }, "expect": { "status": 200, "schema": "EventEnvelope", "stream": { "match": [
         { "at": "", "where": { "/kind": "attempt_status", "/resource_id": "${att}" }, "at_least": 1 } ] } } },
+      { "as": "carol", "request": { "operation": "listIdentities" }, "expect": { "status": 200, "schema": "IdentityList" }, "capture": { "carol_me": "/items/0/id" } },
+      { "as": "carol", "request": { "operation": "listContacts" }, "expect": { "status": 200, "schema": "ContactList" },
+        "capture": { "erin": { "at": "/items", "where": { "/display_name": "Erin (synthetic)" }, "field": "/id" } } },
+      { "as": "carol", "request": { "operation": "createSendAttempt", "headers": { "Idempotency-Key": "att_synthetic_ev_c" },
+        "body": { "client_draft_id": "drf_synthetic_ev_c", "client_attempt_id": "att_synthetic_ev_c", "identity_id": "${carol_me}", "target": { "kind": "contact", "id": "${erin}" }, "content": { "kind": "text", "text": "carol evented (synthetic)" } } },
+        "expect": { "status": 201, "schema": "SendAttempt" }, "capture": { "carol_att": "/id" } },
       { "as": "carol", "request": { "operation": "streamEvents", "query": { "cursor": "${cp}" } }, "expect": { "status": 200, "schema": "EventEnvelope", "stream": { "match": [
+        { "at": "", "where": { "/kind": "attempt_status", "/resource_id": "${carol_att}" }, "at_least": 1 },
         { "at": "", "where": { "/resource_id": "${att}" }, "count": 0 } ] } } } ] },
     { "id": "events-02", "title": "An expired cursor is 410 cursor_expired before the stream starts", "world": "two-fleets", "steps": [
       { "action": "sign-in", "args": { "client": "alice", "user": "alice" } },

@@ -35,4 +35,4 @@ A case fails at its first unmet expectation. Order within a case matters; cases 
 
 ## Adding a case
 
-Each case needs a new id within its group (`<group>-NN`). A request that deliberately breaks the request schema sets `invalid: true` and expects 422; the validator checks that the body really fails. An implementation's runner maps new actions or worlds, so add those sparingly and describe them in `worlds.json`.
+Each case needs a new id within its group (`<group>-NN`). A request that deliberately breaks the request schema sets `invalid: true` and expects 422; the validator checks that the body really fails. A `count: 0` match proves nothing on an empty array, so it always sits beside a match at the same `at` that needs at least one item; the validator enforces this. An implementation's runner maps new actions or worlds, so add those sparingly and describe them in `worlds.json`.

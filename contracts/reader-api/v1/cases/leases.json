@@ -41,7 +41,7 @@
         "capture": { "old_kid": { "at": "/keys", "where": { "/status": "active" }, "field": "/key_id" } } },
       { "action": "revoke-lease-keys" },
       { "as": "alice", "request": { "operation": "listLeaseKeys" }, "expect": { "status": 200, "schema": "LeaseKeyList",
-        "match": [ { "at": "/keys", "where": { "/key_id": "${old_kid}" }, "count": 0 } ] } } ] },
+        "match": [ { "at": "/keys", "where": { "/key_id": "${old_kid}" }, "count": 0 }, { "at": "/keys", "where": { "/status": "active" }, "count": 1 } ] } } ] },
     { "id": "leases-08", "title": "Leases and their keys need a session", "world": "two-fleets", "steps": [
       { "request": { "operation": "createLease" }, "expect": { "status": 401, "schema": "Error", "body": { "/code": "unauthenticated" } } },
       { "request": { "operation": "listLeaseKeys" }, "expect": { "status": 401, "schema": "Error", "body": { "/code": "unauthenticated" } } } ] },

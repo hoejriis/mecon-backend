@@ -45,6 +45,7 @@ class FakeSerialDevice:
         self.answers_hello = False
         self.hello_result = {"v": 1, "name": "synthetic", "node_key": "00" * 32, "epoch": 1}
         self.hello_writes: list[bytes] = []
+        self.hello_page_fn = None  # callable(cursor: int) -> result dict | None (None: no answer); default: hello_result
         self.cr_writes = 0
         self.messages: list[bytes] = []  # each relayed request as the device decoded it
         self.reply_hook = None  # callable(message: bytes) -> bytes | None: the device's answer to a relayed request
@@ -88,7 +89,8 @@ class FakeSerialDevice:
         elif isinstance(obj, dict) and obj.get("op") == "hello" and str(obj.get("id", "")).startswith("ch-"):
             self.hello_writes.append(bytes(data))
             if self.answers_hello:
-                self._answer_hello(obj["id"])
+                cur = (obj.get("args") or {}).get("cursor", 0)
+                self._answer_hello(obj["id"], cur)
         else:
             self.written.append(bytes(data))
             if msg is not None:
@@ -160,8 +162,11 @@ class FakeSerialDevice:
             base.update({"usig_boot": self.epoch, "usig_seq": self._next_seq(), "usig": "U1lOVEhFVElD"})
         self.say(json.dumps(base, separators=(",", ":")).encode())
 
-    def _answer_hello(self, rid: str) -> None:
-        base = {"v": 1, "id": rid, "op": "hello", "status": "ok", "epoch": self.epoch, "result": dict(self.hello_result)}
+    def _answer_hello(self, rid: str, cursor: int = 0) -> None:
+        res = self.hello_result if self.hello_page_fn is None else self.hello_page_fn(cursor)
+        if res is None:
+            return
+        base = {"v": 1, "id": rid, "op": "hello", "status": "ok", "epoch": self.epoch, "result": dict(res)}
         if self.signed and self.enrolment in ("provisioned", "corrupt"):
             base.update({"usig_boot": self.epoch, "usig_seq": self._next_seq(), "usig": "U1lOVEhFVElD"})
         self.say(json.dumps(base, separators=(",", ":")).encode())

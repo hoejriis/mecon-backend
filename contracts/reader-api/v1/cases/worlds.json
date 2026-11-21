@@ -1,0 +1,50 @@
+{
+  "contract": "mecon-reader-api/1.0.0-draft.8",
+  "synthetic": true,
+  "worlds": {
+    "two-fleets": {
+      "description": "Two fleets that share nothing private. Every name, key prefix and address is made up. Each case starts from a fresh copy of this world with both switches on.",
+      "fleets": ["north", "south"],
+      "users": {
+        "alice": { "email": "alice@example.test", "display_name": "Alice (synthetic)", "fleet": "north", "devices": ["alice_companion"], "identities": ["alice_id"] },
+        "carol": { "email": "carol@example.test", "display_name": "Carol (synthetic)", "fleet": "south", "devices": ["carol_companion"], "identities": ["carol_id"] },
+        "dora": { "email": "dora@example.test", "display_name": "Dora (synthetic)", "fleet": "north", "devices": [], "identities": [] }
+      },
+      "devices": {
+        "alice_companion": { "role": "companion", "label": "Alice companion (synthetic)", "reachable": true },
+        "carol_companion": { "role": "companion", "label": "Carol companion (synthetic)", "reachable": true }
+      },
+      "identities": {
+        "alice_id": { "display_name": "Alice (synthetic)", "public_key_prefix": "a1a1a1a1", "device": "alice_companion", "can_send": true },
+        "carol_id": { "display_name": "Carol (synthetic)", "public_key_prefix": "c3c3c3c3", "device": "carol_companion", "can_send": true }
+      },
+      "contacts": {
+        "bob": { "display_name": "Bob (synthetic)", "public_key_prefix": "b0b0b0b0", "kind": "companion", "held_by": "alice_companion" },
+        "erin": { "display_name": "Erin (synthetic)", "public_key_prefix": "e5e5e5e5", "kind": "companion", "held_by": "carol_companion" }
+      },
+      "channels": {
+        "public": { "name": "Public (synthetic)", "visibility": "public", "fleets": ["north", "south"] },
+        "north_ops": { "name": "Ops (synthetic)", "visibility": "private", "fleets": ["north"] },
+        "south_ops": { "name": "Ops (synthetic)", "visibility": "private", "fleets": ["south"] }
+      },
+      "messages": [
+        { "identity": "alice_id", "peer": "bob", "direction": "outbound", "text": "hi bob (synthetic)", "read": true },
+        { "identity": "alice_id", "peer": "bob", "direction": "inbound", "text": "hello alice (synthetic)", "read": false },
+        { "identity": "alice_id", "channel": "north_ops", "direction": "inbound", "sender_label": "Bob (synthetic)", "text": "ops note (synthetic)", "read": true },
+        { "identity": "carol_id", "peer": "erin", "direction": "inbound", "text": "hello carol (synthetic)", "read": false },
+        { "identity": "carol_id", "channel": "south_ops", "direction": "inbound", "sender_label": "Erin (synthetic)", "text": "south note (synthetic)", "read": true }
+      ],
+      "switches": { "sending": "on", "lease_signing": "on" }
+    }
+  },
+  "actions": {
+    "sign-in": { "args": ["client", "user"], "description": "Give `client` a valid session for `user`, by whatever means the implementation's tests use (the magic link is out of band)." },
+    "approve-login": { "args": ["request_id"], "description": "Open the login link of this pending request, as its recipient would." },
+    "set-switch": { "args": ["switch", "value"], "description": "`sending`: on or off (the operator's Reader sending switch). `lease_signing`: on, off (leases offered, signing key unusable) or absent (leases not offered at all)." },
+    "throttle": { "args": ["operation"], "description": "Put the request source over this operation's rate limit." },
+    "events-checkpoint": { "args": [], "description": "Capture the cursor a client would hold had it read the event stream up to now." },
+    "age-out-events": { "args": [], "description": "Move every cursor issued so far outside retention." },
+    "rotate-lease-key": { "args": [], "description": "Retire the active lease key and activate a new one; leases already signed keep verifying." },
+    "revoke-lease-keys": { "args": [], "description": "Revoke every lease key recorded so far and activate a new one." }
+  }
+}

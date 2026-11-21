@@ -1,0 +1,105 @@
+{
+  "contract": "mecon-reader-api/1.0.0-draft.8",
+  "synthetic": true,
+  "group": "messaging",
+  "cases": [
+    { "id": "messaging-01", "title": "A user lists their own identity, which can send", "world": "two-fleets", "steps": [
+      { "action": "sign-in", "args": { "client": "alice", "user": "alice" } },
+      { "as": "alice", "request": { "operation": "listIdentities" }, "expect": { "status": 200, "schema": "IdentityList", "body": { "/next_cursor": null }, "match": [
+        { "at": "/items", "where": { "/display_name": "Alice (synthetic)", "/can_send": true }, "count": 1 },
+        { "at": "/items", "where": { "/display_name": "Carol (synthetic)" }, "count": 0 } ] } } ] },
+    { "id": "messaging-02", "title": "A user with no identity has no identities and no conversations", "world": "two-fleets", "steps": [
+      { "action": "sign-in", "args": { "client": "dora", "user": "dora" } },
+      { "as": "dora", "request": { "operation": "listIdentities" }, "expect": { "status": 200, "schema": "IdentityList", "body": { "/items": [] } } },
+      { "as": "dora", "request": { "operation": "listConversations" }, "expect": { "status": 200, "schema": "ConversationList", "body": { "/items": [] } } } ] },
+    { "id": "messaging-03", "title": "Conversations list the user's direct and channel conversations only", "world": "two-fleets", "steps": [
+      { "action": "sign-in", "args": { "client": "alice", "user": "alice" } },
+      { "as": "alice", "request": { "operation": "listConversations" }, "expect": { "status": 200, "schema": "ConversationList", "match": [
+        { "at": "/items", "where": { "/target/kind": "contact", "/unread_count": 1 }, "count": 1 },
+        { "at": "/items", "where": { "/target/kind": "channel" }, "count": 1 } ] } } ] },
+    { "id": "messaging-04", "title": "One conversation reads back by its id", "world": "two-fleets", "steps": [
+      { "action": "sign-in", "args": { "client": "alice", "user": "alice" } },
+      { "as": "alice", "request": { "operation": "listConversations" }, "expect": { "status": 200, "schema": "ConversationList" },
+        "capture": { "dm": { "at": "/items", "where": { "/target/kind": "contact" }, "field": "/id" } } },
+      { "as": "alice", "request": { "operation": "getConversation", "path": { "conversation_id": "${dm}" } },
+        "expect": { "status": 200, "schema": "Conversation", "body": { "/id": "${dm}", "/target/kind": "contact" } } } ] },
+    { "id": "messaging-05", "title": "An unknown conversation is 404", "world": "two-fleets", "steps": [
+      { "action": "sign-in", "args": { "client": "alice", "user": "alice" } },
+      { "as": "alice", "request": { "operation": "getConversation", "path": { "conversation_id": "cnv_unknown_synthetic" } },
+        "expect": { "status": 404, "schema": "Error", "body": { "/code": "not_found" } } } ] },
+    { "id": "messaging-06", "title": "Another fleet's conversation is 404, never 403, for reading, messages and marking read", "world": "two-fleets", "steps": [
+      { "action": "sign-in", "args": { "client": "carol", "user": "carol" } },
+      { "as": "carol", "request": { "operation": "listConversations" }, "expect": { "status": 200, "schema": "ConversationList" },
+        "capture": { "theirs": { "at": "/items", "where": { "/target/kind": "contact" }, "field": "/id" } } },
+      { "as": "carol", "request": { "operation": "listMessages", "path": { "conversation_id": "${theirs}" } }, "expect": { "status": 200, "schema": "MessageList" },
+        "capture": { "their_msg": "/items/0/message_id" } },
+      { "action": "sign-in", "args": { "client": "alice", "user": "alice" } },
+      { "as": "alice", "request": { "operation": "getConversation", "path": { "conversation_id": "${theirs}" } }, "expect": { "status": 404, "schema": "Error", "body": { "/code": "not_found" } } },
+      { "as": "alice", "request": { "operation": "listMessages", "path": { "conversation_id": "${theirs}" } }, "expect": { "status": 404, "schema": "Error", "body": { "/code": "not_found" } } },
+      { "as": "alice", "request": { "operation": "markConversationRead", "path": { "conversation_id": "${theirs}" }, "body": { "up_to": "${their_msg}" } },
+        "expect": { "status": 404, "schema": "Error", "body": { "/code": "not_found" } } } ] },
+    { "id": "messaging-07", "title": "Direct messages carry the user's identity; channel messages carry none", "world": "two-fleets", "steps": [
+      { "action": "sign-in", "args": { "client": "alice", "user": "alice" } },
+      { "as": "alice", "request": { "operation": "listConversations" }, "expect": { "status": 200, "schema": "ConversationList" },
+        "capture": { "dm": { "at": "/items", "where": { "/target/kind": "contact" }, "field": "/id" }, "ch": { "at": "/items", "where": { "/target/kind": "channel" }, "field": "/id" } } },
+      { "as": "alice", "request": { "operation": "listMessages", "path": { "conversation_id": "${dm}" } }, "expect": { "status": 200, "schema": "MessageList", "match": [
+        { "at": "/items", "where": { "/conversation_id": "${dm}" }, "count": 2 },
+        { "at": "/items", "where": { "/identity_id": null }, "count": 0 },
+        { "at": "/items", "where": { "/direction": "inbound", "/content/text": "hello alice (synthetic)" }, "count": 1 } ] } },
+      { "as": "alice", "request": { "operation": "listMessages", "path": { "conversation_id": "${ch}" } }, "expect": { "status": 200, "schema": "MessageList", "match": [
+        { "at": "/items", "where": { "/identity_id": null, "/sender_label": "Bob (synthetic)" }, "count": 1 } ] } } ] },
+    { "id": "messaging-08", "title": "Marking read clears the unread count and repeats as a no-op", "world": "two-fleets", "steps": [
+      { "action": "sign-in", "args": { "client": "alice", "user": "alice" } },
+      { "as": "alice", "request": { "operation": "listConversations" }, "expect": { "status": 200, "schema": "ConversationList" },
+        "capture": { "dm": { "at": "/items", "where": { "/target/kind": "contact" }, "field": "/id" } } },
+      { "as": "alice", "request": { "operation": "listMessages", "path": { "conversation_id": "${dm}" } }, "expect": { "status": 200, "schema": "MessageList" },
+        "capture": { "newest": "/items/0/message_id" } },
+      { "as": "alice", "request": { "operation": "markConversationRead", "path": { "conversation_id": "${dm}" }, "body": { "up_to": "${newest}" } }, "expect": { "status": 204, "schema": null } },
+      { "as": "alice", "request": { "operation": "getConversation", "path": { "conversation_id": "${dm}" } }, "expect": { "status": 200, "schema": "Conversation", "body": { "/unread_count": 0 } } },
+      { "as": "alice", "request": { "operation": "markConversationRead", "path": { "conversation_id": "${dm}" }, "body": { "up_to": "${newest}" } }, "expect": { "status": 204, "schema": null } } ] },
+    { "id": "messaging-09", "title": "Marking read up to a message of another conversation is 422 validation_failed", "world": "two-fleets", "steps": [
+      { "action": "sign-in", "args": { "client": "alice", "user": "alice" } },
+      { "as": "alice", "request": { "operation": "listConversations" }, "expect": { "status": 200, "schema": "ConversationList" },
+        "capture": { "dm": { "at": "/items", "where": { "/target/kind": "contact" }, "field": "/id" }, "ch": { "at": "/items", "where": { "/target/kind": "channel" }, "field": "/id" } } },
+      { "as": "alice", "request": { "operation": "listMessages", "path": { "conversation_id": "${ch}" } }, "expect": { "status": 200, "schema": "MessageList" },
+        "capture": { "other": "/items/0/message_id" } },
+      { "as": "alice", "request": { "operation": "markConversationRead", "path": { "conversation_id": "${dm}" }, "body": { "up_to": "${other}" } },
+        "expect": { "status": 422, "schema": "Error", "body": { "/code": "validation_failed" } } },
+      { "as": "alice", "request": { "operation": "markConversationRead", "path": { "conversation_id": "${dm}" }, "body": { "up_to": "" }, "invalid": true },
+        "expect": { "status": 422, "schema": "Error" } } ] },
+    { "id": "messaging-10", "title": "Marking read without the CSRF token is refused and changes nothing", "world": "two-fleets", "steps": [
+      { "action": "sign-in", "args": { "client": "alice", "user": "alice" } },
+      { "as": "alice", "request": { "operation": "listConversations" }, "expect": { "status": 200, "schema": "ConversationList" },
+        "capture": { "dm": { "at": "/items", "where": { "/target/kind": "contact" }, "field": "/id" } } },
+      { "as": "alice", "request": { "operation": "listMessages", "path": { "conversation_id": "${dm}" } }, "expect": { "status": 200, "schema": "MessageList" },
+        "capture": { "newest": "/items/0/message_id" } },
+      { "as": "alice", "request": { "operation": "markConversationRead", "path": { "conversation_id": "${dm}" }, "body": { "up_to": "${newest}" }, "csrf": "absent" },
+        "expect": { "status": 403, "schema": "Error", "body": { "/code": "csrf_failed" } } },
+      { "as": "alice", "request": { "operation": "getConversation", "path": { "conversation_id": "${dm}" } }, "expect": { "status": 200, "schema": "Conversation", "body": { "/unread_count": 1 } } } ] },
+    { "id": "messaging-11", "title": "Contacts are shared within a fleet and never across", "world": "two-fleets", "steps": [
+      { "action": "sign-in", "args": { "client": "alice", "user": "alice" } },
+      { "as": "alice", "request": { "operation": "listContacts" }, "expect": { "status": 200, "schema": "ContactList", "match": [
+        { "at": "/items", "where": { "/display_name": "Bob (synthetic)" }, "count": 1 },
+        { "at": "/items", "where": { "/display_name": "Erin (synthetic)" }, "count": 0 } ] } },
+      { "action": "sign-in", "args": { "client": "dora", "user": "dora" } },
+      { "as": "dora", "request": { "operation": "listContacts" }, "expect": { "status": 200, "schema": "ContactList", "match": [
+        { "at": "/items", "where": { "/display_name": "Bob (synthetic)" }, "count": 1 } ] } } ] },
+    { "id": "messaging-12", "title": "Two fleets with a private channel of the same name each see only their own", "world": "two-fleets", "steps": [
+      { "action": "sign-in", "args": { "client": "alice", "user": "alice" } },
+      { "as": "alice", "request": { "operation": "listChannels" }, "expect": { "status": 200, "schema": "ChannelList", "body": { "/next_cursor": null }, "match": [
+        { "at": "/items", "where": { "/name": "Ops (synthetic)", "/visibility": "private" }, "count": 1 },
+        { "at": "/items", "where": { "/name": "Public (synthetic)", "/visibility": "public" }, "count": 1 } ] },
+        "capture": { "north": { "at": "/items", "where": { "/name": "Ops (synthetic)" }, "field": "/id" } } },
+      { "action": "sign-in", "args": { "client": "carol", "user": "carol" } },
+      { "as": "carol", "request": { "operation": "listChannels" }, "expect": { "status": 200, "schema": "ChannelList", "match": [
+        { "at": "/items", "where": { "/name": "Ops (synthetic)" }, "count": 1 },
+        { "at": "/items", "where": { "/id": "${north}" }, "count": 0 } ] } } ] },
+    { "id": "messaging-13", "title": "Every messaging read needs a session", "world": "two-fleets", "steps": [
+      { "request": { "operation": "listIdentities" }, "expect": { "status": 401, "schema": "Error", "body": { "/code": "unauthenticated" } } },
+      { "request": { "operation": "listConversations" }, "expect": { "status": 401, "schema": "Error", "body": { "/code": "unauthenticated" } } },
+      { "request": { "operation": "getConversation", "path": { "conversation_id": "cnv_unknown_synthetic" } }, "expect": { "status": 401, "schema": "Error", "body": { "/code": "unauthenticated" } } },
+      { "request": { "operation": "listMessages", "path": { "conversation_id": "cnv_unknown_synthetic" } }, "expect": { "status": 401, "schema": "Error", "body": { "/code": "unauthenticated" } } },
+      { "request": { "operation": "listContacts" }, "expect": { "status": 401, "schema": "Error", "body": { "/code": "unauthenticated" } } },
+      { "request": { "operation": "listChannels" }, "expect": { "status": 401, "schema": "Error", "body": { "/code": "unauthenticated" } } } ] }
+  ]
+}

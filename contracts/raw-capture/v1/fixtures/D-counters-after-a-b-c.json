@@ -1,0 +1,5 @@
+{
+  "fixture": "D", "title": "The counters after fixtures A, B and C, nothing buffered", "kind": "counters",
+  "after": ["A-committed-batch.json", "B-one-malformed-one-too-large.json", "C-storage-unavailable.json"],
+  "counters": { "received": 7, "committed": 5, "rejected": 2, "unavailable_batches": 1, "buffered": 0, "dropped": 0, "oldest_buffered_ms": null }
+}

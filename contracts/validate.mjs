@@ -7,6 +7,8 @@ import { parse } from 'yaml';
 import Ajv2020 from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
 import { validateHold } from './validate-hold.mjs';
+import { validateObservationSubscription } from './validate-observation-subscription.mjs';
+import { validateRawCapture } from './validate-raw-capture.mjs';
 
 const docs = ['reader-api/v1/openapi.yaml', 'observations/v1/openapi.yaml'];
 // Privacy: no observation fixture or schema may carry these fields (see the contract's description).
@@ -103,5 +105,10 @@ for (const docPath of docs) {
 const hold = validateHold();
 checked += hold.checked;
 failures += hold.failures;
+// The receive-only observation subscription profile and the raw capture append: schemas, fixtures, their rules.
+for (const r of [validateObservationSubscription(), validateRawCapture()]) {
+  checked += r.checked;
+  failures += r.failures;
+}
 console.log(`${checked} fixtures checked, ${failures} failures`);
 process.exit(failures ? 1 : 0);

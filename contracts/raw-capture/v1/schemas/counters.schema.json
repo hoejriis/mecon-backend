@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "raw-capture/v1/counters",
+  "title": "Capture counters",
+  "description": "Totals since the archive started, per source and over all. Every capture handed to the archive ends in exactly one of committed, rejected, or still in flight (buffered).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["received", "committed", "rejected", "unavailable_batches", "buffered", "dropped"],
+  "properties": {
+    "received": { "type": "integer", "minimum": 0 },
+    "committed": { "type": "integer", "minimum": 0 },
+    "rejected": { "type": "integer", "minimum": 0 },
+    "unavailable_batches": { "type": "integer", "minimum": 0, "description": "Appends answered storage unavailable." },
+    "buffered": { "type": "integer", "minimum": 0, "description": "Captures accepted for append and not yet committed." },
+    "dropped": { "type": "integer", "minimum": 0, "description": "Captures lost without a commit (a full buffer that drops, a crash recovered from). A conforming archive that never drops reports 0." },
+    "oldest_buffered_ms": { "type": ["integer", "null"], "minimum": 0, "description": "How long the oldest buffered capture has waited: the lag." }
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "fixture": "B",
+  "title": "Profiles the schema rejects",
+  "kind": "profiles",
+  "expect": "invalid",
+  "cases": [
+    { "note": "certificate verification turned off",
+      "value": { "name": "bad", "host": "h.example.test", "port": 8883, "transport": "tcp", "tls": { "enabled": true, "verify": false }, "topics": ["a/#"], "adapter": "observer_envelope" } },
+    { "note": "a credential value instead of a reference",
+      "value": { "name": "bad", "host": "h.example.test", "port": 8883, "transport": "tcp", "tls": { "enabled": true, "verify": true }, "topics": ["a/#"], "adapter": "observer_envelope",
+                 "credential": { "username_ref": "OBSERVER_USERNAME", "password": "not-allowed" } } },
+    { "note": "no topic to read",
+      "value": { "name": "bad", "host": "h.example.test", "port": 8883, "transport": "tcp", "tls": { "enabled": true, "verify": true }, "topics": [], "adapter": "observer_envelope" } },
+    { "note": "a WebSocket path on a TCP transport",
+      "value": { "name": "bad", "host": "h.example.test", "port": 8883, "transport": "tcp", "ws_path": "/mqtt", "tls": { "enabled": true, "verify": true }, "topics": ["a/#"], "adapter": "observer_envelope" } },
+    { "note": "a subscription above QoS 0",
+      "value": { "name": "bad", "host": "h.example.test", "port": 8883, "transport": "tcp", "tls": { "enabled": true, "verify": true }, "topics": ["a/#"], "adapter": "observer_envelope", "qos": 1 } },
+    { "note": "a topic to publish to",
+      "value": { "name": "bad", "host": "h.example.test", "port": 8883, "transport": "tcp", "tls": { "enabled": true, "verify": true }, "topics": ["a/#"], "adapter": "observer_envelope", "publish_topics": ["a/cmd"] } }
+  ]
+}

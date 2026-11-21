@@ -1,0 +1,29 @@
+{
+  "fixture": "C",
+  "title": "Connect, a refused topic, an error, a reconnect",
+  "kind": "sequence",
+  "profile": { "name": "own-broker", "host": "broker.example.test", "port": 8883, "transport": "tcp",
+               "tls": { "enabled": true, "verify": true }, "topics": ["meshcore/#", "meshcore/+/+/internal"],
+               "credential": { "username_ref": "OBSERVER_USERNAME" }, "adapter": "observer_envelope" },
+  "steps": [
+    { "event": "start",
+      "actions": [],
+      "status": { "name": "own-broker", "state": "connecting", "last_error": null, "last_connected_at": null } },
+    { "event": "connack", "code": 0, "at": "2026-01-01T00:00:00.000Z",
+      "actions": [ { "subscribe": "meshcore/#", "qos": 0 }, { "subscribe": "meshcore/+/+/internal", "qos": 0 } ],
+      "status": { "name": "own-broker", "state": "connected", "last_error": null, "last_connected_at": "2026-01-01T00:00:00.000Z" } },
+    { "event": "suback", "granted": ["meshcore/#"], "refused": ["meshcore/+/+/internal"],
+      "actions": [],
+      "status": { "name": "own-broker", "state": "connected", "last_error": null, "last_connected_at": "2026-01-01T00:00:00.000Z",
+                  "subscribed": ["meshcore/#"], "refused": ["meshcore/+/+/internal"] } },
+    { "event": "disconnect",
+      "actions": [],
+      "status": { "name": "own-broker", "state": "disconnected", "last_error": null, "last_connected_at": "2026-01-01T00:00:00.000Z" } },
+    { "event": "connack", "code": 5, "at": "2026-01-01T00:00:02.000Z",
+      "actions": [],
+      "status": { "name": "own-broker", "state": "error", "last_error": "not authorised", "last_connected_at": "2026-01-01T00:00:00.000Z" } },
+    { "event": "connack", "code": 0, "at": "2026-01-01T00:00:06.000Z",
+      "actions": [ { "subscribe": "meshcore/#", "qos": 0 }, { "subscribe": "meshcore/+/+/internal", "qos": 0 } ],
+      "status": { "name": "own-broker", "state": "connected", "last_error": null, "last_connected_at": "2026-01-01T00:00:06.000Z" } }
+  ]
+}

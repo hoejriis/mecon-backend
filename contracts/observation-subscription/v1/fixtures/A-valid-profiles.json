@@ -1,0 +1,20 @@
+{
+  "fixture": "A",
+  "title": "Profiles a conforming ingester accepts",
+  "kind": "profiles",
+  "expect": "valid",
+  "cases": [
+    { "note": "TLS over TCP, a subscribe-only credential named by environment variable",
+      "value": { "name": "own-broker", "host": "broker.example.test", "port": 8883, "transport": "tcp",
+                 "tls": { "enabled": true, "verify": true }, "topics": ["meshcore/#"],
+                 "credential": { "username_ref": "OBSERVER_USERNAME", "password_ref": "OBSERVER_PASSWORD" },
+                 "adapter": "observer_envelope" } },
+    { "note": "MQTT over WebSocket Secure on a path",
+      "value": { "name": "feed-wss", "host": "feed.example.test", "port": 443, "transport": "websockets", "ws_path": "/mqtt",
+                 "tls": { "enabled": true, "verify": true }, "topics": ["meshcore/+/+/packets", "meshcore/+/+/status"],
+                 "adapter": "observer_envelope", "qos": 0 } },
+    { "note": "An open feed with no credential and another payload format",
+      "value": { "name": "open-feed", "host": "open.example.test", "port": 1883, "transport": "tcp",
+                 "tls": { "enabled": false, "verify": true }, "topics": ["packets/#"], "adapter": "raw_hex" } }
+  ]
+}

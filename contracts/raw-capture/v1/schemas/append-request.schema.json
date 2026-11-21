@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "raw-capture/v1/append-request",
+  "title": "Append a batch of raw captures",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["batch_id", "captures"],
+  "properties": {
+    "batch_id": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,64}$", "description": "Chosen by the caller; a result names it." },
+    "captures": { "type": "array", "minItems": 1, "maxItems": 500, "items": { "type": "object" }, "description": "Each item is checked against capture.schema.json by the archive; one that fails is rejected alone." }
+  }
+}

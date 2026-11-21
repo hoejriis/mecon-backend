@@ -24,7 +24,7 @@ docker build -f reader/Dockerfile .                     # from the repo root
 
 ## Rules that tests and review enforce
 
-- **Contracts:** a change to `contracts/reader-api/v1/openapi.yaml` regenerates `reader/src/api/schema.gen.ts` (`npm run gen:api`). `contracts/observations/v1/openapi.yaml` also regenerates `reader/src/api/observations.gen.ts`. Operations marked M1 are frozen; change M2 drafts by pull request. Fixtures are synthetic only: no real users, keys, coordinates or device ids.
+- **Contracts:** a change to `contracts/reader-api/v1/openapi.yaml` regenerates `reader/src/api/schema.gen.ts` (`npm run gen:api`). `contracts/observations/v1/openapi.yaml` also regenerates `reader/src/api/observations.gen.ts`. Operations marked M1 are frozen; change M2 drafts by pull request. Fixtures are synthetic only: no real users, keys, coordinates or device ids. The Reader API's replayable conformance cases are in `contracts/reader-api/v1/cases/`; a change to an operation's statuses or schemas updates its cases in the same PR.
 - **Strict CSP:** no inline scripts or styles (this includes React `style` attributes). Keep `deploy/reader-headers.caddy` and `preview.headers` in `reader/vite.config.ts` in sync.
 - **Truthful UI:** never simulate an unavailable capability or invent data. Show unavailable, forbidden, offline and unknown states as such.
 - **Send safety:** BLE and Backend are separate, explicit send paths. An attempt is sent at most once; an uncertain outcome is `unknown` and is never resent automatically or rerouted. A retry is a new user action with a new attempt id.

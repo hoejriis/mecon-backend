@@ -1,0 +1,55 @@
+{
+  "contract": "mecon-reader-api/1.0.0-draft.8",
+  "synthetic": true,
+  "group": "session",
+  "cases": [
+    { "id": "session-01", "title": "Health is public and not cached", "world": "two-fleets", "steps": [
+      { "request": { "operation": "getHealth" }, "expect": { "status": 200, "schema": "Health", "headers": { "Cache-Control": "no-store" } } } ] },
+    { "id": "session-02", "title": "A login for an existing account is accepted and polls pending without a cookie", "world": "two-fleets", "steps": [
+      { "as": "reader", "request": { "operation": "startLogin", "body": { "email": "alice@example.test" } }, "expect": { "status": 202, "schema": "LoginStarted" }, "capture": { "req": "/request_id" } },
+      { "as": "reader", "request": { "operation": "pollLogin", "path": { "request_id": "${req}" } },
+        "expect": { "status": 200, "schema": "LoginState", "headers": { "Cache-Control": "no-store", "Set-Cookie": "absent" }, "body": { "/state": "pending" } } } ] },
+    { "id": "session-03", "title": "A login for no account answers exactly like one for an account", "world": "two-fleets", "steps": [
+      { "request": { "operation": "startLogin", "body": { "email": "nobody@example.test" } }, "expect": { "status": 202, "schema": "LoginStarted" }, "capture": { "req": "/request_id" } },
+      { "request": { "operation": "pollLogin", "path": { "request_id": "${req}" } }, "expect": { "status": 200, "schema": "LoginState", "body": { "/state": "pending" } } } ] },
+    { "id": "session-04", "title": "A login body that fails validation is 422", "world": "two-fleets", "steps": [
+      { "request": { "operation": "startLogin", "body": { "email": "alice@example.test", "remember": true }, "invalid": true }, "expect": { "status": 422, "schema": "Error", "body": { "/retryable": false } } } ] },
+    { "id": "session-05", "title": "A throttled login is 429 with Retry-After", "world": "two-fleets", "steps": [
+      { "action": "throttle", "args": { "operation": "startLogin" } },
+      { "request": { "operation": "startLogin", "body": { "email": "alice@example.test" } }, "expect": { "status": 429, "schema": "Error", "headers": { "Retry-After": "present" } } } ] },
+    { "id": "session-06", "title": "An approved login sets the cookie on exactly one poll, then reads delivered", "world": "two-fleets", "steps": [
+      { "as": "reader", "request": { "operation": "startLogin", "body": { "email": "alice@example.test" } }, "expect": { "status": 202, "schema": "LoginStarted" }, "capture": { "req": "/request_id" } },
+      { "action": "approve-login", "args": { "request_id": "${req}" } },
+      { "as": "reader", "request": { "operation": "pollLogin", "path": { "request_id": "${req}" } },
+        "expect": { "status": 200, "schema": "LoginState", "headers": { "Cache-Control": "no-store", "Set-Cookie": "present" }, "body": { "/state": "approved" } } },
+      { "as": "reader", "request": { "operation": "pollLogin", "path": { "request_id": "${req}" } },
+        "expect": { "status": 200, "schema": "LoginState", "headers": { "Set-Cookie": "absent" }, "body": { "/state": "delivered" } } },
+      { "as": "reader", "request": { "operation": "getSession" }, "expect": { "status": 200, "schema": "Session", "body": { "/user/display_name": "Alice (synthetic)" } } } ] },
+    { "id": "session-07", "title": "Opening the link does not sign in a different client", "world": "two-fleets", "steps": [
+      { "as": "reader", "request": { "operation": "startLogin", "body": { "email": "alice@example.test" } }, "expect": { "status": 202, "schema": "LoginStarted" }, "capture": { "req": "/request_id" } },
+      { "action": "approve-login", "args": { "request_id": "${req}" } },
+      { "as": "other", "request": { "operation": "getSession" }, "expect": { "status": 401, "schema": "Error", "body": { "/code": "unauthenticated" } } } ] },
+    { "id": "session-08", "title": "A device user's session reports devices available and is not cached", "world": "two-fleets", "steps": [
+      { "action": "sign-in", "args": { "client": "alice", "user": "alice" } },
+      { "as": "alice", "request": { "operation": "getSession" },
+        "expect": { "status": 200, "schema": "Session", "headers": { "Cache-Control": "no-store" }, "body": { "/user/display_name": "Alice (synthetic)", "/capabilities/devices": "available" } } } ] },
+    { "id": "session-09", "title": "A user with no devices still has a session", "world": "two-fleets", "steps": [
+      { "action": "sign-in", "args": { "client": "dora", "user": "dora" } },
+      { "as": "dora", "request": { "operation": "getSession" }, "expect": { "status": 200, "schema": "Session", "body": { "/user/display_name": "Dora (synthetic)" } } } ] },
+    { "id": "session-10", "title": "No session is 401", "world": "two-fleets", "steps": [
+      { "request": { "operation": "getSession" }, "expect": { "status": 401, "schema": "Error", "body": { "/code": "unauthenticated" } } } ] },
+    { "id": "session-11", "title": "Logout revokes the session server-side", "world": "two-fleets", "steps": [
+      { "action": "sign-in", "args": { "client": "alice", "user": "alice" } },
+      { "as": "alice", "request": { "operation": "logout" }, "expect": { "status": 204, "schema": null } },
+      { "as": "alice", "request": { "operation": "getSession" }, "expect": { "status": 401, "schema": "Error", "body": { "/code": "unauthenticated" } } } ] },
+    { "id": "session-12", "title": "Logout without the CSRF token is refused and the session stays", "world": "two-fleets", "steps": [
+      { "action": "sign-in", "args": { "client": "alice", "user": "alice" } },
+      { "as": "alice", "request": { "operation": "logout", "csrf": "absent" }, "expect": { "status": 403, "schema": "Error", "body": { "/code": "csrf_failed" } } },
+      { "as": "alice", "request": { "operation": "logout", "csrf": "wrong" }, "expect": { "status": 403, "schema": "Error", "body": { "/code": "csrf_failed" } } },
+      { "as": "alice", "request": { "operation": "getSession" }, "expect": { "status": 200, "schema": "Session" } } ] },
+    { "id": "session-13", "title": "Logout from a foreign Origin is refused", "world": "two-fleets", "steps": [
+      { "action": "sign-in", "args": { "client": "alice", "user": "alice" } },
+      { "as": "alice", "request": { "operation": "logout", "origin": "foreign" }, "expect": { "status": 403, "schema": "Error", "body": { "/code": "origin_rejected" } } },
+      { "as": "alice", "request": { "operation": "getSession" }, "expect": { "status": 200, "schema": "Session" } } ] }
+  ]
+}

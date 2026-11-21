@@ -1,0 +1,49 @@
+{
+  "contract": "mecon-reader-api/1.0.0-draft.8",
+  "synthetic": true,
+  "group": "leases",
+  "cases": [
+    { "id": "leases-01", "title": "A lease is the caller's own, at most 7 days, and verifies under a served key", "world": "two-fleets", "steps": [
+      { "action": "sign-in", "args": { "client": "alice", "user": "alice" } },
+      { "as": "alice", "request": { "operation": "getSession" }, "expect": { "status": 200, "schema": "Session" }, "capture": { "uid": "/user/id" } },
+      { "as": "alice", "request": { "operation": "createLease" }, "expect": { "status": 200, "schema": "LeaseIssued" }, "capture": { "tok": "/lease" } },
+      { "as": "alice", "request": { "operation": "listLeaseKeys" }, "expect": { "status": 200, "schema": "LeaseKeyList",
+        "match": [ { "at": "/keys", "where": { "/status": "active" }, "count": 1 } ],
+        "lease": { "token": "${tok}", "keys": "/keys", "user_id": "${uid}", "max_lifetime_s": 604800, "operations_include": ["send.direct"] } } } ] },
+    { "id": "leases-02", "title": "With sending switched off a lease is issued without send operations", "world": "two-fleets", "steps": [
+      { "action": "set-switch", "args": { "switch": "sending", "value": "off" } },
+      { "action": "sign-in", "args": { "client": "alice", "user": "alice" } },
+      { "as": "alice", "request": { "operation": "createLease" }, "expect": { "status": 200, "schema": "LeaseIssued" }, "capture": { "tok": "/lease" } },
+      { "as": "alice", "request": { "operation": "listLeaseKeys" }, "expect": { "status": 200, "schema": "LeaseKeyList",
+        "lease": { "token": "${tok}", "keys": "/keys", "max_lifetime_s": 604800, "operations_exclude": ["send.direct", "send.channel"] } } } ] },
+    { "id": "leases-03", "title": "A Backend that cannot sign answers 503 lease_signing_unavailable, not retryable", "world": "two-fleets", "steps": [
+      { "action": "set-switch", "args": { "switch": "lease_signing", "value": "off" } },
+      { "action": "sign-in", "args": { "client": "alice", "user": "alice" } },
+      { "as": "alice", "request": { "operation": "createLease" }, "expect": { "status": 503, "schema": "Error", "body": { "/code": "lease_signing_unavailable", "/retryable": false } } } ] },
+    { "id": "leases-04", "title": "A Backend that does not offer leases answers 404", "world": "two-fleets", "steps": [
+      { "action": "set-switch", "args": { "switch": "lease_signing", "value": "absent" } },
+      { "action": "sign-in", "args": { "client": "alice", "user": "alice" } },
+      { "as": "alice", "request": { "operation": "createLease" }, "expect": { "status": 404, "schema": "Error", "body": { "/code": "not_found" } } } ] },
+    { "id": "leases-05", "title": "A lease without the CSRF token, or from a foreign Origin, is refused", "world": "two-fleets", "steps": [
+      { "action": "sign-in", "args": { "client": "alice", "user": "alice" } },
+      { "as": "alice", "request": { "operation": "createLease", "csrf": "absent" }, "expect": { "status": 403, "schema": "Error", "body": { "/code": "csrf_failed" } } },
+      { "as": "alice", "request": { "operation": "createLease", "origin": "foreign" }, "expect": { "status": 403, "schema": "Error", "body": { "/code": "origin_rejected" } } } ] },
+    { "id": "leases-06", "title": "A rotated key is listed as retired and still verifies the leases it signed", "world": "two-fleets", "steps": [
+      { "action": "sign-in", "args": { "client": "alice", "user": "alice" } },
+      { "as": "alice", "request": { "operation": "createLease" }, "expect": { "status": 200, "schema": "LeaseIssued" }, "capture": { "tok": "/lease" } },
+      { "action": "rotate-lease-key" },
+      { "as": "alice", "request": { "operation": "listLeaseKeys" }, "expect": { "status": 200, "schema": "LeaseKeyList",
+        "match": [ { "at": "/keys", "where": { "/status": "active" }, "count": 1 }, { "at": "/keys", "where": { "/status": "retired" }, "at_least": 1 } ],
+        "lease": { "token": "${tok}", "keys": "/keys", "max_lifetime_s": 604800 } } } ] },
+    { "id": "leases-07", "title": "Revoked keys are dropped at once", "world": "two-fleets", "steps": [
+      { "action": "sign-in", "args": { "client": "alice", "user": "alice" } },
+      { "as": "alice", "request": { "operation": "listLeaseKeys" }, "expect": { "status": 200, "schema": "LeaseKeyList" },
+        "capture": { "old_kid": { "at": "/keys", "where": { "/status": "active" }, "field": "/key_id" } } },
+      { "action": "revoke-lease-keys" },
+      { "as": "alice", "request": { "operation": "listLeaseKeys" }, "expect": { "status": 200, "schema": "LeaseKeyList",
+        "match": [ { "at": "/keys", "where": { "/key_id": "${old_kid}" }, "count": 0 } ] } } ] },
+    { "id": "leases-08", "title": "Leases and their keys need a session", "world": "two-fleets", "steps": [
+      { "request": { "operation": "createLease" }, "expect": { "status": 401, "schema": "Error", "body": { "/code": "unauthenticated" } } },
+      { "request": { "operation": "listLeaseKeys" }, "expect": { "status": 401, "schema": "Error", "body": { "/code": "unauthenticated" } } } ] }
+  ]
+}

@@ -29,6 +29,8 @@ Replayable cases for `../openapi.yaml`. A Backend that claims to serve the Reade
    - It checks `user_id`, that the lifetime is at most `max_lifetime_s`, and that every identity's operations include or exclude the listed ones.
 7. **Captures.** `capture` stores a value from the response for later steps: a JSON pointer, or `{at, where, field}` for the first matching array item. A capturing action (`events-checkpoint`) stores its result under its `capture` name.
 
+A case whose action the implementation cannot express (for example `lease_signing: absent` on a Backend that always offers leases) is reported as not applicable, never as passed.
+
 A case fails at its first unmet expectation. Order within a case matters; cases are independent of each other.
 
 ## Adding a case

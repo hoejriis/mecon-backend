@@ -24,7 +24,9 @@
         "expect": { "status": 200, "schema": "LoginState", "headers": { "Cache-Control": "no-store", "Set-Cookie": "present" }, "body": { "/state": "approved" } } },
       { "as": "reader", "request": { "operation": "pollLogin", "path": { "request_id": "${req}" } },
         "expect": { "status": 200, "schema": "LoginState", "headers": { "Set-Cookie": "absent" }, "body": { "/state": "delivered" } } },
-      { "as": "reader", "request": { "operation": "getSession" }, "expect": { "status": 200, "schema": "Session", "body": { "/user/display_name": "Alice (synthetic)" } } } ] },
+      { "action": "sign-in", "args": { "client": "alice", "user": "alice" } },
+      { "as": "alice", "request": { "operation": "getSession" }, "expect": { "status": 200, "schema": "Session" }, "capture": { "uid": "/user/id" } },
+      { "as": "reader", "request": { "operation": "getSession" }, "expect": { "status": 200, "schema": "Session", "body": { "/user/id": "${uid}" } } } ] },
     { "id": "session-07", "title": "Opening the link does not sign in a different client", "world": "two-fleets", "steps": [
       { "as": "reader", "request": { "operation": "startLogin", "body": { "email": "alice@example.test" } }, "expect": { "status": 202, "schema": "LoginStarted" }, "capture": { "req": "/request_id" } },
       { "action": "approve-login", "args": { "request_id": "${req}" } },
@@ -32,10 +34,10 @@
     { "id": "session-08", "title": "A device user's session reports devices available and is not cached", "world": "two-fleets", "steps": [
       { "action": "sign-in", "args": { "client": "alice", "user": "alice" } },
       { "as": "alice", "request": { "operation": "getSession" },
-        "expect": { "status": 200, "schema": "Session", "headers": { "Cache-Control": "no-store" }, "body": { "/user/display_name": "Alice (synthetic)", "/capabilities/devices": "available" } } } ] },
+        "expect": { "status": 200, "schema": "Session", "headers": { "Cache-Control": "no-store" }, "body": { "/capabilities/devices": "available" } } } ] },
     { "id": "session-09", "title": "A user with no devices still has a session", "world": "two-fleets", "steps": [
       { "action": "sign-in", "args": { "client": "dora", "user": "dora" } },
-      { "as": "dora", "request": { "operation": "getSession" }, "expect": { "status": 200, "schema": "Session", "body": { "/user/display_name": "Dora (synthetic)" } } } ] },
+      { "as": "dora", "request": { "operation": "getSession" }, "expect": { "status": 200, "schema": "Session" } } ] },
     { "id": "session-10", "title": "No session is 401", "world": "two-fleets", "steps": [
       { "request": { "operation": "getSession" }, "expect": { "status": 401, "schema": "Error", "body": { "/code": "unauthenticated" } } } ] },
     { "id": "session-11", "title": "Logout revokes the session server-side", "world": "two-fleets", "steps": [

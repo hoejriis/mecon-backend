@@ -2,7 +2,8 @@
 // test: each file matches cases.schema.json and names the document's version; every world and action exists
 // with its arguments; every request names a real operation with exactly its path parameters, only its query
 // parameters and its required headers; a request body matches the operation's request schema unless the case
-// marks it `invalid`, in which case it must fail (an operation without a request body takes one only so marked); every expected status is declared for the operation, with
+// marks it `invalid`, in which case it must fail (an operation without a request body takes one only so marked);
+// a `count: 0` match is paired with a positive one at the same place; every expected status is declared for the operation, with
 // the schema and headers that status declares; captures are defined before use; and every operation has at
 // least one case. Called from validate.mjs. An implementation replays the same files (see cases/README.md).
 import { readFileSync, readdirSync } from 'node:fs';
@@ -128,6 +129,14 @@ export function validateReaderCases(dir = 'reader-api/v1') {
         if (s.expect.stream && !isStream) fail(`${at}: stream expected but ${s.expect.status} is not an event stream`);
         if (isStream && !s.expect.stream) fail(`${at}: ${s.expect.status} is an event stream; give a bounded stream expectation`);
         if (s.expect.lease && s.expect.schema !== 'LeaseKeyList') fail(`${at}: a lease check runs against a LeaseKeyList response`);
+        // A `count: 0` alone passes on an empty array, so it proves nothing: pair it with a match at the same place
+        // that needs at least one item.
+        for (const [where, ms] of [['body', s.expect.match ?? []], ['stream', s.expect.stream?.match ?? []]]) {
+          for (const m of ms) {
+            if (m.count !== 0) continue;
+            if (!ms.some((o) => o.at === m.at && (o.at_least >= 1 || o.count >= 1))) fail(`${at}: ${where} match count 0 at ${JSON.stringify(m.at)} has no positive match beside it`);
+          }
+        }
         // Body values that are not captures must themselves fit the schema at that pointer: checked by the replay.
         for (const n of Object.keys(s.capture ?? {})) defined.add(n);
       });

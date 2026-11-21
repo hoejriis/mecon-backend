@@ -57,6 +57,7 @@ HELLO_ID_RE = re.compile(r"^ch-(\d+)$")  # ids of the Connector's own hello requ
 MAX_UPLOAD_CHARS = 8192
 COMPANION_MAX_WIRE = MECON_MAX_MESSAGE  # 4096 bytes
 HELLO_RETRY_S = 5.0
+MAX_HELLO_PAGES = 40  # hello capability pages the Connector will read (the Reader's channel-list page bound)
 READ_CHUNK = 1024
 SERIAL_RETRY_S = 1.0
 SERIAL_AMBIGUOUS_RETRY_S = 5.0
@@ -138,6 +139,9 @@ class HoldBridge:
         self._need_hello = True
         self._next_hello = 0.0
         self._hello_seq = 0
+        self._hello_acc: dict | None = None  # the merged hello so far while later pages are being read
+        self._hello_cursor: object = None  # the `next` of the last page: asked for as `hello {cursor}`
+        self._hello_pages = 0
         self._epoch: int | None = None
 
         # enrolment gate: relayed requests are carried only while the device says it holds a Deployment record
@@ -441,6 +445,69 @@ class HoldBridge:
         self.m.inc("hold_uploads_total", 1, kind)
         return True
 
+    def _hello_paging_reset(self) -> None:
+        self._hello_acc = None
+        self._hello_cursor = None
+        self._hello_pages = 0
+
+    def _on_hello_page(self, res: dict) -> None:
+        """One ok hello page. A hello without a `next` (the usual one) is kept exactly as the device gave it; a
+        paged one is merged page by page (capabilities deduplicated, in order) and kept without `next`."""
+        nxt = res.get("next")
+        acc = self._hello_acc
+        if acc is None:
+            if nxt is None:
+                self._hello = res
+                self._hello_paging_reset()
+                self._hello_done()
+                return
+            acc = {k: v for k, v in res.items() if k != "next"}
+            caps = acc.get("capabilities")
+            acc["capabilities"] = self._dedupe(caps) if isinstance(caps, list) else []
+            self._hello_acc = acc
+            self._hello_pages = 1
+        else:
+            caps = res.get("capabilities")
+            if not isinstance(caps, list):
+                self._finish_paging("malformed")
+                return
+            acc["capabilities"] = self._dedupe(acc["capabilities"] + caps)
+            self._hello_pages += 1
+        if nxt is None:
+            self._finish_paging("")
+        elif self._hello_pages >= MAX_HELLO_PAGES:
+            self._finish_paging("page_cap")
+        else:
+            self._hello_cursor = nxt
+            self.m.inc("hold_hello_pages_total")  # the next page is asked for by _device_step
+
+    @staticmethod
+    def _dedupe(items: list) -> list:
+        seen: set[str] = set()
+        out = []
+        for it in items:
+            k = json.dumps(it, sort_keys=True)
+            if k not in seen:
+                seen.add(k)
+                out.append(it)
+        return out
+
+    def _finish_paging(self, why: str) -> bool:
+        """Ends hello paging with what is merged. False when no paging was under way."""
+        acc = self._hello_acc
+        if acc is None:
+            return False
+        if why:
+            self.log.warn("hello_paging_stopped", reason=why, pages=self._hello_pages)
+        self._hello = acc
+        self._hello_paging_reset()
+        self._hello_done()
+        return True
+
+    def _hello_done(self) -> None:
+        self._need_hello = False
+        self._upload_hello()  # a fresh hello on an open hold (after a reboot) goes up at once
+
     def _upload_hello(self) -> None:
         if self._hello is not None and self._state == "connected":
             self._upload("iface_hello", "hello", {"hello": self._hello})
@@ -488,7 +555,8 @@ class HoldBridge:
         elif s.kind == "hello":
             self._late_own.append(s.id)
             self.m.inc("hold_hello_total", 1, "timeout")
-            self._next_hello = now + HELLO_RETRY_S
+            if not self._finish_paging("timeout"):
+                self._next_hello = now + HELLO_RETRY_S
         else:
             self._late_own.append(s.id)
             self.m.inc("downlink_gate_probes_total", 1, "timeout")
@@ -529,7 +597,10 @@ class HoldBridge:
             self._probe_seq += 1
             rid = f"cg-{self._probe_seq}"
             op, timeout = "deployment.get", self.cfg.gate.timeout_s
-        msg = json.dumps({"v": 1, "id": rid, "op": op}, separators=(",", ":")).encode()
+        body: dict = {"v": 1, "id": rid, "op": op}
+        if kind == "hello" and self._hello_acc is not None:
+            body["args"] = {"cursor": self._hello_cursor}
+        msg = json.dumps(body, separators=(",", ":")).encode()
         if self._write_request(msg, now):
             self._slot = _Slot(kind, rid, now + timeout)
 
@@ -595,6 +666,7 @@ class HoldBridge:
         self._console_primed = False
         self._epoch = None
         self._hello = None
+        self._hello_paging_reset()
         self._need_hello = True
         self._next_hello = now
         self._gate_open = False
@@ -620,6 +692,7 @@ class HoldBridge:
         self._abandoned.clear()
         self._late_own.clear()
         self._hello = None  # the next device on this port may be a different one
+        self._hello_paging_reset()
         lost = self._reset_readers()
         self.m.inc("serial_discarded_bytes_total", lost, "unplug")
         self.m.inc("serial_disconnects_total")
@@ -743,6 +816,7 @@ class HoldBridge:
             if self._epoch is not None and epoch != self._epoch:
                 self._epoch = epoch
                 self._need_hello = True  # rebooted: read hello again and tell the Backend
+                self._hello_paging_reset()  # from the first page
                 self._next_hello = now
                 self._close_gate("epoch_changed", now)
             self._epoch = epoch
@@ -786,13 +860,13 @@ class HoldBridge:
         if kind == "hello":
             res = obj.get("result")
             if obj.get("status") == "ok" and isinstance(res, dict):
-                self._hello = res
-                self._need_hello = False
                 self.m.inc("hold_hello_total", 1, "ok")
-                self._upload_hello()  # a fresh hello on an open hold (after a reboot) goes up at once
+                self._on_hello_page(res)
             else:
-                self.m.inc("hold_hello_total", 1, "refused" if obj.get("status") != "ok" else "malformed")
-                self._next_hello = now + HELLO_RETRY_S
+                why = "refused" if obj.get("status") != "ok" else "malformed"
+                self.m.inc("hold_hello_total", 1, why)
+                if not self._finish_paging(why):
+                    self._next_hello = now + HELLO_RETRY_S
             return
         res = obj.get("result")
         state = res.get("state") if isinstance(res, dict) else None

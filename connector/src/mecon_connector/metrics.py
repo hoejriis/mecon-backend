@@ -92,6 +92,7 @@ HOLD_REGISTRY: dict[str, tuple[str, str, tuple[str, ...]]] = {
     "hold_request_timeouts_total": ("counter", "Relayed requests abandoned after the device wait; never resent", ()),
     "hold_frames_ignored_total": ("counter", "Backend frames ignored, by reason", ("reason",)),
     "hold_hello_total": ("counter", "The Connector's own hello requests by outcome", ("result",)),
+    "hold_hello_pages_total": ("counter", "Extra hello pages the Connector asked for after the first (cursor requests)", ()),
 }
 HOLD_REASONS = {
     **{k: set(v) for k, v in REASONS.items()},

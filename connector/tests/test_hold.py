@@ -197,6 +197,65 @@ def test_conf_18_iface_hello_carries_the_hello_result_object_after_the_relay(mk)
     assert frames(conn, "iface_result") == []  # its own hello answer is consumed, never uploaded
 
 
+def _paged(pages):
+    """hello_page_fn for a device whose capability list spans `pages` (a list of lists); cursor = page index."""
+    def fn(cursor):
+        res = {"v": 1, "name": "synthetic", "node_key": "00" * 32, "epoch": 1, "capabilities": pages[cursor]}
+        res["next"] = cursor + 1 if cursor + 1 < len(pages) else None
+        return res
+    return fn
+
+
+def test_issue_95_paged_hello_uploads_merged_capabilities_without_next(mk):
+    r = mk()
+    r.dev.hello_page_fn = _paged([["hello", "status.get", "dup"], ["dup", "channel.list"]])
+    conn = r.up()
+    hs = frames(conn, "iface_hello")
+    assert len(hs) == 1
+    assert hs[0]["hello"] == {"v": 1, "name": "synthetic", "node_key": "00" * 32, "epoch": 1,
+                              "capabilities": ["hello", "status.get", "dup", "channel.list"]}
+    assert len(r.dev.hello_writes) == 2
+    w = r.dev.hello_writes[1]
+    assert json.loads(w[w.index(b"{"):w.rindex(b"}") + 1])["args"] == {"cursor": 1}
+    assert frames(conn, "iface_result") == []
+    assert r.m("hold_hello_pages_total") == 1
+
+
+def test_issue_95_single_page_hello_is_uploaded_exactly_as_given(mk):
+    r = mk()
+    r.dev.hello_result = {**r.dev.hello_result, "capabilities": ["hello"], "next": None}
+    conn = r.up()
+    assert frames(conn, "iface_hello")[0]["hello"] == r.dev.hello_result  # even a null `next` is left as sent
+    assert len(r.dev.hello_writes) == 1 and r.m("hold_hello_pages_total") == 0
+
+
+def test_issue_95_a_page_that_times_out_uploads_what_is_merged_and_the_hold_carries_on(mk):
+    r = mk()
+    full = _paged([["hello"], ["status.get"]])
+    r.dev.hello_page_fn = lambda c: full(c) if c == 0 else None  # page 2 never answered
+    r.dev.answers_hello = True
+    r.wait(lambda: len(r.dev.hello_writes) == 2)
+    r.jump(20)
+    conn = r.up()
+    hs = frames(conn, "iface_hello")
+    assert len(hs) == 1 and hs[0]["hello"]["capabilities"] == ["hello"] and "next" not in hs[0]["hello"]
+    assert r.m("hold_hello_total", "timeout") == 1
+    assert len(r.dev.hello_writes) == 2  # never asked again
+    assert r.bridge._state == "connected"
+
+
+def test_issue_95_a_device_that_always_returns_next_is_stopped_at_the_page_cap(mk):
+    from mecon_connector.hold import MAX_HELLO_PAGES
+    r = mk()
+    r.dev.hello_page_fn = lambda c: {"v": 1, "name": "synthetic", "node_key": "00" * 32, "epoch": 1,
+                                     "capabilities": [f"cap{c}"], "next": c + 1}
+    conn = r.up()
+    hs = frames(conn, "iface_hello")
+    assert len(hs) == 1 and "next" not in hs[0]["hello"]
+    assert len(hs[0]["hello"]["capabilities"]) == MAX_HELLO_PAGES
+    assert len(r.dev.hello_writes) == MAX_HELLO_PAGES
+
+
 def test_hello_is_read_again_after_a_reboot_and_the_new_object_goes_up(mk):
     r = mk()
     conn = r.up()

@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "raw-capture/v1/append-result",
+  "title": "The outcome of one append",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["batch_id", "storage", "committed", "rejected"],
+  "properties": {
+    "batch_id": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,64}$" },
+    "storage": { "enum": ["available", "unavailable"], "description": "unavailable: nothing of the batch was committed; the caller keeps it and may retry." },
+    "committed": { "type": "integer", "minimum": 0 },
+    "rejected": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["index", "reason"],
+        "properties": {
+          "index": { "type": "integer", "minimum": 0 },
+          "reason": { "enum": ["malformed", "too_large"] }
+        }
+      }
+    }
+  },
+  "allOf": [
+    { "if": { "properties": { "storage": { "const": "unavailable" } } },
+      "then": { "properties": { "committed": { "const": 0 }, "rejected": { "maxItems": 0 } } } }
+  ]
+}

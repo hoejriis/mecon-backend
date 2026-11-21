@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "observation-subscription/v1/profile",
+  "title": "Receive-only observation subscription profile",
+  "description": "One source: the broker an observation ingester subscribes to and the topics it reads. A profile never names a topic to publish to, and carries no secret: the credential is named, never included.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "host", "port", "transport", "tls", "topics", "adapter"],
+  "properties": {
+    "name": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,62}$", "description": "The source identity carried by every capture from this profile." },
+    "host": { "type": "string", "minLength": 1, "maxLength": 253 },
+    "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+    "transport": { "enum": ["tcp", "websockets"] },
+    "ws_path": { "type": "string", "pattern": "^/", "description": "Only for transport websockets; /mqtt when absent." },
+    "tls": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "verify"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "verify": { "const": true, "description": "Certificate verification is never turned off by a profile." }
+      }
+    },
+    "topics": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1, "maxLength": 256, "pattern": "^[^\\u0000]*$" }
+    },
+    "qos": { "const": 0, "description": "Subscriptions are QoS 0; an absent field means 0." },
+    "credential": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["username_ref"],
+      "properties": {
+        "username_ref": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{0,63}$" },
+        "password_ref": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{0,63}$" }
+      },
+      "description": "Names of where the ingester reads the credential from (environment variables), never the values."
+    },
+    "adapter": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,31}$", "description": "The payload format, read downstream: capture never parses." }
+  },
+  "allOf": [
+    { "if": { "properties": { "transport": { "const": "tcp" } } }, "then": { "not": { "required": ["ws_path"] } } }
+  ]
+}

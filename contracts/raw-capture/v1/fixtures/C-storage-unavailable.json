@@ -1,0 +1,9 @@
+{
+  "fixture": "C", "title": "Storage unavailable: nothing committed, the caller keeps the batch", "kind": "append",
+  "limits": { "max_payload_bytes": 65536 },
+  "request": { "batch_id": "c-1", "captures": [
+    { "source": "own-broker", "topic": "meshcore/AB12/obs-1/packets", "payload_b64": "b25l", "retained": false, "received_at": "2026-01-01T00:00:02.000Z" },
+    { "source": "own-broker", "topic": "meshcore/AB12/obs-1/packets", "payload_b64": "dHdv", "retained": false, "received_at": "2026-01-01T00:00:02.001Z" }
+  ] },
+  "result": { "batch_id": "c-1", "storage": "unavailable", "committed": 0, "rejected": [] }
+}

@@ -7,7 +7,7 @@ Human contributor detail lives in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
 
 - `reader/`: the MECON Reader web app (React, TypeScript, Vite).
 - `connector/`: the standalone USB serial-to-MQTT Connector (Python). See `connector/README.md`.
-- `contracts/`: versioned API contracts (OpenAPI; the USB Connector's JSON Schema contract in `contracts/connector/v1`, and the WebSocket hold in `contracts/connector-hold/v1`) and synthetic fixtures.
+- `contracts/`: versioned API contracts (OpenAPI; the USB Connector's JSON Schema contract in `contracts/connector/v1`, the WebSocket hold in `contracts/connector-hold/v1`, the receive-only observation subscription profile in `contracts/observation-subscription/v1`, and the raw capture append in `contracts/raw-capture/v1`) and synthetic fixtures.
 - `deploy/`: Caddy config and security headers shared by the container image and static hosts.
 - `docs/`: product, architecture and protocol documentation. `docs/ARCHITECTURE_DECISIONS.md` is the decision register; read it before changing behaviour it covers.
 

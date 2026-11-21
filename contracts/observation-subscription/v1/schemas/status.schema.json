@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "observation-subscription/v1/status",
+  "title": "Subscription status",
+  "description": "What an ingester reports for one profile.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "state", "last_error"],
+  "properties": {
+    "name": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,62}$" },
+    "state": { "enum": ["unknown", "connecting", "connected", "disconnected", "error"] },
+    "last_error": { "type": ["string", "null"], "maxLength": 500 },
+    "last_connected_at": { "type": ["string", "null"], "format": "date-time" },
+    "subscribed": { "type": "array", "items": { "type": "string" }, "description": "Topics the broker accepted in its SUBACK, once connected." },
+    "refused": { "type": "array", "items": { "type": "string" }, "description": "Topics the broker refused (an ACL denial), reported, never retried as a different topic." }
+  },
+  "allOf": [
+    { "if": { "properties": { "state": { "const": "error" } } }, "then": { "properties": { "last_error": { "type": "string", "minLength": 1 } } } },
+    { "if": { "properties": { "state": { "not": { "const": "error" } } } }, "then": { "properties": { "last_error": { "const": null } } } }
+  ]
+}

@@ -2,7 +2,7 @@
 // test: each file matches cases.schema.json and names the document's version; every world and action exists
 // with its arguments; every request names a real operation with exactly its path parameters, only its query
 // parameters and its required headers; a request body matches the operation's request schema unless the case
-// marks it `invalid`, in which case it must fail; every expected status is declared for the operation, with
+// marks it `invalid`, in which case it must fail (an operation without a request body takes one only so marked); every expected status is declared for the operation, with
 // the schema and headers that status declares; captures are defined before use; and every operation has at
 // least one case. Called from validate.mjs. An implementation replays the same files (see cases/README.md).
 import { readFileSync, readdirSync } from 'node:fs';
@@ -106,7 +106,7 @@ export function validateReaderCases(dir = 'reader-api/v1') {
         // Body.
         const media = op.requestBody?.content?.['application/json'];
         if (!media) {
-          if (s.request.body !== undefined) fail(`${at}: ${s.request.operation} takes no body`);
+          if (s.request.body !== undefined && !s.request.invalid) fail(`${at}: ${s.request.operation} takes no body; a case sending one marks it invalid`);
         } else if (s.request.body === undefined) {
           if (op.requestBody.required) fail(`${at}: ${s.request.operation} needs a body`);
         } else {

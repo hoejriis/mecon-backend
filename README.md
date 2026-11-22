@@ -15,7 +15,7 @@ The application combines a familiar MeshCore Reader, fleet operations, observati
 
 ## Understand the system
 
-- [Components and contracts](docs/COMPONENTS.md)
+- [Components and contracts](docs/COMPONENTS.md) and [migration status](docs/MIGRATION_STATUS.md)
 - [Deployment models, multi-site operation and recovery](docs/DEPLOYMENTS.md)
 - [Roadmap — active MVP versus future target](docs/ROADMAP.md)
 

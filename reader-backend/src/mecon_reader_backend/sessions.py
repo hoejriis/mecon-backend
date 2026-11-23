@@ -54,6 +54,7 @@ class SessionResolver:
         self._streams: dict[str, set[asyncio.Event]] = {}
         self._feed_task: asyncio.Task | None = None
         self.feed_down_since: float | None = None
+        self._revocation_epoch = 0  # bumped by every revocation and feed outage
 
     # ---- resolution ----
 
@@ -67,6 +68,7 @@ class SessionResolver:
                 if hit.until > now and not self._expired(hit.caller):
                     return hit.caller
                 self._cache.pop(credential, None)
+        epoch = self._revocation_epoch
         try:
             if purpose == "write":
                 answer = await asyncio.wait_for(
@@ -83,7 +85,9 @@ class SessionResolver:
             return Denied("core_unavailable")
         if self._expired(answer):
             return Denied("expired")
-        if purpose == "read":
+        # Cache only an answer no revocation can have overtaken: none arrived while the lookup ran, and the
+        # feed that would deliver one is up.
+        if purpose == "read" and epoch == self._revocation_epoch and self.feed_down_since is None:
             self._cache[credential] = _Entry(answer, now + self.cache_s)
         return answer
 
@@ -118,10 +122,12 @@ class SessionResolver:
             if self.feed_down_since is None:
                 self.feed_down_since = self._clock()
             # Nothing cached may outlive a feed outage: a revocation could be missed meanwhile.
+            self._revocation_epoch += 1
             self._cache.clear()
             await asyncio.sleep(self.feed_retry_s)
 
     def _revoked(self, rev: Revocation) -> None:
+        self._revocation_epoch += 1
         self.forget_session(rev.session_id)
         for ev in self._streams.get(rev.session_id, ()):
             ev.set()

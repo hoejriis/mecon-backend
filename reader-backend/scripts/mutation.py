@@ -98,6 +98,13 @@ MUTANTS = [
     ("e7", "the stream stays open when the revocation feed is down", "sse.py",
      [("            if sessions.feed_down_for() > feed_down_close_s:\n                return",
        "            if False:\n                return")]),
+    # ---- the cache never holds an answer a revocation could have overtaken ----
+    ("r1", "an answer is cached although a revocation arrived while the lookup ran", "sessions.py",
+     [("if purpose == \"read\" and epoch == self._revocation_epoch and self.feed_down_since is None:",
+       "if purpose == \"read\" and self.feed_down_since is None:")]),
+    ("r2", "answers are cached while the revocation feed is down", "sessions.py",
+     [("if purpose == \"read\" and epoch == self._revocation_epoch and self.feed_down_since is None:",
+       "if purpose == \"read\" and epoch == self._revocation_epoch:")]),
 ]
 
 

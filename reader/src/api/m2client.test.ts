@@ -66,6 +66,26 @@ describe('M2 capability gating', () => {
     await expect(c.listIdentities()).rejects.toBeInstanceOf(CapabilityError);
   });
 
+  it('reset() (sign-out) returns the capabilities to unknown: nothing is called afterwards', async () => {
+    const b = createBackend();
+    const c = await signedIn(b, ALL);
+    c.reset();
+    await expect(c.listIdentities()).rejects.toMatchObject({ state: 'unknown' });
+    await expect(c.createSendAttempt(REQ)).rejects.toMatchObject({ state: 'unknown' });
+    expect(b.calls).toEqual([]);
+  });
+
+  it('reset() (sign-out) drops the CSRF token: the next state-changing request carries none', async () => {
+    const b = createBackend();
+    const c = await signedIn(b, ALL);
+    b.on('POST /logout', () => new Response(null, { status: 204 }));
+    await c.logout();
+    expect(b.callsTo('POST /logout')[0]!.headers.get('X-CSRF-Token')).toBe(fx.session.csrf_token); // control: held before reset
+    c.reset();
+    await c.logout();
+    expect(b.callsTo('POST /logout')[1]!.headers.get('X-CSRF-Token')).toBeNull();
+  });
+
   it('passes cursor and limit as query parameters', async () => {
     const b = createBackend();
     const c = await signedIn(b, ALL);

@@ -72,6 +72,28 @@ describe('probe write allowlist', () => {
     expect(refused(encodeSerialFrame(frames[0]!))).toBe(true);
   });
 
+  it('refuses an interface request whose frame header says it is not the only frame', () => {
+    const json = T(JSON.stringify({ v: 1, id: 'a', op: 'hello' }));
+    const frame = (idx: number, count: number) => {
+      const f = new Uint8Array(4 + json.length);
+      f.set([0x7f, 1, idx, count]);
+      f.set(json, 4);
+      return f;
+    };
+    expect(refused(encodeSerialFrame(frame(0, 1)))).toBe(false); // control: a single frame passes
+    expect(refused(encodeSerialFrame(frame(0, 2)))).toBe(true); // first of two
+    expect(refused(encodeSerialFrame(frame(1, 1)))).toBe(true); // not the first
+    expect(() => classifyProbeFrame(frame(0, 2))).toThrow();
+    expect(() => classifyProbeFrame(frame(1, 1))).toThrow();
+  });
+
+  it('refuses a text line with a control or non-ASCII byte even when the rest is a valid read request', () => {
+    const line = (json: string) => T(`mecon> ${json}\r`);
+    expect(refused(line('{"v":1,"id":"a","op":"hello"}'))).toBe(false); // control
+    expect(refused(line('{"v":1,\t"id":"a","op":"hello"}'))).toBe(true); // tab is valid JSON whitespace
+    expect(refused(new TextEncoder().encode('mecon> {"v":1,"id":"é","op":"hello"}\r'))).toBe(true); // raw non-ASCII
+  });
+
   it('refuses empty and unframed binary', () => {
     expect(refused(new Uint8Array(0))).toBe(true);
     expect(refused(Uint8Array.of(0x16, 0x03, 0x0d))).toBe(true);

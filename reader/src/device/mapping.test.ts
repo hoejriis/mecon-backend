@@ -185,6 +185,30 @@ describe(`${S}: the send re-verifies the mapping, so an API caller cannot pass a
     expect(r.session.mapDestination(channelDest('Crew'))).toMatchObject({ ok: false, code: 'channel_ambiguous' });
   });
 
+  it('a token of the other kind is refused by the token check itself, in both directions', async () => {
+    const r = await usb({ channels: true });
+    const ch = tokenOf(r.session, channelDest('Crew'));
+    const dm = tokenOf(r.session, contactDest('a1a1a1'));
+    const before = r.mock.writes.length;
+    await expect(r.session.sendChannel(channel('k1', { mapping: dm }))).rejects.toMatchObject({ code: 'unmapped_destination', message: expect.stringContaining('another kind of message') });
+    await expect(r.session.sendDirect(direct('k2', { mapping: ch }))).rejects.toMatchObject({ code: 'unmapped_destination', message: expect.stringContaining('another kind of message') });
+    untouched(r.mock, before);
+  });
+
+  it('a token is refused when its channel is still found uniquely but now sits on another slot', async () => {
+    const r = await usb({ channels: DEFAULT_CHANNELS });
+    const tok = tokenOf(r.session, channelDest('Crew'));
+    const crew = r.mock.lists()!.channels.find((c) => c.name === 'Crew')!;
+    const oldSlot = crew.slot;
+    crew.slot = 7; // moved on the device; the name is still unique, so the matcher still succeeds
+    await r.session.refreshChannels();
+    expect(r.session.mapDestination(channelDest('Crew'))).toMatchObject({ ok: true });
+    const before = r.mock.writes.length;
+    await expect(r.session.sendChannel(channel('moved', { mapping: tok }))).rejects.toMatchObject({ code: 'unmapped_destination', message: expect.stringContaining('no longer matches') });
+    untouched(r.mock, before);
+    expect(oldSlot).not.toBe(7);
+  });
+
   it('a token issued with a hash is re-checked with it: the device channel keeps its name and slot but its hash changes, so the write is refused', async () => {
     const r = await usb({ channels: DEFAULT_CHANNELS });
     const tok = tokenOf(r.session, channelDest('Crew', { hash: '5f' }));

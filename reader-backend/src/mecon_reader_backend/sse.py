@@ -12,7 +12,7 @@ from __future__ import annotations
 import asyncio
 import json
 from datetime import datetime, timezone
-from typing import Any, AsyncIterator
+from typing import Any, AsyncIterator, Awaitable, Callable
 
 from .ports import Caller, CoreError, EventBatch, ReaderCore
 from .sessions import SessionResolver
@@ -33,8 +33,19 @@ def revoked_frame(cursor: str) -> bytes:
     return frame(env, with_id=False)
 
 
-async def event_stream(core: ReaderCore, sessions: SessionResolver, caller: Caller, first: EventBatch, *,
-                       heartbeat_s: float, feed_down_close_s: float, tick_s: float = 0.25) -> AsyncIterator[bytes]:
+async def event_stream(core: ReaderCore | None, sessions: SessionResolver, caller: Caller, first: EventBatch, *,
+                       heartbeat_s: float, feed_down_close_s: float, tick_s: float = 0.25,
+                       read: Callable[[Caller, str | None, float], Awaitable[EventBatch]] | None = None,
+                       revoked_frame_for: Callable[[str], bytes] = revoked_frame,
+                       gone_frame_for: Callable[[str], bytes] | None = None) -> AsyncIterator[bytes]:
+    """Frame `first`, then follow the stream with `read` (default: the Reader core's read_events).
+
+    `revoked_frame_for` builds the one frame sent when the session is revoked; `gone_frame_for`, when given,
+    builds a frame sent before closing when a read finds the cursor gone (else the stream just closes).
+    """
+    if read is None:
+        assert core is not None
+        read = core.read_events
     revoked = sessions.register_stream(caller.session_ref)
     try:
         cursor = first.cursor
@@ -44,23 +55,25 @@ async def event_stream(core: ReaderCore, sessions: SessionResolver, caller: Call
         last_beat = asyncio.get_running_loop().time()
         while True:
             if revoked.is_set():
-                yield revoked_frame(cursor)
+                yield revoked_frame_for(cursor)
                 return
             if caller.expires_at <= datetime.now(timezone.utc):
                 return
             if sessions.feed_down_for() > feed_down_close_s:
                 return
-            read = asyncio.ensure_future(core.read_events(caller, cursor, min(tick_s, heartbeat_s)))
+            pending = asyncio.ensure_future(read(caller, cursor, min(tick_s, heartbeat_s)))
             stop = asyncio.ensure_future(revoked.wait())
-            done, _ = await asyncio.wait({read, stop}, return_when=asyncio.FIRST_COMPLETED)
-            if read not in done:
-                read.cancel()
+            done, _ = await asyncio.wait({pending, stop}, return_when=asyncio.FIRST_COMPLETED)
+            if pending not in done:
+                pending.cancel()
                 stop.cancel()
                 continue  # revoked: the check at the top closes the stream before anything else is sent
             stop.cancel()
             try:
-                batch = read.result()
-            except CoreError:
+                batch = pending.result()
+            except CoreError as e:
+                if e.kind == "gone" and gone_frame_for is not None:
+                    yield gone_frame_for(cursor)
                 return  # the cursor aged out mid-stream: the client reconnects and gets the 410
             if revoked.is_set():
                 continue

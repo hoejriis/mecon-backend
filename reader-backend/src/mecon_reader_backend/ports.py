@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, AsyncIterator, Literal, Mapping, Protocol, Union, runtime_checkable
+from typing import Any, AsyncIterator, Literal, Mapping, Protocol, Sequence, Union, runtime_checkable
 
 Purpose = Literal["read", "write", "stream"]
 CapabilityState = Literal["available", "unavailable", "forbidden"]
@@ -170,3 +170,62 @@ class ReaderCore(Protocol):
     async def create_lease(self, caller: Caller) -> dict[str, Any]: ...
 
     async def list_lease_keys(self, caller: Caller) -> dict[str, Any]: ...
+
+
+# ---- observations (contracts/observations/v1) ----
+
+Provenance = Literal["own_fleet", "shared_fleet", "approved_public_source"]
+
+
+@dataclass(frozen=True)
+class ScopedObserver:
+    """One observer a caller may see, as the core decides it. The facade never computes or widens this."""
+
+    observer_id: str  # the opaque id the API reports for this observer
+    provenance: Provenance  # which rule made it visible
+    location_precision_m: float | None  # None: the location is withheld; else the radius it may be shown at
+
+
+@dataclass(frozen=True)
+class ObserverPage:
+    items: list[dict[str, Any]]  # Observer dicts
+    next_cursor: str | None
+
+
+@dataclass(frozen=True)
+class SnapshotResult:
+    items: list[dict[str, Any]]  # Reception dicts, oldest first
+    cursor: str  # hand to the event stream or to a later `since`
+    expires_at: datetime  # when the cursor stops being accepted
+
+
+@runtime_checkable
+class ObservationScope(Protocol):
+    """The core's call: which observers this caller may see, and how each location may be shown.
+
+    A caller whose rules match nothing gets an empty list, never an error. An answer the core cannot give
+    raises CoreError("unavailable"). The facade passes the answer to the ReceptionStore unchanged.
+    """
+
+    async def visible_observers(self, caller: Caller) -> Sequence[ScopedObserver]: ...
+
+
+@runtime_checkable
+class ReceptionStore(Protocol):
+    """Observers and receptions. Every method answers only for the observers in `scope`, and nothing else.
+
+    A cursor that is malformed, was not issued to this caller, or is outside retention raises
+    CoreError("gone"); a store that cannot answer raises CoreError("unavailable").
+    """
+
+    async def observers(self, caller: Caller, scope: Sequence[ScopedObserver], cursor: str | None,
+                        limit: int) -> ObserverPage: ...
+
+    async def snapshot(self, caller: Caller, scope: Sequence[ScopedObserver], since: str | None,
+                       limit: int) -> SnapshotResult: ...
+
+    async def events_after(self, caller: Caller, scope: Sequence[ScopedObserver], cursor: str | None,
+                           wait_s: float) -> EventBatch:
+        """ObservationEvent dicts (kind `reception`) after `cursor` (None: from now), oldest first; waits up to
+        `wait_s` for one when none is held. `EventBatch.cursor` is where the next read continues."""
+        ...

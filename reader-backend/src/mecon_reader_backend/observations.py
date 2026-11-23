@@ -169,8 +169,11 @@ def observation_routes(authenticate: Callable[[Request, str], Awaitable[Caller]]
             # the resolver (purpose read: its short cache), never a stored Caller.
             now = await sessions.resolve(credential, "read") if credential else Denied("unknown")
             if isinstance(now, Denied):
-                # A session that ended is the revocation feed's to close (session_revoked path); a lookup that
-                # cannot answer closes the stream, and the reconnect answers 503 or 401.
+                if now.reason in ("revoked", "expired"):
+                    # The session ended, seen here before the revocation feed's event: said once, as a revocation.
+                    raise CoreError("forbidden")
+                # A lookup that cannot answer (or an unknown session) closes the stream with nothing said; the
+                # reconnect answers 503 or 401.
                 raise CoreError("unavailable")
             state = now.capabilities.get("observations")
             if state == "forbidden":

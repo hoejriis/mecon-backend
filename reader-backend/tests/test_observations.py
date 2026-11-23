@@ -373,6 +373,41 @@ def test_the_scope_answering_forbidden_mid_stream_sends_access_revoked_not_a_sil
     run(go())
 
 
+@pytest.mark.parametrize("reason,frames_want", [("revoked", ["access_revoked"]), ("expired", ["access_revoked"]),
+                                                ("core_unavailable", []), ("unknown", [])])
+def test_a_re_resolve_that_finds_the_session_ended_says_access_revoked_and_an_outage_closes_silently(reason, frames_want):
+    """The stream's own re-resolve can see a session end before the revocation feed's event: revoked or expired is
+    said once as access_revoked; a lookup that cannot answer, or an unknown session, closes with nothing said."""
+    from mecon_reader_backend.ports import Denied
+
+    async def go():
+        rig = Rig()
+        async with rig.client("alice"):
+            pass
+        orig = rig.lookup.resolve
+        rig.world.deny = None
+
+        async def maybe_denied(credential, purpose, **kw):
+            if rig.world.deny is not None and purpose == "read":
+                return Denied(rig.world.deny)
+            return await orig(credential, purpose, **kw)
+        rig.lookup.resolve = maybe_denied
+
+        async def act():
+            await asyncio.sleep(0.3)
+            rig.world.deny = reason
+            rig.app.state.sessions.drop_cache()  # as the 5 s read cache ending would
+            await asyncio.sleep(0.3)
+            rig.world.add_reception("north_mast", "p3", -52)
+        t = asyncio.ensure_future(act())
+        status, _, raw, ended = await rig.stream(bound_s=3.0)
+        await t
+        assert status == 200 and ended, f"the stream stayed open after the re-resolve answered {reason}"
+        assert [f["kind"] for f in parse_sse(raw)] == frames_want
+        assert b"-52" not in raw
+    run(go())
+
+
 def test_another_sessions_revocation_leaves_the_stream_open():
     async def go():
         rig = Rig()

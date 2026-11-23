@@ -31,6 +31,8 @@ CREATE TABLE IF NOT EXISTS receptions (
     route_type         INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS receptions_dup ON receptions (packet_id, source);
+-- Reads by observer, in position order: the Reader backend's observation reads ask for a caller's observers only.
+CREATE INDEX IF NOT EXISTS receptions_observer ON receptions (source, observer_key, capture_id);
 CREATE TABLE IF NOT EXISTS outcomes (
     capture_id INTEGER PRIMARY KEY,
     outcome    TEXT NOT NULL CHECK (outcome IN ('reception', 'skipped')),

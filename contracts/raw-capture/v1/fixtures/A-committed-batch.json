@@ -6,5 +6,5 @@
     { "source": "own-broker", "topic": "meshcore/AB12/obs-1/status", "payload_b64": "eyJzdGF0dXMiOiJvbmxpbmUifQ==", "retained": true, "received_at": "2026-01-01T00:00:00.121Z" },
     { "source": "open-feed", "topic": "packets/obs-9", "payload_b64": "MTUwMGJi", "retained": false, "received_at": "2026-01-01T00:00:00.300Z" }
   ] },
-  "result": { "batch_id": "a-1", "storage": "available", "committed": 3, "rejected": [] }
+  "result": { "batch_id": "a-1", "storage": "available", "committed": 3, "rejected": [], "stubbed": [] }
 }

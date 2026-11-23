@@ -2,11 +2,14 @@
   "fixture": "E", "title": "Documents the schemas reject", "kind": "invalid",
   "cases": [
     { "schema": "append-request", "note": "an empty batch", "value": { "batch_id": "e-1", "captures": [] } },
-    { "schema": "append-result", "note": "unavailable storage that still claims commits", "value": { "batch_id": "e-2", "storage": "unavailable", "committed": 2, "rejected": [] } },
-    { "schema": "append-result", "note": "an unknown rejection reason", "value": { "batch_id": "e-3", "storage": "available", "committed": 0, "rejected": [ { "index": 0, "reason": "duplicate" } ] } },
+    { "schema": "append-result", "note": "unavailable storage that still claims commits", "value": { "batch_id": "e-2", "storage": "unavailable", "committed": 2, "rejected": [], "stubbed": [] } },
+    { "schema": "append-result", "note": "an unknown rejection reason", "value": { "batch_id": "e-3", "storage": "available", "committed": 0, "rejected": [ { "index": 0, "reason": "duplicate" } ], "stubbed": [] } },
+    { "schema": "append-result", "note": "an oversized capture rejected, which version 1 no longer allows: it is committed as a stub", "value": { "batch_id": "e-8", "storage": "available", "committed": 0, "rejected": [ { "index": 0, "reason": "too_large" } ], "stubbed": [] } },
+    { "schema": "append-result", "note": "unavailable storage that still names a stub", "value": { "batch_id": "e-9", "storage": "unavailable", "committed": 0, "rejected": [], "stubbed": [0] } },
+    { "schema": "append-result", "note": "a result without the stubbed list", "value": { "batch_id": "e-10", "storage": "available", "committed": 1, "rejected": [] } },
     { "schema": "capture", "note": "a receive time without milliseconds", "value": { "source": "own-broker", "topic": "t", "payload_b64": "", "retained": false, "received_at": "2026-01-01T00:00:00Z" } },
     { "schema": "capture", "note": "a payload that is not base64", "value": { "source": "own-broker", "topic": "t", "payload_b64": "not base64!", "retained": false, "received_at": "2026-01-01T00:00:00.000Z" } },
     { "schema": "capture", "note": "the retained flag missing", "value": { "source": "own-broker", "topic": "t", "payload_b64": "", "received_at": "2026-01-01T00:00:00.000Z" } },
-    { "schema": "counters", "note": "a negative count", "value": { "received": -1, "committed": 0, "rejected": 0, "unavailable_batches": 0, "buffered": 0, "dropped": 0 } }
+    { "schema": "counters", "note": "a negative count", "value": { "received": -1, "committed": 0, "rejected": 0, "stubbed": 0, "unavailable_batches": 0, "buffered": 0, "dropped": 0 } }
   ]
 }

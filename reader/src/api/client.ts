@@ -146,6 +146,11 @@ export interface ApiClient {
   openEvents(opts: { lastEventId?: string | null; signal?: AbortSignal }): Promise<Response>;
   /** Forget the held CSRF token (signed out). */
   reset(): void;
+  /**
+   * The server ended the session outside a request (a `session_revoked` stream
+   * envelope). Handled exactly as a 401: the caller's sign-out path runs.
+   */
+  sessionEnded(): void;
 }
 
 async function readError(res: Response): Promise<ApiError> {
@@ -168,11 +173,14 @@ export function createApiClient(opts: ApiClientOptions = {}): ApiClient {
 
   async function send(path: string, init: RequestInit, base = API_BASE): Promise<Response> {
     const res = await doFetch(`${base}${path}`, { credentials: 'same-origin', ...init });
-    if (res.status === 401) {
-      capabilities = null;
-      opts.onUnauthorized?.();
-    }
+    if (res.status === 401) unauthorized();
     return res;
+  }
+
+  // The one sign-out path for a session the server no longer accepts.
+  function unauthorized() {
+    capabilities = null;
+    opts.onUnauthorized?.();
   }
 
   function need(...caps: Array<keyof Capabilities>) {
@@ -380,6 +388,9 @@ export function createApiClient(opts: ApiClientOptions = {}): ApiClient {
     reset() {
       csrfToken = null;
       capabilities = null;
+    },
+    sessionEnded() {
+      unauthorized();
     },
   };
 }

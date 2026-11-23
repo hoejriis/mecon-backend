@@ -129,6 +129,7 @@ class Replay:
         self.stream_bound_s = stream_bound_s
         self.log: list[str] = []
         self.operations_seen: set[str] = set()
+        self.csrf_tokens: dict[int, str] = {}  # per client: the last token GET /session returned
 
     def client(self, name: str | None) -> httpx.AsyncClient:
         if name is None:
@@ -155,7 +156,8 @@ class Replay:
 
     # actions
     ACTIONS = ("sign-in", "approve-login", "set-switch", "events-checkpoint", "age-out-events",
-               "rotate-lease-key", "revoke-lease-keys")
+               "rotate-lease-key", "revoke-lease-keys", "end-session", "session-authority-down",
+               "session-authority-up")
 
     def act(self, step: dict) -> None:
         name, args = step["action"], self.sub(step.get("args", {}))
@@ -178,14 +180,32 @@ class Replay:
             w.rotate_lease_key()
         elif name == "revoke-lease-keys":
             w.revoke_lease_keys()
+        elif name == "end-session":
+            # The session this client's cookie names ends on the server; the client keeps the cookie.
+            cred = self.client(args["client"]).cookies.get(COOKIE)
+            if cred is None or cred not in w.sessions:
+                raise CaseFailed(f"end-session: client {args['client']} holds no session")
+            w.revoke(w.sessions[cred], "ended")
+        elif name == "session-authority-down":
+            self.lookup.unavailable = True
+            self.app.state.sessions.drop_cache()  # cached answers are dropped, as if they had timed out
+        elif name == "session-authority-up":
+            self.lookup.unavailable = False
         else:
             raise NotApplicable(f"action {name} is not mapped")
         if "capture" in step and name != "events-checkpoint":
             raise NotApplicable(f"action {name} does not capture")
 
     async def csrf_token(self, client: httpx.AsyncClient) -> str | None:
+        # The client's token from GET /session; the last one it read when GET /session cannot answer.
         r = await client.get(PREFIX + "/session", headers={"Origin": SAME_ORIGIN})
-        return r.json().get("csrf_token") if r.status_code == 200 else None
+        if r.status_code == 200:
+            self.csrf_tokens[id(client)] = r.json()["csrf_token"]
+            return self.csrf_tokens[id(client)]
+        if r.status_code == 401:
+            self.csrf_tokens.pop(id(client), None)
+            return None
+        return self.csrf_tokens.get(id(client))
 
     async def request(self, i: int, step: dict) -> None:
         req = step["request"]

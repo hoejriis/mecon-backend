@@ -112,6 +112,9 @@ class SessionResolver:
     def _expired(caller: Caller) -> bool:
         return caller.expires_at <= datetime.now(timezone.utc)
 
+    def drop_cache(self) -> None:
+        self._cache.clear()
+
     def forget_session(self, session_ref: str) -> None:
         for cred in [k for k, e in self._cache.items() if e.caller.session_ref == session_ref]:
             del self._cache[cred]

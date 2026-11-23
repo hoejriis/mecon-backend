@@ -1,4 +1,4 @@
-import { ApiError, createApiClient } from './client';
+import { ApiError, CapabilityError, createApiClient } from './client';
 import { createBackend, fx, json } from '../test/backend';
 
 describe('api client', () => {
@@ -19,6 +19,18 @@ describe('api client', () => {
     expect(onUnauthorized).toHaveBeenCalledTimes(1);
     expect(b.fetchMock.mock.calls[0]![0]).toBe('/api/reader/v1/devices');
     expect(b.fetchMock.mock.calls[0]![1]).toMatchObject({ credentials: 'same-origin' });
+  });
+
+  it('sessionEnded takes the same sign-out path as a 401', async () => {
+    const b = createBackend();
+    b.on('GET /session', json(fx.session));
+    const onUnauthorized = vi.fn();
+    const client = createApiClient({ fetchImpl: b.fetchMock as unknown as typeof fetch, onUnauthorized });
+    await client.getSession();
+    client.sessionEnded();
+    expect(onUnauthorized).toHaveBeenCalledTimes(1);
+    // Capabilities are forgotten, as on a 401: messaging calls are refused until a session is read again.
+    await expect(client.listConversations()).rejects.toBeInstanceOf(CapabilityError);
   });
 
   it('survives a non-JSON error body', async () => {

@@ -70,6 +70,7 @@ const KINDS = [
   'attempt_status',
   'authorization_changed',
   'resync_required',
+  'session_revoked',
 ];
 
 /** Parse an event's data as an EventEnvelope; null when it is not one. */

@@ -1,5 +1,5 @@
 {
-  "contract": "mecon-reader-api/1.0.0-draft.10",
+  "contract": "mecon-reader-api/1.0.0-draft.11",
   "synthetic": true,
   "group": "devices",
   "cases": [
@@ -12,6 +12,7 @@
       { "action": "sign-in", "args": { "client": "dora", "user": "dora" } },
       { "as": "dora", "request": { "operation": "listDevices" }, "expect": { "status": 200, "schema": "DeviceList", "body": { "/items": [] } } } ] },
     { "id": "devices-03", "title": "Devices need a session", "world": "two-fleets", "steps": [
-      { "request": { "operation": "listDevices" }, "expect": { "status": 401, "schema": "Error", "body": { "/code": "unauthenticated" } } } ] }
+      { "request": { "operation": "listDevices" }, "expect": { "status": 401, "schema": "Error", "body": { "/code": "unauthenticated" } } } ] },
+    {"id": "devices-04", "title": "A malformed limit or cursor is refused with 422 invalid, never clamped", "world": "two-fleets", "steps": [{"action": "sign-in", "args": {"client": "alice", "user": "alice"}}, {"as": "alice", "request": {"operation": "listDevices", "query": {"limit": 0}}, "expect": {"status": 422, "schema": "Error", "body": {"/code": "invalid", "/retryable": false}}}, {"as": "alice", "request": {"operation": "listDevices", "query": {"limit": 201}}, "expect": {"status": 422, "schema": "Error", "body": {"/code": "invalid", "/retryable": false}}}, {"as": "alice", "request": {"operation": "listDevices", "query": {"limit": "ten"}}, "expect": {"status": 422, "schema": "Error", "body": {"/code": "invalid", "/retryable": false}}}, {"as": "alice", "request": {"operation": "listDevices", "query": {"cursor": "ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"}}, "expect": {"status": 422, "schema": "Error", "body": {"/code": "invalid", "/retryable": false}}}, {"as": "alice", "request": {"operation": "listDevices", "query": {"limit": 200}}, "expect": {"status": 200, "schema": "DeviceList"}}]}
   ]
 }

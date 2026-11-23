@@ -379,6 +379,18 @@ export interface paths {
          *     stream from a dead one. The Reader treats 2 missed intervals (no bytes
          *     for 50 s) as dead and reconnects with `Last-Event-ID`. A comment line
          *     counts as a heartbeat.
+         *
+         *     **Control events.** `resync_required`: the server cannot continue the
+         *     stream faithfully; the client reloads its snapshots.
+         *     `authorization_changed`: the caller's rights changed while the session
+         *     goes on; the client re-reads the session, then reloads its snapshots.
+         *     `session_revoked`: the session this stream belongs to was revoked or
+         *     ended on the server (signed out elsewhere, revoked by an operator);
+         *     the Backend sends it once, with `resource_id` null, then ends the
+         *     stream. Nothing after revocation is sent. The client returns to
+         *     sign-in, as on a 401, and never reconnects with that session. A
+         *     stream whose session simply expires may end without it; the reconnect
+         *     then answers 401.
          */
         get: operations["streamEvents"];
         put?: never;
@@ -478,11 +490,14 @@ export interface components {
              * @example forbidden
              * @example csrf_failed
              * @example origin_rejected
+             * @example sending_disabled
              * @example not_found
              * @example conflict
              * @example invalid
+             * @example validation_failed
              * @example throttled
              * @example unavailable
+             * @example lease_signing_unavailable
              * @example cursor_expired
              */
             code: string;
@@ -757,13 +772,15 @@ export interface components {
         /**
          * @description `resource_id` by `kind`: the conversation id for `message` and
          *     `conversation`; the server attempt `id` for `attempt_status`; the
-         *     device id for `device_status`, which a client may ignore. A client may
-         *     refetch its open attempts when it meets an unknown id.
+         *     device id for `device_status`, which a client may ignore; null for the
+         *     control events `authorization_changed`, `resync_required` and
+         *     `session_revoked` (see `GET /events`). A client may refetch its open
+         *     attempts when it meets an unknown id.
          */
         EventEnvelope: {
             event_id: string;
             /** @enum {string} */
-            kind: "message" | "conversation" | "device_status" | "attempt_status" | "authorization_changed" | "resync_required";
+            kind: "message" | "conversation" | "device_status" | "attempt_status" | "authorization_changed" | "resync_required" | "session_revoked";
             occurred_at: components["schemas"]["Timestamp"];
             resource_id?: string | null;
             version: number;
@@ -893,6 +910,23 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
+        /**
+         * @description A malformed `limit` or `cursor` (code `invalid`, `retryable: false`).
+         *     Malformed means outside the parameter's schema (a `limit` that is not
+         *     an integer from 1 to 200, a `cursor` longer than 512 characters) or,
+         *     on a history list, a `cursor` the Backend cannot read as one it issued
+         *     for that list. The request is refused, never clamped or read from the
+         *     start. On `/events` a well-formed cursor that cannot be resumed is 410
+         *     `cursor_expired`, not 422.
+         */
+        BadQuery: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
         /** @description Rate limited */
         Throttled: {
             headers: {
@@ -903,7 +937,13 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description Temporarily unavailable */
+        /**
+         * @description Temporarily unavailable (code `unavailable`, `retryable: true`): the
+         *     Backend, or the session authority it needs to resolve the session,
+         *     cannot answer now. The cookie is left as it is. An operation may name
+         *     another code for its own 503 (`POST /leases`: `lease_signing_unavailable`,
+         *     `retryable: false`).
+         */
         Unavailable: {
             headers: {
                 [name: string]: unknown;
@@ -1027,6 +1067,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            503: components["responses"]["Unavailable"];
         };
     };
     logout: {
@@ -1050,6 +1091,7 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
+            503: components["responses"]["Unavailable"];
         };
     };
     listDevices: {
@@ -1074,6 +1116,8 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            422: components["responses"]["BadQuery"];
+            503: components["responses"]["Unavailable"];
         };
     };
     listIdentities: {
@@ -1095,6 +1139,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            503: components["responses"]["Unavailable"];
         };
     };
     listConversations: {
@@ -1119,6 +1164,8 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            422: components["responses"]["BadQuery"];
+            503: components["responses"]["Unavailable"];
         };
     };
     getConversation: {
@@ -1151,6 +1198,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            503: components["responses"]["Unavailable"];
         };
     };
     markConversationRead: {
@@ -1198,6 +1246,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            503: components["responses"]["Unavailable"];
         };
     };
     listMessages: {
@@ -1225,6 +1274,8 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             404: components["responses"]["NotFound"];
+            422: components["responses"]["BadQuery"];
+            503: components["responses"]["Unavailable"];
         };
     };
     listContacts: {
@@ -1249,6 +1300,8 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            422: components["responses"]["BadQuery"];
+            503: components["responses"]["Unavailable"];
         };
     };
     listChannels: {
@@ -1270,6 +1323,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            503: components["responses"]["Unavailable"];
         };
     };
     createSendAttempt: {
@@ -1338,6 +1392,7 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             404: components["responses"]["NotFound"];
+            503: components["responses"]["Unavailable"];
         };
     };
     streamEvents: {
@@ -1372,6 +1427,8 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            422: components["responses"]["BadQuery"];
+            503: components["responses"]["Unavailable"];
         };
     };
     createLease: {
@@ -1431,6 +1488,7 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             404: components["responses"]["NotFound"];
+            503: components["responses"]["Unavailable"];
         };
     };
 }

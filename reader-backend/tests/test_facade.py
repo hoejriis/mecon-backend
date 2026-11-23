@@ -10,7 +10,7 @@ from mecon_reader_backend import FacadeConfig, create_app
 from mecon_reader_backend.app import COOKIE, PREFIX
 from mecon_reader_backend.fakes import build
 from mecon_reader_backend.ports import Denied
-from replay import BASE, SAME_ORIGIN, WORLDS, asgi_get_stream, parse_sse
+from replay import BASE, SAME_ORIGIN, WORLDS, asgi_get_stream, parse_sse, schema_validator
 
 ERROR_KEYS = {"code", "message", "request_id", "retryable"}
 
@@ -360,9 +360,13 @@ def test_the_stream_closes_on_revocation_without_replaying_anything():
         assert status == 200
         assert ended, "the stream stayed open after its session was revoked"
         frames = parse_sse(raw)
-        assert frames and frames[-1]["kind"] == "authorization_changed"
+        assert frames and frames[-1]["kind"] == "session_revoked" and frames[-1]["resource_id"] is None
+        assert [f["kind"] for f in frames].count("session_revoked") == 1  # sent once
+        assert not list(schema_validator("EventEnvelope").iter_errors(frames[-1]))
         assert all(f.get("resource_id") != "att_after_revocation" for f in frames)
-        assert not raw.rstrip().endswith(b": heartbeat") and b"id: " not in raw.split(b"data:")[-1]
+        assert not raw.rstrip().endswith(b": heartbeat")
+        last = [b for b in raw.split(b"\n\n") if b"data:" in b][-1]
+        assert not any(ln.startswith(b"id:") for ln in last.split(b"\n")), "the revocation frame is not a resume point"
     run(go())
 
 
@@ -488,7 +492,7 @@ def test_streams_are_matched_by_session_ref_never_by_cookie_value():
         await t
         assert seen["keys"] == {ref}
         assert seen["open_after_cookie_revocation"]
-        assert status == 200 and ended and parse_sse(raw)[-1]["kind"] == "authorization_changed"
+        assert status == 200 and ended and parse_sse(raw)[-1]["kind"] == "session_revoked"
     run(go())
 
 

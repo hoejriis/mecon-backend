@@ -520,6 +520,8 @@ export function MessagingProvider({
       open: (o) => api.openEvents(o),
       onEvent: (e) => handlers.current.event?.(e),
       onResync: (r) => handlers.current.resync?.(r),
+      // The server ended this session: the same sign-out path as a 401, and no reconnect.
+      onSessionRevoked: () => api.sessionEnded(),
       onStatus: (s) => {
         live.current = s === 'live';
         setStreamStatus(s);

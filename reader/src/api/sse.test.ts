@@ -175,6 +175,38 @@ describe('startEventStream', () => {
     h.stop();
   });
 
+  it('session_revoked runs the sign-out path, delivers nothing after it, and never reconnects', async () => {
+    const s = mkStream();
+    const h = run([() => s.res]);
+    await flush();
+    s.push(
+      `id: e1\ndata: ${JSON.stringify(envelope('message', 'e1', 'conv_1'))}\n\n` +
+        `data: ${JSON.stringify(envelope('session_revoked', 'e2'))}\n\n` +
+        `id: e3\ndata: ${JSON.stringify(envelope('message', 'e3', 'conv_1'))}\n\n`,
+    );
+    await flush(60_000);
+    expect(h.unauthorized).toBe(1);
+    expect(h.events.map((e) => e.event_id)).toEqual(['e1']);
+    expect(h.resyncs).toEqual([]);
+    expect(h.opens).toHaveLength(1);
+  });
+
+  it('session_revoked prefers onSessionRevoked over onUnauthorized', async () => {
+    const s = mkStream();
+    const seen = { revoked: 0, unauthorized: 0, opens: 0 };
+    startEventStream({
+      open: async () => (seen.opens++, s.res),
+      onEvent: () => {},
+      onResync: () => {},
+      onUnauthorized: () => seen.unauthorized++,
+      onSessionRevoked: () => seen.revoked++,
+    });
+    await flush();
+    s.push(`data: ${JSON.stringify(envelope('session_revoked', 'e1'))}\n\n`);
+    await flush(60_000);
+    expect(seen).toEqual({ revoked: 1, unauthorized: 0, opens: 1 });
+  });
+
   it('a 401 stops the stream and runs the sign-out path; it does not reconnect', async () => {
     const h = run([() => new Response('{}', { status: 401 })]);
     await flush(60_000);

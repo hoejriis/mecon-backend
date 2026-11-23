@@ -192,12 +192,12 @@ def test_generator_reproduces_the_fixture_files():
 
 
 def test_every_checklist_item_has_a_test():
-    """contracts/connector-hold/v1/README.md section 9 numbers 24 items; tests/test_hold.py and tests/test_dfu.py
+    """contracts/connector-hold/v1/README.md section 9 numbers 26 items; tests/test_hold.py and tests/test_dfu.py
     name their tests test_conf_NN for each, so a new item cannot ship without one."""
     text = (V1 / "README.md").read_text()
     items = re.findall(r"(?m)^(\d+)\. ", text.split("## 9. Conformance checklist")[1].split("## 10.")[0])
-    assert items == [str(n) for n in range(1, 25)]
+    assert items == [str(n) for n in range(1, 26 + 1)]
     src = "".join((pathlib.Path(__file__).parent / f).read_text() for f in ("test_hold.py", "test_dfu.py"))
     covered = set(re.findall(r"def test_conf_(\d\d)", src))
     covered |= {n for grp in re.findall(r"def test_conf_((?:\d\d_)+)", src) for n in re.findall(r"\d\d", grp)}
-    assert {f"{n:02d}" for n in range(1, 25)} <= covered
+    assert {f"{n:02d}" for n in range(1, 26 + 1)} <= covered

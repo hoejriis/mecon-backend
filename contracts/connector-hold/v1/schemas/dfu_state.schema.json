@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:mecon:connector-hold:v1:dfu_state",
   "title": "dfu_state (agent to Backend)",
-  "description": "Where the agent is with the armed job. The Backend records each state on the job. failed carries the stage and a short error code; no other state carries them. Not acknowledged.",
+  "description": "Where the agent is with the armed job. The Backend records each state on the job and relays the bootloader-dfu offer only after ready for that job on that socket. failed carries the stage and a short error code; no other state carries them. Not acknowledged; the current state is sent again once on a new socket while a job is under way or failed.",
   "type": "object",
   "required": [
     "type",
@@ -21,6 +21,7 @@
     "state": {
       "enum": [
         "fetching",
+        "ready",
         "waiting-bootloader",
         "transferring",
         "rebooting",

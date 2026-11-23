@@ -40,15 +40,15 @@ def hold_cfg(server_url, token_file, mode="companion", presentation="header", df
 
 class HoldRig:
     def __init__(self, tmp_path, server=None, mode="companion", presentation="header", enrolment="provisioned",
-                 plugged=True, token=TOKEN, dfu=None, bridge_kw=None, **hold):
+                 plugged=True, token=TOKEN, dfu=None, bridge_kw=None, opener=None, **hold):
         self.server = server or FakeHoldServer()
         self.own_server = server is None
         self.token_file = tmp_path / "hold-token"
         self.token_file.write_text(token + "\n")
         self.token_file.chmod(0o600)
         self.cfg = hold_cfg(self.server.url, self.token_file, mode, presentation, dfu, **hold)
-        self.opener = FakeOpener(mode=mode, enrolment=enrolment)
-        self.dev = self.opener.plug() if plugged else None
+        self.opener = opener or FakeOpener(mode=mode, enrolment=enrolment)
+        self.dev = self.opener.plug() if plugged and opener is None else None
         if self.dev is not None:
             self.dev.answers_hello = True
         self.clock = Clock()

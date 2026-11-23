@@ -12,7 +12,8 @@ const BACKEND = ['iface_req', 'iface_ack', 'refused', 'dfu_job'];
 // dfu_state order (section 12): each state may follow only these
 const DFU_NEXT = {
   start: ['fetching'],
-  fetching: ['waiting-bootloader', 'failed'],
+  fetching: ['ready', 'failed'],
+  ready: ['waiting-bootloader', 'failed'],
   'waiting-bootloader': ['transferring', 'failed'],
   transferring: ['transferring', 'rebooting', 'failed'],
   rebooting: ['installed-pending-hello', 'failed'],
@@ -218,6 +219,8 @@ function scenario(doc, file, check, fail) {
           dfuState = 'start';
         }
         if (s.frame.type === 'iface_req') {
+          let op; try { op = JSON.parse(JSON.parse(s.frame.wire).body).op; } catch { op = undefined; }
+          if (op === 'update.offer' && dfu && dfuState !== 'ready') at(i, 'the offer is relayed only after dfu_state ready for the job');
           if (lastReq) at(i, 'a second request before the first was written');
           lastReq = s.frame;
           lastId = s.frame.id;
@@ -286,7 +289,7 @@ function scenario(doc, file, check, fail) {
       }
       case 'device_link':
         if (s.port === 'application' && s.event === 'lost') {
-          if (!dfu || dfuState === 'start') at(i, 'the socket stays only for an armed job; otherwise the agent closes it');
+          if (!dfu || dfuState !== 'ready') at(i, 'the socket stays only for a job that is ready; otherwise the agent closes it');
           appUp = false;
         } else if (s.port === 'application' && s.event === 'opened') {
           appUp = true;

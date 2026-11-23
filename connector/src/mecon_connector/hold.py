@@ -47,7 +47,7 @@ from .logutil import Log
 from .metrics import Metrics
 from .nordic_dfu import BAUD as DFU_BAUD
 from .nordic_dfu import Package, PackageError, TransferError, make_fetcher, read_package, run_transfer, verify_package
-from .serial_link import make_opener
+from .serial_link import SelectorOverlap, make_opener
 from .transport import (
     SerialAmbiguous,
     SerialGone,
@@ -78,6 +78,7 @@ SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 BOOT_LOOK_S = 0.5  # how often the bootloader port is looked for
 BOOT_SETTLE_S = 1.0  # before a fresh transfer attempt on the same bootloader
 DFU_KEEPS = ("waiting-bootloader", "transferring", "rebooting", "resuming", "failed")  # phases that keep the socket
+DFU_RECONNECT = ("waiting-bootloader", "transferring", "rebooting", "failed")  # reconnect a lost socket, no device link
 
 
 @dataclass
@@ -203,6 +204,9 @@ class HoldBridge:
         self._dfu_next_look = 0.0
         self._dfu_attempt = 0
         self._dfu_ambiguous_noted = False
+        self._dfu_last: dict | None = None  # the last dfu_state sent: sent again once on a new socket
+        self._dfu_failed_at = 0.0
+        self._dfu_overlap_noted = False
 
     # ---- transport callbacks (any thread) ----------------------------------------------
 
@@ -294,6 +298,8 @@ class HoldBridge:
         if self._send(self._relay_frame()):
             self.m.inc("hold_relay_declared_total")
         self._upload_hello()
+        if self._dfu_phase in DFU_RECONNECT and self._dfu_last is not None:
+            self._send(self._dfu_last)  # a new socket during a DFU: the Backend hears where the job is, once
 
     def _relay_frame(self) -> dict:
         """iface_relay, with serial_dfu only when this Connector is configured to run a bootloader DFU: the Backend
@@ -387,6 +393,7 @@ class HoldBridge:
             self._dfu_keeps_socket()
         )
         want = keep and self._gate_open
+        want = want or (keep and self._dfu_phase in DFU_RECONNECT)  # a DFU reports on a new socket without a device
         if self._state == "connected":
             if not keep:
                 self._close_hold("device_link_lost" if self._link is None else "not_enrolled")
@@ -707,8 +714,19 @@ class HoldBridge:
             self._check_stall(now)
 
     def _try_open(self, now: float) -> None:
+        if hasattr(self.opener, "avoid"):
+            # While a DFU waits on the bootloader, a port that also matches the bootloader's selector is not the
+            # application's: it is refused before it is opened, so nothing is written to the bootloader.
+            dc = self._dfu_cfg
+            self.opener.avoid = dc.bootloader if dc is not None and self._dfu_phase in DFU_RECONNECT else None
         try:
             link = self.opener()
+        except SelectorOverlap:
+            if not self._dfu_overlap_noted:
+                self._dfu_overlap_noted = True
+                self.log.warn("dfu_selector_overlap", port="application")
+            self._next_open = now + SERIAL_RETRY_S
+            return
         except SerialUnavailable:
             self._note_serial("unavailable")
             self._next_open = now + SERIAL_RETRY_S
@@ -973,7 +991,10 @@ class HoldBridge:
             self._ignored("malformed_dfu_job")
             return
         phase = self._dfu_phase
-        if phase in ("none", "armed") and self._link is not None:
+        if phase in ("none", "armed") and self._link is None:
+            self._ignored("dfu_no_device")
+            self.log.warn("dfu_job_ignored", job=job, phase=phase, why="no_device")
+        elif phase in ("none", "armed"):
             self._dfu_begin(now, job, sha, size, "armed")  # a newer job replaces one that is only armed
         elif phase == "failed" and self._dfu_job is not None and self._dfu_job["job"] == job:
             self._dfu_begin(now, job, sha, size, "waiting-bootloader")  # run again: the device is in its bootloader
@@ -1019,31 +1040,35 @@ class HoldBridge:
             self._dfu_fetch_state = "ok"
             self._dfu_pkg = payload
             self.log.info("dfu_package_ok", job=self._dfu_job and self._dfu_job["job"], bytes=len(payload.image))
+            # ready: fetched, checked and read. The Backend relays the offer only now, and the window starts now.
+            self._dfu_armed_at = now
+            self._dfu_state("ready")
+            if self._dfu_phase == "waiting-bootloader":  # a run again: the device already waits in its bootloader
+                self._dfu_deadline = now + self._dfu_cfg.bootloader_wait_s
+                self._dfu_state("waiting-bootloader")
         elif kind == "fetch_failed":
             stage, error = payload  # type: ignore[misc]
             self._dfu_fetch_state = "failed"
             self._dfu_pkg = None
             self._dfu_state("failed", stage, error)
             if self._dfu_phase == "waiting-bootloader":
-                self._dfu_phase = "failed"  # the device is not touched; it stays recoverable in its bootloader
-            # while only armed it stays armed: a reset within the window still keeps the socket, to wait
+                self._dfu_set_failed(now)  # the device is not touched; it stays recoverable in its bootloader
+            else:
+                self._dfu_clear()  # never ready: the Backend does not offer, and the device stays up
         elif kind == "transfer":
             self._on_transfer_done(now, payload if isinstance(payload, str) else None)
 
     def _dfu_on_link_lost(self, now: float) -> None:
         """Called when the application port drops, before the hold would be released."""
-        if self._dfu_phase == "armed" and not self._dfu_window_over(now):
+        if self._dfu_phase == "armed" and self._dfu_fetch_state == "ok" and not self._dfu_window_over(now):
             assert self._dfu_cfg is not None
             self.log.info("dfu_device_reset", job=self._dfu_job and self._dfu_job["job"])
-            if self._dfu_fetch_state == "failed":
-                self._dfu_phase = "failed"  # already reported; nothing to send, the socket waits
-                return
             self._dfu_phase = "waiting-bootloader"
             self._dfu_next_look = now
             self._dfu_deadline = None  # starts when the package is ready
             self._dfu_state("waiting-bootloader")
         elif self._dfu_phase == "armed":
-            self._dfu_disarm("window_over")
+            self._dfu_disarm("not_ready" if self._dfu_fetch_state != "ok" else "window_over")  # handled as unarmed
         elif self._dfu_phase == "resuming":
             assert self._dfu_cfg is not None
             self._dfu_phase = "rebooting"  # went again before the resume: wait for it as after a transfer
@@ -1065,8 +1090,13 @@ class HoldBridge:
             return
         ph = self._dfu_phase
         if ph == "armed":
-            if self._dfu_window_over(now):
+            if self._dfu_fetch_state == "ok" and self._dfu_window_over(now):
                 self._dfu_disarm("window_over")
+        elif ph == "failed":
+            if self._dfu_failed_cap_over(now):
+                # Held long enough with no device and no new job: released as on any device link drop.
+                self.log.warn("dfu_failed_released", job=self._dfu_job and self._dfu_job["job"])
+                self._dfu_clear()
         elif ph == "waiting-bootloader":
             if self._dfu_pkg is None:
                 return  # the fetch is still running; a failed one moves the phase on
@@ -1089,8 +1119,14 @@ class HoldBridge:
     def _dfu_look_for_bootloader(self, now: float) -> None:
         assert self._boot_opener is not None and self._dfu_pkg is not None
         self._dfu_next_look = now + BOOT_LOOK_S
+        if hasattr(self._boot_opener, "avoid"):
+            self._boot_opener.avoid = self.cfg.device.selector  # a port the device selector also takes is refused
         try:
             link = self._boot_opener()
+        except SelectorOverlap:
+            self.log.warn("dfu_selector_overlap", port="bootloader")
+            self._dfu_fail("bootloader", "selector-overlap")  # never opened, never written
+            return
         except SerialAmbiguous:
             if not self._dfu_ambiguous_noted:
                 self._dfu_ambiguous_noted = True
@@ -1137,8 +1173,16 @@ class HoldBridge:
         else:
             self._dfu_fail("transfer", err)
 
-    def _dfu_fail(self, stage: str, error: str) -> None:
+    def _dfu_failed_cap_over(self, now: float) -> bool:
+        assert self._dfu_cfg is not None
+        return now - self._dfu_failed_at >= self._dfu_cfg.failed_hold_s
+
+    def _dfu_set_failed(self, now: float) -> None:
         self._dfu_phase = "failed"
+        self._dfu_failed_at = now
+
+    def _dfu_fail(self, stage: str, error: str) -> None:
+        self._dfu_set_failed(self.clock())
         self._dfu_pkg = None
         self._dfu_deadline = None
         self._dfu_state("failed", stage, error)
@@ -1163,6 +1207,8 @@ class HoldBridge:
         self._dfu_fetch_state = "idle"
         self._dfu_deadline = None
         self._dfu_attempt = 0
+        self._dfu_last = None
+        self._dfu_overlap_noted = False
 
     def _dfu_state(self, state: str, stage: str | None = None, error: str | None = None) -> None:
         """dfu_state to the Backend, which records it on the job. Not sent while the socket is down."""
@@ -1173,6 +1219,7 @@ class HoldBridge:
             frame["stage"] = stage
             frame["error"] = error or "unknown"
         self.log.info("dfu_state", job=self._dfu_job["job"], state=state, stage=stage, error=error)
+        self._dfu_last = frame
         if self._state == "connected":
             self._send(frame)
 

@@ -191,8 +191,8 @@ def build():
     relay_dfu = {"type": "iface_relay", "serial_dfu": True}
     out["F-serial-dfu.json"] = fixture(
         "F", "Bootloader serial DFU on a held device",
-        "The agent declared serial_dfu. The Backend arms it with dfu_job, then relays the bootloader-dfu offer. The agent fetched and "
-        "checked the package before the device reset; the application port drops within the arming window, so the socket is kept and "
+        "The agent declared serial_dfu. The Backend arms it with dfu_job; the agent fetches, checks and reads the package and says "
+        "ready, and only then does the Backend relay the bootloader-dfu offer; the application port drops within the arming window, so the socket is kept and "
         "nothing is relayed. The agent opens the bootloader's own port and sends the package as HCI packets in SLIP frames (start, init, "
         "data, stop; every byte shown), then the application port returns and the agent declares and says hello again on the same "
         "socket. The offer's arguments are illustrative; the firmware's update contract is authoritative. The package is synthetic.",
@@ -205,6 +205,7 @@ def build():
          {"step": "send", "frame": {"type": "dfu_state", "job": F_JOB, "state": "fetching"}},
          {"step": "package_get", "path": f"/gateway/dfu-package/{F_JOB}", "authorization": "Bearer <token>", "status": 200,
           "size": len(pkg), "sha256": hashlib.sha256(pkg).hexdigest(), "body_base64": base64.b64encode(pkg).decode()},
+         {"step": "send", "frame": {"type": "dfu_state", "job": F_JOB, "state": "ready"}},
          {"step": "recv", "frame": {"type": "iface_req", "id": "j11", "wire": offer}},
          {"step": "device_write", "wire": offer},
          {"step": "device_read", "text": offered},
@@ -252,6 +253,7 @@ def build():
             {"direction": "agent_to_backend", "why": "dfu_state with an unknown state", "frame": {"type": "dfu_state", "job": "fw-1", "state": "done"}},
             {"direction": "agent_to_backend", "why": "dfu_state failed without a stage", "frame": {"type": "dfu_state", "job": "fw-1", "state": "failed", "error": "no-ack"}},
             {"direction": "agent_to_backend", "why": "dfu_state with a stage on a state that is not failed", "frame": {"type": "dfu_state", "job": "fw-1", "state": "transferring", "stage": "transfer", "error": "x"}},
+            {"direction": "agent_to_backend", "why": "dfu_state ready with a stage", "frame": {"type": "dfu_state", "job": "fw-1", "state": "ready", "stage": "fetch", "error": "x"}},
             {"direction": "agent_to_backend", "why": "dfu_state with an extra member", "frame": {"type": "dfu_state", "job": "fw-1", "state": "rebooting", "progress": 50}},
         ],
     }

@@ -125,9 +125,10 @@ class DfuConfig:
     bootloader: Selector  # the bootloader's own USB serial port (a different USB device from the application's)
     bootloader_wait_s: float  # how long to look for the bootloader port after the application port dropped
     app_return_wait_s: float  # how long to wait for the application port after a transfer
-    arm_window_s: float  # a dfu_job arms the socket-keeping exception for this long
+    arm_window_s: float  # from `ready`, a device reset keeps the socket only within this long
     attempts: int  # transfer attempts before the job is reported failed
     package_max_bytes: int
+    failed_hold_s: float = 1800.0  # how long a failed job keeps the socket without a device link
 
 
 @dataclass(frozen=True)
@@ -263,7 +264,7 @@ def parse_dfu(d: dict[str, Any], device_sel: Selector, transport: str, errs: lis
     _check_unknown(
         d,
         {"enabled", "bootloader", "bootloader_wait_s", "app_return_wait_s", "arm_window_s", "attempts",
-         "package_max_bytes"},
+         "package_max_bytes", "failed_hold_s"},
         "dfu",
         errs,
     )
@@ -285,6 +286,7 @@ def parse_dfu(d: dict[str, Any], device_sel: Selector, transport: str, errs: lis
     window = float(_get(d, "arm_window_s", (int, float), 60.0, errs, "dfu"))
     attempts = _get(d, "attempts", int, 3, errs, "dfu")
     max_bytes = _get(d, "package_max_bytes", int, 2 * 1024 * 1024, errs, "dfu")
+    failed_hold = float(_get(d, "failed_hold_s", (int, float), 1800.0, errs, "dfu"))
     if not enabled:
         return None
     if transport != "hold":
@@ -305,7 +307,9 @@ def parse_dfu(d: dict[str, Any], device_sel: Selector, transport: str, errs: lis
         errs.append("dfu.attempts must be 1-10")
     if not 64 * 1024 <= max_bytes <= 16 * 1024 * 1024:
         errs.append("dfu.package_max_bytes must be 65536-16777216")
-    return DfuConfig(sel, boot_wait, app_wait, window, attempts, max_bytes)
+    if not 60 <= failed_hold <= 86400:
+        errs.append("dfu.failed_hold_s must be 60-86400")
+    return DfuConfig(sel, boot_wait, app_wait, window, attempts, max_bytes, failed_hold)
 
 
 def parse(raw: dict[str, Any]) -> Config:

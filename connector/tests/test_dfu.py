@@ -25,11 +25,11 @@ def sha(b):
 def mk(tmp_path):
     rigs = []
 
-    def make(dfu=DFU, **kw):
+    def make(dfu=DFU, runner=None, boot=None, **kw):
         sub = tmp_path / f"r{len(rigs)}"
         sub.mkdir()
-        boot = FakeBootOpener()
-        r = HoldRig(sub, dfu=dfu, bridge_kw={"boot_opener": boot, "runner": lambda fn: fn()}, **kw)
+        boot = boot or FakeBootOpener()
+        r = HoldRig(sub, dfu=dfu, bridge_kw={"boot_opener": boot, "runner": runner or (lambda fn: fn())}, **kw)
         r.bridge._sleep = r.clock.advance  # the transfer's waits pass in fake time
         r.boot = boot
         r.server.packages["fw-1"] = PKG
@@ -54,8 +54,24 @@ def job(conn, jid="fw-1", data=PKG, size=None, digest=None):
 
 
 def armed(r, conn, **kw):
+    """Sends a dfu_job and waits until the Connector says ready or failed."""
+    before = r.m("hold_dfu_states_total", "ready") + r.m("hold_dfu_states_total", "failed")
     job(conn, **kw)
-    r.wait(lambda: r.bridge._dfu_fetch_state in ("ok", "failed"))
+    r.wait(lambda: r.m("hold_dfu_states_total", "ready") + r.m("hold_dfu_states_total", "failed") > before)
+
+
+class Deferred:
+    """A runner that holds the fetch until the test lets it run."""
+
+    def __init__(self):
+        self.work = []
+
+    def __call__(self, fn):
+        self.work.append(fn)
+
+    def run_all(self):
+        while self.work:
+            self.work.pop(0)()
 
 
 def reset_into_bootloader(r):
@@ -110,7 +126,7 @@ def test_conf_20_21_23_job_package_reset_bootloader_transfer_and_resume_on_the_s
     armed(r, conn)
     path, headers = r.server.package_requests[-1]
     assert path == "/gateway/dfu-package/fw-1" and headers["authorization"] == f"Bearer {TOKEN}"
-    r.wait(lambda: states(conn) == [("fetching", None, None)])
+    r.wait(lambda: states(conn) == [("fetching", None, None), ("ready", None, None)])
     reset_into_bootloader(r)
     assert not conn.closed.is_set() and r.bridge.snapshot()["dfu"] == "waiting-bootloader"
     boot = FakeBootloader(clock=r.clock)
@@ -125,12 +141,12 @@ def test_conf_20_21_23_job_package_reset_bootloader_transfer_and_resume_on_the_s
     r.wait(lambda: r.bridge._dfu_phase == "none" and len(frames(conn, "iface_hello")) == 2)
     after = [f for f in conn.parsed()[before:]]
     assert [(f["type"], f.get("state")) for f in after] == [
-        ("dfu_state", "fetching"), ("dfu_state", "waiting-bootloader"), ("dfu_state", "transferring"),
-        ("dfu_state", "rebooting"), ("dfu_state", "installed-pending-hello"), ("iface_relay", None),
-        ("iface_hello", None),
+        ("dfu_state", "fetching"), ("dfu_state", "ready"), ("dfu_state", "waiting-bootloader"),
+        ("dfu_state", "transferring"), ("dfu_state", "rebooting"), ("dfu_state", "installed-pending-hello"),
+        ("iface_relay", None), ("iface_hello", None),
     ]
-    assert after[5] == {"type": "iface_relay", "serial_dfu": True}
-    assert all(f["job"] == "fw-1" for f in after[:5])
+    assert after[6] == {"type": "iface_relay", "serial_dfu": True}
+    assert all(f["job"] == "fw-1" for f in after[:6])
     assert not conn.closed.is_set() and r.server.handshakes == 1
     assert r.m("hold_dfu_transfer_attempts_total", "ok") == 1 and r.m("hold_dfu_active") == 0
     # relaying is back
@@ -166,7 +182,7 @@ def test_conf_21_arm_window_expiry_disarms_and_a_later_drop_closes_the_socket(mk
     r.wait(lambda: conn.closed.is_set())
     for _ in range(5):
         r.jump(1)
-    assert r.boot.calls == 0 and states(conn) == [("fetching", None, None)]
+    assert r.boot.calls == 0 and states(conn) == [("fetching", None, None), ("ready", None, None)]
 
 
 def test_conf_21_a_drop_inside_the_window_but_late_still_keeps_the_socket(mk):
@@ -202,13 +218,14 @@ def test_conf_20_a_package_that_does_not_match_aborts_before_the_device_is_touch
     armed(r, conn, **kw)
     r.wait(lambda: len(states(conn)) == 2)
     assert states(conn) == [("fetching", None, None), ("failed", stage, error)]
+    assert r.bridge._dfu_phase == "none"  # never ready: the Backend does not offer, nothing stays armed
     r.boot.appear(FakeBootloader())
-    reset_into_bootloader(r)  # the device had already been offered the update and reset
-    for _ in range(40):
+    reset_into_bootloader(r)  # a reset now is an ordinary link drop
+    r.wait(lambda: conn.closed.is_set())
+    assert conn.close_code == 1000
+    for _ in range(10):
         r.jump(1)
     assert r.boot.calls == 0  # never touched
-    assert not conn.closed.is_set() and r.bridge._dfu_phase == "failed"  # kept, waiting, nothing relayed
-    assert len(frames(conn, "iface_relay")) == 1
 
 
 def test_conf_20_an_oversize_package_is_refused_without_a_request(mk):
@@ -328,13 +345,14 @@ def test_conf_24_three_failed_attempts_then_failed_kept_socket_and_a_new_job_run
 def test_conf_24_the_app_port_returning_after_a_failure_resumes_without_installed(mk):
     r = mk()
     conn = r.up()
-    armed(r, conn, digest="1" * 64)  # a bad package: failed before the reset
+    armed(r, conn)
     reset_into_bootloader(r)
-    r.settle()
+    for _ in range(31):
+        r.jump(1)  # no bootloader port: failed
     assert r.bridge._dfu_phase == "failed"
     app_returns(r)  # recovered by hand
     r.wait(lambda: r.bridge._dfu_phase == "none" and len(frames(conn, "iface_hello")) == 2)
-    assert [s[0] for s in states(conn)] == ["fetching", "failed"]
+    assert [s[0] for s in states(conn)] == ["fetching", "ready", "waiting-bootloader", "failed"]
     assert conn.parsed()[-2] == {"type": "iface_relay", "serial_dfu": True}
 
 
@@ -390,3 +408,184 @@ def test_dfu_config_needs_hold_and_a_bootloader_selector_that_is_not_the_device(
     assert c.dfu.bootloader.vid == 0x2886 and c.dfu.arm_window_s == 60 and c.dfu.attempts == 3
     assert c.dfu.bootloader_wait_s == 30 and c.dfu.app_return_wait_s == 120 and c.dfu.package_max_bytes == 2 * 1024 * 1024
     assert parse({**base, **hold, "dfu": {"enabled": False}}).dfu is None
+
+
+# ---- ready gates the offer and starts the window (20, 21) -----------------------------------------------
+
+
+def test_conf_20_21_a_reset_before_ready_is_an_unarmed_link_drop(mk):
+    d = Deferred()
+    r = mk(runner=d)
+    conn = r.up()
+    job(conn)
+    r.wait(lambda: d.work)  # fetching, not yet ready
+    r.boot.appear(FakeBootloader())
+    reset_into_bootloader(r)
+    r.wait(lambda: conn.closed.is_set())
+    assert conn.close_code == 1000 and r.bridge._dfu_phase == "none"
+    d.run_all()  # the fetch finishes late: its result belongs to nothing
+    for _ in range(10):
+        r.jump(1)
+    assert r.boot.calls == 0 and states(conn) == [("fetching", None, None)]
+
+
+def test_conf_21_the_window_starts_at_ready_not_at_the_job(mk):
+    d = Deferred()
+    r = mk(runner=d)
+    conn = r.up()
+    job(conn)
+    r.wait(lambda: d.work)
+    r.jump(50)  # a slow fetch
+    d.run_all()
+    r.wait(lambda: states(conn)[-1:] == [("ready", None, None)])
+    r.jump(50)  # 100 s after the job, 50 s after ready
+    reset_into_bootloader(r)
+    r.settle()
+    assert not conn.closed.is_set() and r.bridge._dfu_phase == "waiting-bootloader"
+
+
+# ---- a new socket hears the state again (25) ------------------------------------------------------------
+
+
+def test_conf_25_a_new_socket_during_the_dfu_gets_iface_relay_then_the_current_state(mk):
+    r = mk()
+    conn = r.up()
+    armed(r, conn)
+    reset_into_bootloader(r)
+    r.wait(lambda: states(conn)[-1:] == [("waiting-bootloader", None, None)])
+    conn.close(1011, "restart")
+    r.wait(lambda: r.bridge._state == "idle")
+    r.jump(1.1)
+    r.wait(lambda: r.bridge._state == "connected")
+    c2 = r.server.current()
+    r.wait(lambda: len(c2.frames) >= 2)
+    assert c2.parsed() == [{"type": "iface_relay", "serial_dfu": True},
+                           {"type": "dfu_state", "job": "fw-1", "state": "waiting-bootloader"}]
+    for _ in range(31):
+        r.jump(1)
+    r.wait(lambda: states(c2)[-1:] == [("failed", "bootloader", "not-found")])
+    c2.close(1011, "restart")
+    r.wait(lambda: r.bridge._state == "idle")
+    r.jump(1.1)
+    r.wait(lambda: r.bridge._state == "connected")
+    c3 = r.server.current()
+    r.wait(lambda: len(c3.frames) >= 2)
+    assert c3.parsed() == [{"type": "iface_relay", "serial_dfu": True},
+                           {"type": "dfu_state", "job": "fw-1", "state": "failed", "stage": "bootloader",
+                            "error": "not-found"}]
+    r.settle()
+    assert len(c3.frames) == 2  # once
+
+
+# ---- the failed cap (26) --------------------------------------------------------------------------------
+
+
+def test_conf_26_a_failed_job_releases_the_hold_after_its_cap(mk):
+    r = mk(dfu={**DFU, "failed_hold_s": 60})
+    conn = r.up()
+    armed(r, conn)
+    reset_into_bootloader(r)
+    for _ in range(31):
+        r.jump(1)
+    assert r.bridge._dfu_phase == "failed"
+    for _ in range(50):
+        r.jump(1)
+    assert not conn.closed.is_set()  # still within the cap
+    for _ in range(15):
+        r.jump(1)
+    r.wait(lambda: conn.closed.is_set())
+    assert conn.close_code == 1000 and r.bridge._dfu_phase == "none"
+    n = r.server.handshakes
+    for _ in range(20):
+        r.jump(1)
+    assert r.server.handshakes == n  # no device link, no job: no new socket
+
+
+def test_dfu_job_with_no_device_link_is_counted_as_no_device(mk):
+    r = mk()
+    r.up()
+    r.bridge._link = None  # the link is already gone when the frame is handled
+    r.bridge._on_frame(r.clock(), json.dumps({"type": "dfu_job", "job": "fw-1", "sha256": sha(PKG), "size": len(PKG)}))
+    assert r.m("hold_frames_ignored_total", "dfu_no_device") == 1
+    assert r.m("hold_frames_ignored_total", "dfu_busy") == 0 and r.bridge._dfu_phase == "none"
+
+
+# ---- overlapping selectors (refused at run time) --------------------------------------------------------
+
+
+def _ports_rig(mk, ports, devices):
+    """A rig whose application and bootloader openers are the real PortOpener over a listed set of ports."""
+    from mecon_connector.config import Selector
+    from mecon_connector.serial_link import PortOpener
+
+    created = []
+
+    def factory(device, baud):
+        created.append(device)
+        return devices[device]
+
+    app = PortOpener(Selector(by_id="usb-TEST_synthetic-*"), 115200, lister=lambda: list(ports), link_factory=factory)
+    boot = PortOpener(Selector(by_id="usb-TEST_synthetic-boot*"), 115200, lister=lambda: list(ports), link_factory=factory)
+    r = mk(dfu={**DFU, "bootloader": {"by_id": "usb-TEST_synthetic-boot*"}}, opener=app, boot=boot)
+    r.created = created
+    return r
+
+
+def test_a_bootloader_port_the_device_selector_also_takes_is_refused_and_never_written(mk):
+    from fakes.fake_serial import FakeSerialDevice
+    from mecon_connector.serial_link import PortInfo
+
+    dev = FakeSerialDevice()
+    dev.answers_hello = True
+    app_port = PortInfo("/dev/ttyACM0", by_id_names=("usb-TEST_synthetic-app-if00",))
+    boot_port = PortInfo("/dev/ttyACM1", by_id_names=("usb-TEST_synthetic-boot-if00",))  # matches both selectors
+    boot = FakeBootloader()
+    ports = [app_port]
+    r = _ports_rig(mk, ports, {"/dev/ttyACM0": dev, "/dev/ttyACM1": boot})
+    conn = r.up()
+    armed(r, conn)
+    dev.unplug()
+    ports[:] = [boot_port]
+    r.wait(lambda: r.bridge._link is None)
+    r.jump(0.6)
+    r.wait(lambda: states(conn)[-1:] == [("failed", "bootloader", "selector-overlap")])
+    assert "/dev/ttyACM1" not in r.created and boot.frames == 0
+
+
+def test_an_application_port_the_bootloader_selector_also_takes_is_refused_while_a_dfu_waits(mk):
+    from fakes.fake_serial import FakeSerialDevice
+    from mecon_connector.serial_link import PortInfo
+
+    dev = FakeSerialDevice()
+    dev.answers_hello = True
+    app_port = PortInfo("/dev/ttyACM0", by_id_names=("usb-TEST_synthetic-app-if00",))
+    both = PortInfo("/dev/ttyACM1", by_id_names=("usb-TEST_synthetic-boot-if00",))  # matches both selectors
+    boot = FakeBootloader()
+    ports = [app_port]
+    r = _ports_rig(mk, ports, {"/dev/ttyACM0": dev, "/dev/ttyACM1": boot})
+    conn = r.up()
+    armed(r, conn)
+    dev.unplug()
+    ports[:] = []
+    r.wait(lambda: r.bridge._link is None)
+    for _ in range(31):
+        r.jump(1)
+    r.wait(lambda: states(conn)[-1:] == [("failed", "bootloader", "not-found")])
+    ports[:] = [both]  # now a port appears that both selectors take
+    for _ in range(5):
+        r.jump(1)
+    assert "/dev/ttyACM1" not in r.created and boot.frames == 0 and r.bridge._link is None
+    assert "dfu_selector_overlap" in r.logbuf.getvalue()
+
+
+def test_failed_hold_s_default_and_range():
+    from mecon_connector.config import ConfigError, parse
+
+    base = {"device": {"mode": "companion", "select": {"by_id": "usb-A-*"}}, "transport": "hold",
+            "hold": {"base_url": "https://h.example.invalid", "token_file": "/t"}}
+    dfu = {"enabled": True, "bootloader": {"by_id": "usb-B-*"}}
+    assert parse({**base, "dfu": dfu}).dfu.failed_hold_s == 1800
+    assert parse({**base, "dfu": {**dfu, "failed_hold_s": 60}}).dfu.failed_hold_s == 60
+    for bad in (59, 86401):
+        with pytest.raises(ConfigError):
+            parse({**base, "dfu": {**dfu, "failed_hold_s": bad}})

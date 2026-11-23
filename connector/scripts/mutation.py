@@ -245,7 +245,7 @@ HOLD_MUTANTS = [
     ("x3", "the socket is kept on any link loss while DFU is configured (no arm check)", "hold.py",
      [('        if why == "device_link_lost" and self._dfu_keeps_socket():', '        if why == "device_link_lost" and self._dfu_cfg is not None:')]),
     ("x3b", "DFU is entered on a link loss without an armed job", "hold.py",
-     [('        if self._dfu_phase == "armed" and not self._dfu_window_over(now):',
+     [('        if self._dfu_phase == "armed" and self._dfu_fetch_state == "ok" and not self._dfu_window_over(now):',
        '        if self._dfu_cfg is not None and (self._dfu_phase != "armed" or not self._dfu_window_over(now)):')]),
     ("x4", "the arming window is not checked", "hold.py",
      [("        return now - self._dfu_armed_at > self._dfu_cfg.arm_window_s", "        return False")]),
@@ -259,6 +259,18 @@ HOLD_MUTANTS = [
        "        if True:\n            return {\"type\": \"iface_relay\", \"serial_dfu\": True}")]),
     ("x7", "any acknowledgement is taken as the packet's own (ack number not checked)", "nordic_dfu.py",
      [("                if ack == want:\n", "                if ack is not None:\n")]),
+    ("x8", "DFU is entered on a reset before ready (the window runs from the job)", "hold.py",
+     [('        if self._dfu_phase == "armed" and self._dfu_fetch_state == "ok" and not self._dfu_window_over(now):',
+       '        if self._dfu_phase == "armed" and not self._dfu_window_over(now):')]),
+    ("x9", "the current dfu_state is not sent again on a new socket", "hold.py",
+     [("            self._send(self._dfu_last)  # a new socket", "            pass  # a new socket")]),
+    ("x10", "a failed job holds the socket for ever (no cap)", "hold.py",
+     [("        return now - self._dfu_failed_at >= self._dfu_cfg.failed_hold_s", "        return False")]),
+    ("x11", "a bootloader port the device selector also takes is used", "hold.py",
+     [("            self._boot_opener.avoid = self.cfg.device.selector", "            self._boot_opener.avoid = None")]),
+    ("x12", "an application port the bootloader selector also takes is used while a DFU waits", "hold.py",
+     [("            self.opener.avoid = dc.bootloader if dc is not None and self._dfu_phase in DFU_RECONNECT else None",
+       "            self.opener.avoid = None")]),
 ]
 
 

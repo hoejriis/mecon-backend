@@ -34,9 +34,10 @@ token_presentation = "header"
 # bootloader = { by_id = "usb-REPLACE_WITH_YOUR_BOOTLOADER_ID-*" }
 # bootloader_wait_s = 30      # how long to look for the bootloader port after the device reset
 # app_return_wait_s = 120     # how long to wait for the application port after the transfer
-# arm_window_s = 60           # a job keeps the socket across a reset only within this long of the job
+# arm_window_s = 60           # a job keeps the socket across a reset only within this long of `ready`
 # attempts = 3                # transfer attempts before the job is reported failed
 # package_max_bytes = 2097152
+# failed_hold_s = 1800        # how long a failed job keeps the hold without a device link
 
 [health]
 enabled = true

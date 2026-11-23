@@ -105,9 +105,9 @@ HOLD_REASONS = {
     "hold_uploads_total": {"hello", "result", "event"},
     "hold_acks_total": {"accepted", "duplicate", "refused", "unmatched", "malformed"},
     "hold_frames_ignored_total": {"invalid_json", "not_object", "no_type", "unknown_type", "binary", "malformed_req",
-                                  "malformed_dfu_job", "dfu_disabled", "dfu_busy"},
+                                  "malformed_dfu_job", "dfu_disabled", "dfu_busy", "dfu_no_device"},
     "hold_hello_total": {"ok", "refused", "malformed", "timeout"},
-    "hold_dfu_states_total": {"fetching", "waiting-bootloader", "transferring", "rebooting", "installed-pending-hello",
+    "hold_dfu_states_total": {"fetching", "ready", "waiting-bootloader", "transferring", "rebooting", "installed-pending-hello",
                               "failed"},
     "hold_dfu_transfer_attempts_total": {"ok", "failed"},
 }

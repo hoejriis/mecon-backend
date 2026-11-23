@@ -2,7 +2,7 @@
 
 How a **connector agent** holds one MECON device for a Backend over a WebSocket, so the Backend can reach a device that has no usable network path of its own (no Wi-Fi, no broker session, or a USB-only link), and the device's uplink can be carried back. The [USB Connector](../../../connector/README.md) implements this contract as its `hold` transport.
 
-**Status: draft, version `1.0.0-draft.2`.** Draft 2 adds bootloader serial DFU through the hold (section 12: the `serial_dfu` declaration, `dfu_job`, the package route and `dfu_state`); nothing in draft 1 changes for an agent that does not declare it. The text is derived from a Backend's implementation and its reference agent (a browser application). Statements marked **(observed)** describe what that reference does and are not guaranteed by a written contract; such behaviour is a SHOULD here, and section 11 lists every gap. The fixtures are synthetic. No live Backend has been tested against this contract yet. Hex fields are case-insensitive.
+**Status: draft, version `1.0.0-draft.2`.** Draft 2 adds bootloader serial DFU through the hold (section 12: the `serial_dfu` declaration, `dfu_job`, the package route, `dfu_state`, and the offer gated on `ready`); nothing in draft 1 changes for an agent that does not declare it. The text is derived from a Backend's implementation and its reference agent (a browser application). Statements marked **(observed)** describe what that reference does and are not guaranteed by a written contract; such behaviour is a SHOULD here, and section 11 lists every gap. The fixtures are synthetic. No live Backend has been tested against this contract yet. Hex fields are case-insensitive.
 
 Notation: `{base}` is the Backend's base URL. MUST and SHOULD describe what a conforming agent does to interoperate with a Backend that offers the hold.
 
@@ -288,14 +288,16 @@ The JSON Schemas check the shape of each frame. They cannot express the byte lim
 17. The agent sends only JSON text frames, each an object with a string `type`.
 18. After the device's `hello` is read, the agent sends `iface_hello` with the hello result object, after `iface_relay` on every connect and before any result or event; its own `hello` request and the answer to it are not uploaded as a result.
 
-Items 19 to 24 apply to an agent that runs bootloader serial DFU (section 12). An agent that does not, sends `iface_relay` without `serial_dfu` and ignores `dfu_job` (item 19).
+Items 19 to 26 apply to an agent that runs bootloader serial DFU (section 12). An agent that does not, sends `iface_relay` without `serial_dfu` and ignores `dfu_job` (item 19).
 
 19. The agent sends `"serial_dfu": true` in `iface_relay` only when it is configured to run serial DFU; otherwise the frame is exactly `{"type":"iface_relay"}`, and a `dfu_job` is ignored: nothing is fetched and nothing is armed.
-20. On `dfu_job` the agent sends `dfu_state` `fetching`, fetches `GET {base}/gateway/dfu-package/{job}` with its per-device token as `Authorization: Bearer`, and checks the length against `size` and the SHA-256 against `sha256` before it uses a byte. A refusal, a mismatch or a package over its limit is `dfu_state` `failed` (stage `fetch` or `verify`), and the device is not touched.
-21. Only when a `dfu_job` armed this socket and the device link drops within 60 s of it does the agent keep the socket open; any other link drop closes it (item 15). The agent never opens the bootloader port without an armed job.
+20. On `dfu_job` the agent sends `dfu_state` `fetching`, fetches `GET {base}/gateway/dfu-package/{job}` with its per-device token as `Authorization: Bearer`, and checks the length against `size` and the SHA-256 against `sha256` before it uses a byte. A package that is fetched, checked and read is `dfu_state` `ready`; a refusal, a mismatch or a package over its limit is `dfu_state` `failed` (stage `fetch` or `verify`), and the device is not touched. The Backend relays the offer only after `ready`.
+21. Only when a `dfu_job` armed this socket, the agent has sent `ready` for it, and the device link drops within 60 s of `ready` does the agent keep the socket open; any other link drop, a drop before `ready` included, closes it (item 15). The agent never opens the bootloader port without an armed job.
 22. From the link drop until the resume the agent writes no request anywhere: an `iface_req` that arrives is dropped as with a closed gate, and the bootloader port receives only the DFU transfer.
-23. The agent reports `waiting-bootloader`, `transferring`, `rebooting` and `installed-pending-hello` in that order; when the application port returns it sends `iface_relay` (with `serial_dfu`) and then `iface_hello` on the same socket.
+23. The agent reports `ready`, `waiting-bootloader`, `transferring`, `rebooting` and `installed-pending-hello` in that order; when the application port returns it sends `iface_relay` (with `serial_dfu`) and then `iface_hello` on the same socket.
 24. A transfer that fails is retried, up to 3 attempts in all, then reported as `dfu_state` `failed` with the stage and the error; the agent keeps the socket without relaying, resumes when the application port returns, and runs again on a new `dfu_job` for the same job.
+25. When a new socket opens while a DFU is under way or has failed (no device link), the agent sends `iface_relay` (with `serial_dfu`) and then the current `dfu_state` once more, `failed` with its stage and error.
+26. A job that has stayed `failed` with no device link and no new `dfu_job` for the agent's cap (30 minutes by default) is dropped, and the hold is released as on any device link drop.
 
 ## 10. Fixtures
 
@@ -306,7 +308,7 @@ JSON files, one scenario each, validated by `contracts/validate.mjs` against `fi
 - **C**: framing a 400-byte wire for a Companion: three frames of 168, 168 and 64 bytes with the same `xid` (the value in the fixture is an example; any single byte, the same for all three frames).
 - **D** (console): the bare CR, then `mecon> ` + wire + CR; the echoed prefix skipped; the result line; `iface_result`.
 - **E**: an event uploaded and accepted; the same event again acknowledged `duplicate` (success); an altered event acknowledged `refused` (not resent); an event whose stream is `result` that is never sent.
-- **F** (serial DFU): `iface_relay` with `serial_dfu`; `dfu_job`; `fetching`; the package fetch (`package_get`: the path, the token presentation, the size, the SHA-256 and the synthetic package itself); the offer relayed and its answer uploaded; the application port lost (`device_link`); `waiting-bootloader`; the bootloader port opened; `transferring`; every packet written to the bootloader (`bootloader_write`: the packet, its sequence number, the exact bytes on the wire and the bootloader's acknowledgement); `rebooting`; the application port back; `installed-pending-hello`; `iface_relay` and `iface_hello` again on the same socket. The validator decodes each packet (SLIP, header checksum, CRC, opcode, order) and checks that the init packet and the image are the package's own.
+- **F** (serial DFU): `iface_relay` with `serial_dfu`; `dfu_job`; `fetching`; the package fetch (`package_get`: the path, the token presentation, the size, the SHA-256 and the synthetic package itself); `ready`; only then the offer relayed and its answer uploaded; the application port lost (`device_link`); `waiting-bootloader`; the bootloader port opened; `transferring`; every packet written to the bootloader (`bootloader_write`: the packet, its sequence number, the exact bytes on the wire and the bootloader's acknowledgement); `rebooting`; the application port back; `installed-pending-hello`; `iface_relay` and `iface_hello` again on the same socket. The validator decodes each packet (SLIP, header checksum, CRC, opcode, order) and checks that the init packet and the image are the package's own.
 
 ## 11. Not specified / open
 
@@ -348,7 +350,7 @@ Sent only by an agent configured to run serial DFU, on every connect, as `iface_
 | `sha256` | string | SHA-256 of the package bytes the package route serves for this job, 64 lower-case hex |
 | `size` | integer | the package's length in bytes, at least 1 |
 
-Sent on the socket that holds the device **before** the offer is relayed. It arms the agent for that one job on that one socket: a new socket starts unarmed. A `dfu_job` for a different job while one is only armed replaces it; one that arrives while a transfer is under way is ignored (the agent logs it). An agent ignores a `dfu_job` that does not match the schema.
+Sent on the socket that holds the device **before** the offer is relayed. The Backend **MUST** relay the `update.offer` for the job only after this socket has answered `dfu_state` `ready` for it, and **SHOULD** give up the job without offering when `failed` arrives instead, or when no `ready` arrives within a bound of its own choosing. It arms the agent for that one job on that one socket: a new socket starts unarmed. A `dfu_job` for a different job while one is only armed replaces it; one that arrives while a transfer is under way is ignored (the agent logs it). An agent ignores a `dfu_job` that does not match the schema.
 
 ### 12.3 The package
 
@@ -361,11 +363,11 @@ Authorization: Bearer <token>
 
 Before it uses a byte, the agent checks that the length equals `size` and the SHA-256 equals `sha256`, and that the package is within its own limit. It keeps the package in memory only, and only until the transfer ends. The package's `manifest.json` names the application image (`manifest.application.bin_file`) and its init packet (`dat_file`); a package without an application, or with anything besides it, is refused. A package that is missing, refused or does not match aborts the job before the device is touched (`failed`, stage `fetch` or `verify`). If the device has already reset, it stays recoverable in its bootloader.
 
-The agent fetches and checks the package as soon as it is armed, while the device is still up.
+The agent fetches and checks the package as soon as it is armed, while the device is still up, and then sends `ready`. A package that fails never becomes `ready`: the agent drops the job (the device is still up and was never offered the update), and a reset is an ordinary link drop.
 
 ### 12.4 The device resets (the one exception to closing on link drop)
 
-When the device's application port drops while the agent is armed and within **60 s** of the `dfu_job`, the agent keeps the socket open. This is the only case in which a socket stays open without a device link. Without an armed job, or after the window, a link drop closes the socket as in section 6. From this moment until 12.6 the agent writes **no request**: an `iface_req` that arrives is dropped as with a closed gate, never held, and never written to the bootloader.
+When the device's application port drops while the agent is armed, has sent `ready`, and is within **60 s** of `ready`, the agent keeps the socket open. This is the only case in which a socket stays open without a device link. Without an armed job, before `ready`, or after the window, a link drop closes the socket as in section 6. From this moment until 12.6 the agent writes **no request**: an `iface_req` that arrives is dropped as with a closed gate, never held, and never written to the bootloader.
 
 The agent then looks for the bootloader's own port (a different USB device from the application's, chosen by the agent's configuration, never guessed) for up to 30 s, and runs the transfer with that port opened exclusively. Without an armed job the agent never opens the bootloader port.
 
@@ -382,7 +384,7 @@ A failed attempt is retried with a fresh start (the bootloader takes one at any 
 
 ### 12.6 The resume
 
-After stop the bootloader starts the new application, which comes back as the application port. The agent waits for it for up to 120 s, then takes the normal path on the **same socket**: it opens the port, reads the device's hello, asks the enrolment gate, and sends `iface_relay` (with `serial_dfu`) and `iface_hello`. The device's hello carries the update attestation, and the Backend confirms the job from it, as it does for any update. A device that is not enrolled after the update releases the hold as in section 3.1. If the socket dropped during the DFU, the agent finishes the transfer and the resume is an ordinary new connect.
+After stop the bootloader starts the new application, which comes back as the application port. The agent waits for it for up to 120 s, then takes the normal path on the **same socket**: it opens the port, reads the device's hello, asks the enrolment gate, and sends `iface_relay` (with `serial_dfu`) and `iface_hello`. The device's hello carries the update attestation, and the Backend confirms the job from it, as it does for any update. A device that is not enrolled after the update releases the hold as in section 3.1. If the socket dropped during the DFU, the agent finishes the transfer, reconnects (12.7), and the resume follows on the new socket.
 
 ### 12.7 `dfu_state` (agent to Backend)
 
@@ -394,13 +396,14 @@ After stop the bootloader starts the new application, which comes back as the ap
 | `state` | when |
 |---|---|
 | `fetching` | on `dfu_job` |
+| `ready` | the package was fetched, checked and read; the Backend may now relay the offer, and the 60 s window starts |
 | `waiting-bootloader` | the application port dropped within the window; looking for the bootloader port |
 | `transferring` | the bootloader port is open and an attempt starts (sent again for each attempt) |
 | `rebooting` | the stop packet was acknowledged |
 | `installed-pending-hello` | the application port returned after the transfer |
 | `failed` | with `stage` (`fetch`, `verify`, `bootloader`, `transfer` or `app-return`) and `error`, a short lower-case code such as `http-404`, `sha256-mismatch`, `not-found` or `no-ack` |
 
-`dfu_state` is not acknowledged. The Backend records each state on the job, so a failure is reported, never silent. It is sent only while the socket is open; a state reached while it is down is not sent later.
+`dfu_state` is not acknowledged. The Backend records each state on the job, so a failure is reported, never silent. It is sent only while the socket is open. While a DFU is under way or has failed, the agent reconnects a lost socket as in section 6 even though it has no device link, and on the new socket sends `iface_relay` (with `serial_dfu`) and then the current state once more (`failed` with its stage and error); states passed through while it was down are not sent.
 
 ### 12.8 Failure
 
@@ -409,4 +412,4 @@ After stop the bootloader starts the new application, which comes back as the ap
 - **Transfer**: 3 failed attempts: `failed` (`transfer`, the last error).
 - **Application port** not back within 120 s after the transfer: `failed` (`app-return`, `not-found`).
 
-After `failed` the agent keeps the socket, does not relay, and waits. It resumes (12.6) when the application port returns, for example after a manual recovery, and it runs the job again when the Backend sends a new `dfu_job` for the same job: it fetches and checks the package again and sends it to the bootloader, which is still waiting. A `dfu_job` for a different job is ignored while one has failed this way.
+After `failed` the agent keeps the socket, does not relay, and waits. It resumes (12.6) when the application port returns, for example after a manual recovery, and it runs the job again when the Backend sends a new `dfu_job` for the same job: it fetches and checks the package again and sends it to the bootloader, which is still waiting. A `dfu_job` for a different job is ignored while one has failed this way. The agent holds a failed job only up to a cap of its own (the USB Connector: 30 minutes by default); then it drops the job and releases the hold as on any device link drop. The Backend ends the job on its own deadline regardless of what the agent does.

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:mecon:connector-hold:v1:dfu_job",
   "title": "dfu_job (Backend to agent)",
-  "description": "Arms the agent for one bootloader-dfu update job on this socket, sent before the offer is relayed and only on a socket whose iface_relay declared serial_dfu. sha256 and size are those of the package the package route serves for the job (the DFU zip, byte for byte). Extra members are ignored.",
+  "description": "Arms the agent for one bootloader-dfu update job on this socket, only on a socket whose iface_relay declared serial_dfu. The Backend relays the offer only after the agent answers dfu_state ready for this job on this socket. sha256 and size are those of the package the package route serves for the job (the DFU zip, byte for byte). Extra members are ignored.",
   "type": "object",
   "required": [
     "type",

@@ -245,6 +245,17 @@
     },
     {
       "direction": "agent_to_backend",
+      "why": "dfu_state ready with a stage",
+      "frame": {
+        "type": "dfu_state",
+        "job": "fw-1",
+        "state": "ready",
+        "stage": "fetch",
+        "error": "x"
+      }
+    },
+    {
+      "direction": "agent_to_backend",
       "why": "dfu_state with an extra member",
       "frame": {
         "type": "dfu_state",

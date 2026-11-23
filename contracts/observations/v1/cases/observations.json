@@ -742,8 +742,8 @@
   },
   {
    "id": "observations-11",
-   "title": "A member whose fleet has no observer gets 200 and nothing, never 403",
-   "world": "two-fleets-observed",
+   "title": "A member who may observe but has nothing to see gets 200 and nothing, never 403",
+   "world": "unobserved",
    "steps": [
     {
      "action": "sign-in",

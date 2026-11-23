@@ -56,9 +56,9 @@ A profile is one source. Its `name` is the **source identity** carried by every 
 
 **The receive bound.** An ingester MUST bound what one message can make it hold, because a broker may send any size MQTT allows (256 MB in MQTT 3.1.1):
 - Over MQTT 5, it SHOULD set the CONNECT property Maximum Packet Size, so the broker never sends it a larger packet.
-- In any case it measures each payload on receipt. One over its bound, `max_receive_bytes`, is handed on as a stub, with its size and content hash only (the [raw capture append](../../raw-capture/v1/README.md), section 2), and counted `oversize`. Its bytes are not held past the hash.
+- In any case it measures each payload on receipt. One over its bound, `max_receive_bytes` (strictly greater: a payload of exactly the bound is kept whole, as with the archive's own limit), is handed on as a stub, with its size and content hash only (the [raw capture append](../../raw-capture/v1/README.md), section 2), and counted `oversize`. Its bytes are not held past the hash.
 
-**The buffer.** Captures wait for the archive in a buffer of a fixed bound. One that arrives while the buffer is full is lost and counted `shed`, never by the archive. The network thread never waits on the archive.
+**The buffer.** Captures wait for the archive in a buffer of a fixed bound. One that arrives while the buffer is full is lost and counted `shed`, never by the archive; an oversize one lost that way counts in both `oversize` and `shed`. The network thread never waits on the archive.
 
 ## 5. Status
 

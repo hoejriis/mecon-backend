@@ -31,6 +31,16 @@ class Rig:
             c.cookies.set(COOKIE, self.session.credential, domain="reader.example.test", path="/")
         return c
 
+    async def feed_up(self, c):
+        """Start the revocation feed with a first request and wait until it is confirmed (caching on)."""
+        await c.get(PREFIX + "/health")
+        await c.get(PREFIX + "/session")
+        for _ in range(50):
+            if self.app.state.sessions.feed_up:
+                return
+            await asyncio.sleep(0.01)
+        raise AssertionError("the revocation feed never subscribed")
+
     async def csrf(self, c):
         r = await c.get(PREFIX + "/session")
         assert r.status_code == 200
@@ -189,6 +199,9 @@ def test_reads_are_cached_briefly_and_dropped_on_logout():
         rig = Rig(lookup_wrap=Recording)
         async with rig.client("alice") as c:
             token = await rig.csrf(c)
+            await rig.feed_up(c)
+            rig.port.calls.clear()
+            await c.get(PREFIX + "/devices")
             await c.get(PREFIX + "/devices")
             reads = [x for x in rig.port.calls if x["purpose"] == "read"]
             assert len(reads) == 1  # the second read came from the cache
@@ -202,8 +215,9 @@ def test_a_revocation_from_the_feed_drops_the_cached_caller():
     async def go():
         rig = Rig()
         async with rig.client("alice") as c:
-            assert (await c.get(PREFIX + "/session")).status_code == 200  # cached, feed started
-            await asyncio.sleep(0.05)
+            await rig.feed_up(c)
+            assert (await c.get(PREFIX + "/session")).status_code == 200  # now cached
+            assert rig.session.credential in rig.app.state.sessions._cache
             rig.world.revoke(rig.session)
             await asyncio.sleep(0.05)
             assert_error(await c.get(PREFIX + "/session"), 401, "unauthenticated")
@@ -418,7 +432,9 @@ def test_a_cached_caller_is_not_served_past_the_cache_bound(how):
     async def go():
         rig = Rig(lookup_cache_s=0.05)
         async with rig.client("alice") as c:
+            await rig.feed_up(c)
             assert (await c.get(PREFIX + "/session")).status_code == 200
+            assert rig.session.credential in rig.app.state.sessions._cache
             if how == "unavailable":
                 rig.lookup.unavailable = True
             else:
@@ -434,7 +450,96 @@ def test_a_cached_caller_is_not_served_past_its_expiry():
         rig = Rig()
         async with rig.client("alice") as c:
             rig.world.sessions[rig.session.credential].expires_at = datetime.now(timezone.utc) + timedelta(seconds=1)
+            await rig.feed_up(c)
             assert (await c.get(PREFIX + "/session")).status_code == 200
+            assert rig.session.credential in rig.app.state.sessions._cache
             await asyncio.sleep(1.1)
             assert_error(await c.get(PREFIX + "/session"), 401, "unauthenticated")
+    run(go())
+
+
+# ---- session_ref, never the cookie value ----
+
+def test_streams_are_matched_by_session_ref_never_by_cookie_value():
+    from mecon_reader_backend.ports import Revocation
+
+    async def go():
+        rig = Rig(heartbeat_s=0.2)
+        async with rig.client("alice"):
+            pass
+        cred = rig.session.credential
+        ref = rig.world.session_ref(rig.session)
+        assert ref not in (cred, rig.session.id) and cred not in ref
+        headers = await _open_stream(rig)
+        sessions = rig.app.state.sessions
+        seen = {}
+
+        async def drive():
+            await asyncio.sleep(0.3)
+            seen["keys"] = set(sessions._streams)
+            for q in rig.world.revocation_queues:
+                q.put_nowait(Revocation(cred))  # a revocation naming the cookie value matches nothing
+            await asyncio.sleep(0.3)
+            seen["open_after_cookie_revocation"] = ref in sessions._streams
+            rig.world.revoke(rig.session)
+        t = asyncio.ensure_future(drive())
+        status, _, raw, ended = await asgi_get_stream(rig.app, PREFIX + "/events", headers, bound_s=3.0,
+                                                      until_heartbeat=False)
+        await t
+        assert seen["keys"] == {ref}
+        assert seen["open_after_cookie_revocation"]
+        assert status == 200 and ended and parse_sse(raw)[-1]["kind"] == "authorization_changed"
+    run(go())
+
+
+# ---- the login Origin is the core's to check ----
+
+@pytest.mark.parametrize("headers", [{"Origin": "https://foreign.example.test"}, {},
+                                     {"Origin": SAME_ORIGIN, "Sec-Fetch-Site": "cross-site"}],
+                         ids=["foreign", "absent", "cross-site"])
+def test_the_core_refuses_a_foreign_login_origin_without_the_facade_precheck(headers):
+    async def go():
+        rig = Rig(login_origin_precheck=False)
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=rig.app), base_url=BASE) as c:
+            r = await c.post(PREFIX + "/login", headers=headers, json={"email": "alice@example.test"})
+            assert_error(r, 403, "origin_rejected", False)
+            assert rig.world.logins == {}
+            ok = await c.post(PREFIX + "/login", headers={"Origin": SAME_ORIGIN, "Sec-Fetch-Site": "same-origin"},
+                              json={"email": "alice@example.test"})
+            assert ok.status_code == 202
+    run(go())
+
+
+def test_the_facade_precheck_refuses_before_the_core_is_reached():
+    async def go():
+        rig = Rig()
+        calls = []
+        inner = rig.core.start_login
+
+        async def recording(email, **kw):
+            calls.append(kw)
+            return await inner(email, **kw)
+        rig.core.start_login = recording
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=rig.app), base_url=BASE) as c:
+            r = await c.post(PREFIX + "/login", headers={"Origin": "https://foreign.example.test"},
+                             json={"email": "alice@example.test"})
+            assert_error(r, 403, "origin_rejected")
+            assert calls == []
+            r = await c.post(PREFIX + "/login", headers={"Origin": SAME_ORIGIN}, json={"email": "alice@example.test"})
+            assert r.status_code == 202
+            assert calls == [{"origin": SAME_ORIGIN, "sec_fetch_site": None}]
+    run(go())
+
+
+def test_a_write_is_never_served_from_the_read_cache():
+    async def go():
+        rig = Rig()
+        async with rig.client("alice") as c:
+            await rig.feed_up(c)
+            assert (await c.get(PREFIX + "/session")).status_code == 200
+            assert rig.session.credential in rig.app.state.sessions._cache  # a cached caller exists
+            assert_error(await c.post(PREFIX + "/logout"), 403, "csrf_failed")
+            assert_error(await c.post(PREFIX + "/leases", headers={"Origin": "https://foreign.example.test"}),
+                         403, "origin_rejected")
+            assert rig.world.sessions[rig.session.credential].revoked is False
     run(go())

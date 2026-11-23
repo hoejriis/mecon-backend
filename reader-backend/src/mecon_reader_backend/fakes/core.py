@@ -46,8 +46,10 @@ class FakeReaderCore:
     async def health(self) -> dict[str, Any]:
         return {"status": "ok", "commit": None}
 
-    async def start_login(self, email: str) -> dict[str, Any]:
+    async def start_login(self, email: str, *, origin: str | None, sec_fetch_site: str | None) -> dict[str, Any]:
         w = self.world
+        if origin is None or origin not in w.reader_origins or sec_fetch_site not in (None, "same-origin"):
+            raise CoreError("forbidden", "origin_rejected", "origin not allowed")
         user = next((u.name for u in w.users.values() if u.email.lower() == email.lower()), None)
         req = secrets.token_urlsafe(24)
         expires = now() + w.login_lifetime
@@ -76,7 +78,7 @@ class FakeReaderCore:
 
     async def logout(self, caller: Caller) -> None:
         for s in self.world.sessions.values():
-            if s.id == caller.session_id:
+            if self.world.session_ref(s) == caller.session_ref:
                 self.world.revoke(s, "logout")
 
     # ---- devices and messaging reads ----

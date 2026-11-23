@@ -5,7 +5,8 @@ A public implementation of the Reader API ([`contracts/reader-api/v1`](../contra
 ## What the facade owns
 
 - The host-only session cookie `__Host-mecon_session` (`Secure`, `HttpOnly`, `SameSite=Strict`, `Path=/`, no `Domain`): set on the single `approved` login poll, cleared on logout and whenever a presented session is refused.
-- Passing every write's `X-CSRF-Token` and `Origin` to the session lookup, which checks them. Writes never use the cache. Before a session exists, the facade checks the Origin of `POST /login` against its own allowlist.
+- Passing every write's `X-CSRF-Token` and `Origin` to the session lookup, which checks them. Writes never use the cache.
+- Passing the `Origin` and `Sec-Fetch-Site` of `POST /login` to the core, which checks them against its own allow-list before a session exists. The facade may also refuse a foreign Origin early (`login_origin_precheck`), but the core's check holds without it.
 - The `Idempotency-Key` rule: the header is required on `POST /send-attempts` and must equal `client_attempt_id`.
 - Validating request bodies, path and query parameters (422 `invalid`). A lease request with a body is refused.
 - Error bodies `{code, message, request_id, retryable}` and mapping each core error to a status the operation declares. A core error whose status the operation does not declare is never passed on: it becomes 404 where the operation has one (forbidden or not found), else 503.
@@ -18,16 +19,16 @@ A public implementation of the Reader API ([`contracts/reader-api/v1`](../contra
 [`ports.py`](src/mecon_reader_backend/ports.py) defines both ports as `typing.Protocol`s.
 
 - **`SessionLookup.resolve(credential, purpose, csrf_token=, origin=)`** returns a `Caller` or a `Denied`. `purpose` is `read`, `write` or `stream`. On a write the lookup checks the CSRF token and the Origin and may deny with `csrf_failed` or `origin_rejected` (both 403). A `Caller` carries:
-  - `session_id`, `user_id` and `display_name`;
+  - `session_ref` (the core's stored session reference, a hash, never the cookie value), `user_id` and `display_name`;
   - `role` (`instance_admin` or `user`) and `break_glass`;
   - `capabilities`, which the facade passes through as `GET /session` reports them;
   - `expires_at`;
   - `csrf_token`, which the lookup derives and `GET /session` returns.
   It has no scope: scope stays in the core.
-- **`SessionLookup.revocations()`** yields revoked session ids. The facade drops any cached caller for that session and closes its open streams. If the feed stops, the cache is cleared and open streams close after `feed_down_close_s`.
+- **`SessionLookup.revocations()`** first yields `Subscribed` once the core has confirmed the subscription, then one `Revocation(session_ref)` per revoked session. A user-wide revocation arrives as one `Revocation` per session of that user. The facade drops any cached caller for that session and closes its open streams. The feed counts as up only from `Subscribed`. Before that, and after any end or error until the next `Subscribed`, nothing is cached, and open streams close once it has been down for `feed_down_close_s`.
 - **`ReaderCore`** has one method per core-owned capability:
   - health;
-  - login start, poll and logout;
+  - login start (with the request's `Origin` and `Sec-Fetch-Site`), poll and logout;
   - devices, identities, conversations (list and one), read marks, messages, contacts and channels;
   - send attempts (create, idempotent by `client_attempt_id`, and get);
   - the event feed (`read_events(caller, cursor, wait_s)`);
@@ -35,7 +36,7 @@ A public implementation of the Reader API ([`contracts/reader-api/v1`](../contra
 
   Every call carries the `Caller`, and the core decides what that caller sees. Refusals are typed `CoreError`s: `not_found`, `forbidden`, `conflict`, `unavailable`, `invalid`, `gone` and `throttled`.
 
-Read answers are cached for at most `lookup_cache_s` (5 s), never past the caller's expiry and never across a revocation the facade has heard of. Logout drops the entry at once.
+Read answers are cached for at most `lookup_cache_s` (5 s), never past the caller's expiry, never across a revocation the facade has heard of, and only while the revocation feed is up. An answer is not cached if a revocation arrived while its lookup ran. The cache holds at most `lookup_cache_max` entries (10,000): an insert drops expired entries, then the oldest. Logout drops the entry at once.
 
 ## Fake adapters
 

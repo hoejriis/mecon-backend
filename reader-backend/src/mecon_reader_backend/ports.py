@@ -27,7 +27,7 @@ DENIAL_REASONS = ("expired", "revoked", "unknown", "core_unavailable", "csrf_fai
 class Caller:
     """A resolved session. Scope is not here: it stays in the core, which every call reaches with this."""
 
-    session_id: str  # opaque handle of the session; revocations name it
+    session_ref: str  # the core's stored session reference (a hash), never the cookie value; revocations name it
     user_id: str  # opaque
     display_name: str
     role: Role
@@ -44,8 +44,13 @@ class Denied:
 
 @dataclass(frozen=True)
 class Revocation:
-    session_id: str
+    session_ref: str
     reason: str = "revoked"
+
+
+@dataclass(frozen=True)
+class Subscribed:
+    """The first item of a revocation feed: the core has confirmed the subscription."""
 
 
 @runtime_checkable
@@ -59,8 +64,14 @@ class SessionLookup(Protocol):
         """
         ...
 
-    def revocations(self) -> AsyncIterator[Revocation]:
-        """Revoked sessions, as they happen. Ending or raising means the feed is down."""
+    def revocations(self) -> AsyncIterator[Union[Subscribed, Revocation]]:
+        """The revocation feed.
+
+        It first yields one `Subscribed` once the core has confirmed the subscription, then one
+        `Revocation` per revoked session, as they happen. A user-wide revocation (a disabled user, a
+        removed grant) arrives as one `Revocation` per `session_ref` of that user. Ending or raising
+        means the feed is down; until the next `Subscribed` the facade caches nothing.
+        """
         ...
 
 
@@ -117,7 +128,10 @@ class EventBatch:
 class ReaderCore(Protocol):
     async def health(self) -> dict[str, Any]: ...
 
-    async def start_login(self, email: str) -> dict[str, Any]: ...
+    async def start_login(self, email: str, *, origin: str | None, sec_fetch_site: str | None) -> dict[str, Any]:
+        """Start a magic-link login. The core checks `origin` (and `Sec-Fetch-Site`, when sent) against
+        its own allow-list and refuses with CoreError("forbidden", "origin_rejected"); None means absent."""
+        ...
 
     async def poll_login(self, request_id: str) -> LoginPoll: ...
 

@@ -35,7 +35,7 @@ def revoked_frame(cursor: str) -> bytes:
 
 async def event_stream(core: ReaderCore, sessions: SessionResolver, caller: Caller, first: EventBatch, *,
                        heartbeat_s: float, feed_down_close_s: float, tick_s: float = 0.25) -> AsyncIterator[bytes]:
-    revoked = sessions.register_stream(caller.session_id)
+    revoked = sessions.register_stream(caller.session_ref)
     try:
         cursor = first.cursor
         for env in first.events:
@@ -74,4 +74,4 @@ async def event_stream(core: ReaderCore, sessions: SessionResolver, caller: Call
                 yield HEARTBEAT
                 last_beat = now
     finally:
-        sessions.unregister_stream(caller.session_id, revoked)
+        sessions.unregister_stream(caller.session_ref, revoked)

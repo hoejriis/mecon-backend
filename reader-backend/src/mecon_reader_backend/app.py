@@ -54,10 +54,12 @@ DECLARED: dict[str, frozenset[int]] = {
 
 @dataclass
 class FacadeConfig:
-    reader_origins: tuple[str, ...] = ("https://reader.example.test",)  # pre-session Origin allowlist
+    reader_origins: tuple[str, ...] = ("https://reader.example.test",)  # the facade's login Origin pre-check
+    login_origin_precheck: bool = True  # the core checks the login Origin on its own either way
     contract_version: str = CONTRACT_VERSION
     heartbeat_s: float = 25.0
     lookup_cache_s: float = 5.0
+    lookup_cache_max: int = 10_000
     lookup_timeout_s: float = 2.0
     core_timeout_s: float = 10.0
     feed_down_close_s: float = 30.0  # open streams close once the revocation feed is down this long
@@ -109,7 +111,7 @@ def _page(p: Page) -> dict[str, Any]:
 
 def create_app(lookup: SessionLookup, core: ReaderCore, config: FacadeConfig | None = None) -> Starlette:
     cfg = config or FacadeConfig()
-    sessions = SessionResolver(lookup, cache_s=cfg.lookup_cache_s, timeout_s=cfg.lookup_timeout_s,
+    sessions = SessionResolver(lookup, cache_s=cfg.lookup_cache_s, cache_max=cfg.lookup_cache_max, timeout_s=cfg.lookup_timeout_s,
                                feed_retry_s=cfg.feed_retry_s)
 
     def refuse_denial(d: Denied) -> Refusal:
@@ -194,11 +196,13 @@ def create_app(lookup: SessionLookup, core: ReaderCore, config: FacadeConfig | N
         return ok(body)
 
     async def start_login(request: Request) -> Response:
-        # Pre-session, so the lookup cannot check this Origin: the facade's own allowlist does.
-        if request.headers.get("origin") not in cfg.reader_origins:
+        # Pre-session, so no lookup: the core checks the Origin against its own allow-list. The facade's
+        # pre-check only refuses early, before the core is reached.
+        if cfg.login_origin_precheck and request.headers.get("origin") not in cfg.reader_origins:
             raise Refusal(403, "origin_rejected", "origin not allowed")
         body = v.login_request(await json_body(request))
-        started = await call_core("startLogin", core.start_login(body["email"]))
+        started = await call_core("startLogin", core.start_login(
+            body["email"], origin=request.headers.get("origin"), sec_fetch_site=request.headers.get("sec-fetch-site")))
         return ok(started, 202)
 
     async def poll_login(request: Request) -> Response:
@@ -225,7 +229,7 @@ def create_app(lookup: SessionLookup, core: ReaderCore, config: FacadeConfig | N
     async def logout(request: Request) -> Response:
         c = await authenticate(request, "write")
         await call_core("logout", core.logout(c))
-        sessions.revoke_local(c.session_id)
+        sessions.revoke_local(c.session_ref)
         resp = Response(status_code=204)
         _clear_cookie(resp)
         return resp

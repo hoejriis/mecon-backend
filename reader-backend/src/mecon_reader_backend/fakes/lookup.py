@@ -5,7 +5,7 @@ import asyncio
 import hmac
 from typing import AsyncIterator, Union
 
-from ..ports import Caller, Denied, Revocation
+from ..ports import Caller, Denied, Revocation, Subscribed
 from .world import World, now
 
 
@@ -38,14 +38,15 @@ class FakeSessionLookup:
             if csrf_token is None or not hmac.compare_digest(csrf_token.encode(), expected.encode()):
                 return Denied("csrf_failed")
         u = self.world.users[s.user]
-        return Caller(session_id=s.id, user_id=u.id, display_name=u.display_name,
+        return Caller(session_ref=self.world.session_ref(s), user_id=u.id, display_name=u.display_name,
                       role="instance_admin" if u.role == "instance_admin" else "user", break_glass=False,
                       capabilities=self.capabilities(), expires_at=s.expires_at, csrf_token=expected)
 
-    async def revocations(self) -> AsyncIterator[Revocation]:
+    async def revocations(self) -> AsyncIterator[Union[Subscribed, Revocation]]:
         q: asyncio.Queue = asyncio.Queue()
         self.world.revocation_queues.append(q)
         try:
+            yield Subscribed()
             while True:
                 yield await q.get()
         finally:

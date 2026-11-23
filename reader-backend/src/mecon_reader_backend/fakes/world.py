@@ -211,13 +211,18 @@ class World:
         self.sessions[cred] = s
         return s
 
+    @staticmethod
+    def session_ref(session: Session) -> str:
+        # The stored reference: a hash of the session record's id, never the cookie value.
+        return "sr_" + hashlib.sha256(b"session-ref\x00" + session.id.encode()).hexdigest()[:32]
+
     def csrf_for(self, session: Session) -> str:
         return b64u(hmac.new(self.csrf_secret, b"csrf\x00" + session.id.encode(), hashlib.sha256).digest())
 
     def revoke(self, session: Session, reason: str = "revoked") -> None:
         session.revoked = True
         for q in self.revocation_queues:
-            q.put_nowait(Revocation(session.id, reason))
+            q.put_nowait(Revocation(self.session_ref(session), reason))
 
     # ---- events ----
 

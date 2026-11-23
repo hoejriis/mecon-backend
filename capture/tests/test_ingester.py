@@ -171,3 +171,20 @@ def test_log_never_carries_payloads(tmp_path):
     ig.sessions[0].on_message("t", b"SECRET-PAYLOAD", False)
     ig.flush_once()
     assert not any("SECRET-PAYLOAD" in ln for ln in stream.lines)
+
+
+def test_the_buffer_level_shows_what_waits_for_the_archive_and_for_how_long():
+    """While storage is unavailable the archive's counters see nothing of what waits; the buffer's level does."""
+    import datetime as dt
+
+    from mecon_capture.archive import Archive
+    from mecon_capture.ingester import CaptureBuffer
+
+    buf = CaptureBuffer(3, Archive(":memory:"))
+    now = dt.datetime(2026, 1, 1, 0, 0, 5, tzinfo=dt.timezone.utc)
+    assert buf.level(now) == {"buffered": 0, "bound": 3, "oldest_buffered_ms": None}
+    for at in ("2026-01-01T00:00:01.250Z", "2026-01-01T00:00:03.000Z"):
+        buf.put({"source": "own-broker", "topic": "t/a", "payload_b64": "", "retained": False, "received_at": at})
+    assert buf.level(now) == {"buffered": 2, "bound": 3, "oldest_buffered_ms": 3750}
+    buf.discard(1)
+    assert buf.level(now)["oldest_buffered_ms"] == 2000

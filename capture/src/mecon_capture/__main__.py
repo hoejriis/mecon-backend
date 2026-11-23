@@ -12,7 +12,7 @@ from . import __version__
 from .archive import Archive
 from .config import ConfigError, load
 from .health import make_server, serve_in_thread
-from .ingester import Ingester
+from .ingester import Ingester, utc_now
 from .logutil import Log
 from .paho_transport import PahoTransport
 
@@ -54,7 +54,8 @@ def main(argv: list[str] | None = None) -> int:
     server = None
     if cfg.health.enabled:
         server = make_server(cfg.health.bind, cfg.health.port,
-                             lambda: {"profiles": ingester.statuses(), "counters": archive.counters()})
+                             lambda: {"profiles": ingester.statuses(), "counters": archive.counters(),
+                                      "ingester": ingester.buffer.level(utc_now())})
         serve_in_thread(server)
     log.info("started", version=__version__, sources=len(cfg.profiles))
     ingester.start()

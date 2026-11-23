@@ -63,6 +63,19 @@ class CaptureBuffer:
         with self._lock:
             return len(self._q)
 
+    def level(self, now: dt.datetime) -> dict[str, Any]:
+        """What waits here for the archive: how many captures, the bound, and how long the oldest has waited
+        since its arrival (null when empty). The archive's own counters see a capture only once it is appended,
+        so this is where the lag shows while storage is unavailable."""
+        with self._lock:
+            n = len(self._q)
+            first = self._q[0]["received_at"] if n else None
+        oldest = None
+        if first is not None:
+            arrived = dt.datetime.strptime(first, "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=dt.timezone.utc)
+            oldest = max(0, int((now - arrived).total_seconds() * 1000))
+        return {"buffered": n, "bound": self.bound, "oldest_buffered_ms": oldest}
+
 
 class SourceSession:
     """One profile: its transport, its status, and the callbacks the transport drives."""

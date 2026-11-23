@@ -102,7 +102,7 @@ sudo systemctl daemon-reload && sudo systemctl enable --now mecon-connector
 | `hold.ping_interval_s` | 20 (0 or 5-120). WebSocket control pings, so a dead path is noticed. |
 | `hold.connect_timeout_s` | 10 (1-60). |
 | `dfu.enabled` | `false` (default). `true` turns on bootloader serial DFU (below); it needs `transport = "hold"` and `dfu.bootloader`. |
-| `dfu.bootloader` | The bootloader's own port: `path`, `by_id`, or `vid` and `pid` (with optional `usb_serial`), validated like `device.select` (a kernel node such as `/dev/ttyACM0` is refused). It must not be the same selector as `device.select`. |
+| `dfu.bootloader` | The bootloader's own port: `path`, `by_id`, or `vid` and `pid` (with optional `usb_serial`), validated like `device.select` (a kernel node such as `/dev/ttyACM0` is refused). It must not be the same selector as `device.select`, and the two must not overlap: a `device.select` that could also match the bootloader's port (a broad `by_id` pattern, say) would open it as the device while a failed job waits. The check compares selectors literally, so prefer `vid`/`pid` or an exact name for both. |
 | `dfu.bootloader_wait_s`, `dfu.app_return_wait_s`, `dfu.arm_window_s` | 30 (5-300), 120 (10-900), 60 (10-600). |
 | `dfu.attempts` | 3 (1-10). Transfer attempts before the job is reported failed. |
 | `dfu.package_max_bytes` | 2 MiB (64 KiB-16 MiB). A larger package is refused before it is fetched or used. |

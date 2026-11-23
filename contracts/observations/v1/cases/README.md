@@ -15,6 +15,7 @@ The format and the replay rules are the Reader API's, in [`../../../reader-api/v
 - **Observers.** An observer belongs to a fleet, or is an approved public source's. Its `location` is the position its owner shared, or null when none is shared.
 - **Receptions.** A reception's `ago_s` places its receipt that many seconds before the case starts. Each reception's `rssi` is unique in the world, so a case tells receptions apart by it, never by comparing one caller's opaque ids with another's.
 - **Packets.** Receptions of the same named packet are receptions of one packet. A Backend gives them one `packet_correlation_id` for a given caller.
+- **Grants.** A user's `observations` is the grant `GET /session` reports as `capabilities.observations`. It is `available` unless the world says otherwise.
 - **Actions.** `add-reception` records a reception received now. `age-out-events` moves every cursor issued so far outside retention. `end-session` ends a client's session on the server while the client keeps its cookie.
 
 ## What the cases cover
@@ -26,5 +27,6 @@ The format and the replay rules are the Reader API's, in [`../../../reader-api/v
 - Cursors that are no cursor, `Last-Event-ID` winning over the query, and cursors moved out of retention.
 - A stream continuing from a snapshot's cursor.
 - A session ended on the server.
+- A user without the grant: 403 from every operation. A user whose fleet has no observer: 200 and empty, never 403.
 
 **Not covered yet:** a stream's `access_revoked` while open, `resync_required`, the heartbeat and freshness states. They need a runner that holds a stream open across an action, or a clock it controls.

@@ -15,7 +15,7 @@ Private code is removed only after stage 4. The core (accounts, identity, key cu
 |---|---|---|---|---|---|
 | Reader API | [`reader-api/v1`](../contracts/reader-api/v1/openapi.yaml) | Yes: draft.10, 49 replayable cases | **Passing at draft.10**, in its own CI job (see below) | Not started | No |
 | USB Connector | [`connector/v1`](../contracts/connector/v1/README.md), [`connector-hold/v1`](../contracts/connector-hold/v1/README.md) | Yes: wire contracts and fixtures | Not applicable: there is no private Connector | [`connector/`](../connector/README.md): passes its unit, fake-device and broker integration tests | No |
-| Observation reads | [`observations/v1`](../contracts/observations/v1/openapi.yaml) | Schemas, fixtures and 9 replayable cases ([`cases/`](../contracts/observations/v1/cases/README.md)) | Schemas and fixtures checked; no case replay yet | Not started | No |
+| Observation reads | [`observations/v1`](../contracts/observations/v1/openapi.yaml) | Schemas, fixtures and 11 replayable cases ([`cases/`](../contracts/observations/v1/cases/README.md)) | Schemas and fixtures checked; no case replay yet | Not started | No |
 | Observation capture | [`observation-subscription/v1`](../contracts/observation-subscription/v1/README.md), [`raw-capture/v1`](../contracts/raw-capture/v1/README.md) | Drafts: schemas and fixtures | Not yet | Not started | No |
 | Observation processing | [`observation-processing/v1`](../contracts/observation-processing/v1/README.md) | Draft: schemas, replayable fixtures and a reference processor | Not yet | Not started | No |
 | Job lifecycle and device dispatch | — | Not yet | Not yet | Not started | No |

@@ -1,5 +1,5 @@
 {
- "contract": "mecon-observations/1.0.0-draft.2",
+ "contract": "mecon-observations/1.0.0-draft.3",
  "synthetic": true,
  "group": "observations",
  "cases": [
@@ -212,7 +212,7 @@
   },
   {
    "id": "observations-04",
-   "title": "A snapshot holds the visible receptions only, and one packet's receptions share a correlation id",
+   "title": "A snapshot holds the visible receptions only, one packet's receptions share a correlation id, and another packet's do not",
    "world": "two-fleets-observed",
    "steps": [
     {
@@ -328,6 +328,14 @@
          "/observer_id": "${attic}"
         },
         "at_least": 1
+       },
+       {
+        "at": "/items",
+        "where": {
+         "/rssi": -70,
+         "/packet_correlation_id": "${pc}"
+        },
+        "count": 0
        }
       ]
      }
@@ -666,6 +674,128 @@
       "body": {
        "/code": "unauthenticated"
       }
+     }
+    }
+   ]
+  },
+  {
+   "id": "observations-10",
+   "title": "A member without the observations grant gets 403 from every operation, though its fleet has observers",
+   "world": "two-fleets-observed",
+   "steps": [
+    {
+     "action": "sign-in",
+     "args": {
+      "client": "dora",
+      "user": "dora"
+     }
+    },
+    {
+     "as": "dora",
+     "request": {
+      "operation": "listObservers",
+      "query": {
+       "scope": "self"
+      }
+     },
+     "expect": {
+      "status": 403,
+      "schema": "Error",
+      "body": {
+       "/code": "forbidden"
+      }
+     }
+    },
+    {
+     "as": "dora",
+     "request": {
+      "operation": "getObservationSnapshot",
+      "query": {
+       "scope": "self"
+      }
+     },
+     "expect": {
+      "status": 403,
+      "schema": "Error",
+      "body": {
+       "/code": "forbidden"
+      }
+     }
+    },
+    {
+     "as": "dora",
+     "request": {
+      "operation": "streamObservationEvents",
+      "query": {
+       "scope": "self"
+      }
+     },
+     "expect": {
+      "status": 403,
+      "schema": "Error",
+      "body": {
+       "/code": "forbidden"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "observations-11",
+   "title": "A member whose fleet has no observer gets 200 and nothing, never 403",
+   "world": "two-fleets-observed",
+   "steps": [
+    {
+     "action": "sign-in",
+     "args": {
+      "client": "erin",
+      "user": "erin"
+     }
+    },
+    {
+     "as": "erin",
+     "request": {
+      "operation": "listObservers",
+      "query": {
+       "scope": "self"
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "ObserverList",
+      "body": {
+       "/items": []
+      }
+     }
+    },
+    {
+     "as": "erin",
+     "request": {
+      "operation": "getObservationSnapshot",
+      "query": {
+       "scope": "self"
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "Snapshot",
+      "body": {
+       "/items": []
+      }
+     }
+    },
+    {
+     "as": "erin",
+     "request": {
+      "operation": "streamObservationEvents",
+      "query": {
+       "scope": "self"
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "ObservationEvent",
+      "stream": {}
      }
     }
    ]

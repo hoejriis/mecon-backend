@@ -492,42 +492,86 @@ def test_streams_are_matched_by_session_ref_never_by_cookie_value():
     run(go())
 
 
-# ---- the login Origin is the core's to check ----
+# ---- the login Origin is the core's to check: a listed Origin OR Sec-Fetch-Site same-origin ----
 
-@pytest.mark.parametrize("headers", [{"Origin": "https://foreign.example.test"}, {},
-                                     {"Origin": SAME_ORIGIN, "Sec-Fetch-Site": "cross-site"}],
-                         ids=["foreign", "absent", "cross-site"])
-def test_the_core_refuses_a_foreign_login_origin_without_the_facade_precheck(headers):
+OTHER_LISTED = "https://other-reader.example.test"
+FOREIGN = "https://foreign.example.test"
+ALLOW = (SAME_ORIGIN, OTHER_LISTED)
+LOGIN_ORIGIN_MATRIX = [
+    # (Origin, Sec-Fetch-Site, accepted)
+    (OTHER_LISTED, "cross-site", True),  # the allow-list branch
+    (SAME_ORIGIN, None, True),
+    (None, "same-origin", True),  # the Sec-Fetch-Site branch
+    (FOREIGN, "same-origin", True),
+    (SAME_ORIGIN + "/", None, True),  # trailing slash stripped
+    (OTHER_LISTED + "//", "cross-site", True),
+    (None, None, False),
+    (FOREIGN, None, False),
+    (FOREIGN, "cross-site", False),
+    (None, "cross-site", False),
+    (FOREIGN + "/", "same-site", False),
+    ("null", None, False),
+]
+MATRIX_IDS = [f"{o or 'absent'}|{f or 'absent'}|{'accept' if a else 'refuse'}" for o, f, a in LOGIN_ORIGIN_MATRIX]
+
+
+def _login_rig(precheck):
+    rig = Rig(login_origin_precheck=precheck, reader_origins=ALLOW)
+    rig.core.login_origins = list(ALLOW)
+    calls = []
+    inner = rig.core.start_login
+
+    async def recording(email, **kw):
+        calls.append(kw)
+        return await inner(email, **kw)
+    rig.core.start_login = recording
+    return rig, calls
+
+
+async def _post_login(rig, origin, sfs):
+    headers = {}
+    if origin is not None:
+        headers["Origin"] = origin
+    if sfs is not None:
+        headers["Sec-Fetch-Site"] = sfs
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=rig.app), base_url=BASE) as c:
+        return await c.post(PREFIX + "/login", headers=headers, json={"email": "alice@example.test"})
+
+
+@pytest.mark.parametrize("origin,sfs,accepted", LOGIN_ORIGIN_MATRIX, ids=MATRIX_IDS)
+def test_the_core_applies_the_login_origin_rule_on_its_own(origin, sfs, accepted):
     async def go():
-        rig = Rig(login_origin_precheck=False)
-        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=rig.app), base_url=BASE) as c:
-            r = await c.post(PREFIX + "/login", headers=headers, json={"email": "alice@example.test"})
+        rig, calls = _login_rig(precheck=False)
+        r = await _post_login(rig, origin, sfs)
+        assert calls == [{"origin": origin, "sec_fetch_site": sfs}]  # every request reached the core
+        if accepted:
+            assert r.status_code == 202 and len(rig.world.logins) == 1
+        else:
             assert_error(r, 403, "origin_rejected", False)
             assert rig.world.logins == {}
-            ok = await c.post(PREFIX + "/login", headers={"Origin": SAME_ORIGIN, "Sec-Fetch-Site": "same-origin"},
-                              json={"email": "alice@example.test"})
-            assert ok.status_code == 202
     run(go())
 
 
-def test_the_facade_precheck_refuses_before_the_core_is_reached():
+@pytest.mark.parametrize("origin,sfs,accepted", LOGIN_ORIGIN_MATRIX, ids=MATRIX_IDS)
+def test_the_facade_precheck_applies_the_same_rule(origin, sfs, accepted):
     async def go():
-        rig = Rig()
-        calls = []
-        inner = rig.core.start_login
+        rig, calls = _login_rig(precheck=True)
+        r = await _post_login(rig, origin, sfs)
+        if accepted:
+            assert r.status_code == 202, r.text  # the pre-check never refuses what the core accepts
+            assert calls == [{"origin": origin, "sec_fetch_site": sfs}]
+        else:
+            assert_error(r, 403, "origin_rejected", False)
+            assert calls == []  # refused by the facade, before the core
+    run(go())
 
-        async def recording(email, **kw):
-            calls.append(kw)
-            return await inner(email, **kw)
-        rig.core.start_login = recording
-        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=rig.app), base_url=BASE) as c:
-            r = await c.post(PREFIX + "/login", headers={"Origin": "https://foreign.example.test"},
-                             json={"email": "alice@example.test"})
-            assert_error(r, 403, "origin_rejected")
-            assert calls == []
-            r = await c.post(PREFIX + "/login", headers={"Origin": SAME_ORIGIN}, json={"email": "alice@example.test"})
-            assert r.status_code == 202
-            assert calls == [{"origin": SAME_ORIGIN, "sec_fetch_site": None}]
+
+def test_the_core_allow_list_defaults_to_the_readers_own_origin():
+    async def go():
+        rig = Rig(login_origin_precheck=False)
+        assert rig.core.login_origins is None
+        assert (await _post_login(rig, SAME_ORIGIN + "/", None)).status_code == 202
+        assert_error(await _post_login(rig, OTHER_LISTED, None), 403, "origin_rejected")
     run(go())
 
 

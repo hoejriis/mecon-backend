@@ -54,7 +54,7 @@ DECLARED: dict[str, frozenset[int]] = {
 
 @dataclass
 class FacadeConfig:
-    reader_origins: tuple[str, ...] = ("https://reader.example.test",)  # the facade's login Origin pre-check
+    reader_origins: tuple[str, ...] = ("https://reader.example.test",)  # login Origin allow-list (the core's list)
     login_origin_precheck: bool = True  # the core checks the login Origin on its own either way
     contract_version: str = CONTRACT_VERSION
     heartbeat_s: float = 25.0
@@ -103,6 +103,12 @@ def _set_cookie(resp: Response, credential: str, expires_at: datetime | None, se
 
 def _clear_cookie(resp: Response) -> None:
     resp.set_cookie(COOKIE, "", max_age=0, expires=0, path="/", secure=True, httponly=True, samesite="strict")
+
+
+def login_origin_allowed(origin: str | None, sec_fetch_site: str | None, allow: tuple[str, ...]) -> bool:
+    """The core's login Origin rule, mirrored so the pre-check never refuses what the core accepts:
+    the Origin (any trailing "/" stripped) is on the allow-list, OR Sec-Fetch-Site is "same-origin"."""
+    return (origin is not None and origin.rstrip("/") in allow) or sec_fetch_site == "same-origin"
 
 
 def _page(p: Page) -> dict[str, Any]:
@@ -198,7 +204,8 @@ def create_app(lookup: SessionLookup, core: ReaderCore, config: FacadeConfig | N
     async def start_login(request: Request) -> Response:
         # Pre-session, so no lookup: the core checks the Origin against its own allow-list. The facade's
         # pre-check only refuses early, before the core is reached.
-        if cfg.login_origin_precheck and request.headers.get("origin") not in cfg.reader_origins:
+        if cfg.login_origin_precheck and not login_origin_allowed(
+                request.headers.get("origin"), request.headers.get("sec-fetch-site"), cfg.reader_origins):
             raise Refusal(403, "origin_rejected", "origin not allowed")
         body = v.login_request(await json_body(request))
         started = await call_core("startLogin", core.start_login(

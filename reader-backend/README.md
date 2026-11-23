@@ -6,7 +6,11 @@ A public implementation of the Reader API ([`contracts/reader-api/v1`](../contra
 
 - The host-only session cookie `__Host-mecon_session` (`Secure`, `HttpOnly`, `SameSite=Strict`, `Path=/`, no `Domain`): set on the single `approved` login poll, cleared on logout and whenever a presented session is refused.
 - Passing every write's `X-CSRF-Token` and `Origin` to the session lookup, which checks them. Writes never use the cache.
-- Passing the `Origin` and `Sec-Fetch-Site` of `POST /login` to the core, which checks them against its own allow-list before a session exists. The facade may also refuse a foreign Origin early (`login_origin_precheck`), but the core's check holds without it.
+- Passing the `Origin` and `Sec-Fetch-Site` of `POST /login` to the core, which checks them before a session exists. The rule accepts a request when either:
+  - the Origin, with any trailing `/` stripped, is on the allow-list; or
+  - `Sec-Fetch-Site` is `same-origin`.
+
+  Anything else gets 403 `origin_rejected`. The facade's optional pre-check (`login_origin_precheck`) applies the same rule with the same list (`reader_origins`), so it never refuses what the core would accept, and the core's check holds without it.
 - The `Idempotency-Key` rule: the header is required on `POST /send-attempts` and must equal `client_attempt_id`.
 - Validating request bodies, path and query parameters (422 `invalid`). A lease request with a body is refused.
 - Error bodies `{code, message, request_id, retryable}` and mapping each core error to a status the operation declares. A core error whose status the operation does not declare is never passed on: it becomes 404 where the operation has one (forbidden or not found), else 503.
@@ -36,7 +40,7 @@ A public implementation of the Reader API ([`contracts/reader-api/v1`](../contra
 
   Every call carries the `Caller`, and the core decides what that caller sees. Refusals are typed `CoreError`s: `not_found`, `forbidden`, `conflict`, `unavailable`, `invalid`, `gone` and `throttled`.
 
-Read answers are cached for at most `lookup_cache_s` (5 s), never past the caller's expiry, never across a revocation the facade has heard of, and only while the revocation feed is up. An answer is not cached if a revocation arrived while its lookup ran. The cache holds at most `lookup_cache_max` entries (10,000): an insert drops expired entries, then the oldest. Logout drops the entry at once.
+Read answers are cached for at most `lookup_cache_s` (5 s), never past the caller's expiry, never across a revocation the facade has heard of, and only while the revocation feed is up. An answer is not cached if a revocation arrived while its lookup ran. The cache holds at most `lookup_cache_max` entries (10,000): an insert prunes timed-out entries from the oldest end, then evicts the oldest while full. Logout drops the entry at once.
 
 ## Fake adapters
 

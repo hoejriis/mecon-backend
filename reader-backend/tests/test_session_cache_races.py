@@ -190,3 +190,15 @@ def test_the_default_cap_is_ten_thousand():
     from mecon_reader_backend import FacadeConfig
     assert FacadeConfig().lookup_cache_max == 10_000
     assert SessionResolver(_FeedLookup()).cache_max == 10_000
+
+
+def test_a_reinserted_key_moves_to_the_end_and_is_not_pruned_with_older_entries():
+    from mecon_reader_backend.sessions import _Entry
+    r = SessionResolver(_FeedLookup())
+    c = _caller()
+    r._insert("a", _Entry(c, 10.0), now=0.0)
+    r._insert("b", _Entry(c, 12.0), now=1.0)
+    r._insert("a", _Entry(c, 20.0), now=5.0)  # re-inserted: now the newest
+    assert list(r._cache) == ["b", "a"]
+    r._insert("c", _Entry(c, 30.0), now=15.0)  # b has run out; a has not
+    assert list(r._cache) == ["a", "c"]

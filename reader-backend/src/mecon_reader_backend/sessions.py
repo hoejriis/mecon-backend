@@ -96,9 +96,14 @@ class SessionResolver:
         return answer
 
     def _insert(self, credential: str, entry: _Entry, now: float) -> None:
+        # Pop first: a re-inserted key must move to the end, so the dict stays in `until` order (every
+        # entry lives cache_s from its insert). Then prune from the front up to the first live entry.
         self._cache.pop(credential, None)
-        for cred in [k for k, e in self._cache.items() if e.until <= now or self._expired(e.caller)]:
-            del self._cache[cred]
+        while self._cache:
+            oldest = next(iter(self._cache))
+            if self._cache[oldest].until > now:
+                break
+            del self._cache[oldest]
         while len(self._cache) >= self.cache_max:
             del self._cache[next(iter(self._cache))]  # the oldest insert
         self._cache[credential] = entry

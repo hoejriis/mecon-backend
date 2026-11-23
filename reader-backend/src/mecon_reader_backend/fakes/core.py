@@ -31,9 +31,15 @@ def _offset_page(items: list[dict], cursor: str | None, limit: int) -> tuple[lis
 
 
 class FakeReaderCore:
-    def __init__(self, world: World, poll_wait_tick_s: float = 0.02):
+    def __init__(self, world: World, poll_wait_tick_s: float = 0.02, login_origins: list[str] | None = None):
         self.world = world
         self.tick = poll_wait_tick_s
+        self.login_origins = login_origins  # None: the Reader's own origin(s), as the world records them
+
+    def _login_origin_allowed(self, origin: str | None, sec_fetch_site: str | None) -> bool:
+        # The core's rule: a listed Origin (trailing "/" stripped) OR Sec-Fetch-Site "same-origin".
+        allow = list(self.world.reader_origins) if self.login_origins is None else self.login_origins
+        return (origin is not None and origin.rstrip("/") in allow) or sec_fetch_site == "same-origin"
 
     def _user(self, caller: Caller):
         u = self.world.user_by_id(caller.user_id)
@@ -48,7 +54,7 @@ class FakeReaderCore:
 
     async def start_login(self, email: str, *, origin: str | None, sec_fetch_site: str | None) -> dict[str, Any]:
         w = self.world
-        if origin is None or origin not in w.reader_origins or sec_fetch_site not in (None, "same-origin"):
+        if not self._login_origin_allowed(origin, sec_fetch_site):
             raise CoreError("forbidden", "origin_rejected", "origin not allowed")
         user = next((u.name for u in w.users.values() if u.email.lower() == email.lower()), None)
         req = secrets.token_urlsafe(24)

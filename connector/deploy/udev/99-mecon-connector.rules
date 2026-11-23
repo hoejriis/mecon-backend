@@ -23,3 +23,7 @@
 # one link per board instead of a by-id pattern: give the rule above SYMLINK+="bench/NAME" (NAME made up per
 # board) and select path = "/dev/bench/NAME". The link must be stable across replugs; a kernel node
 # (/dev/ttyACM0) is refused.
+#
+# With [dfu] enabled, the board's bootloader enumerates as another USB device (other ids, often another serial
+# number). Give it a rule of its own the same way (ids read with --list-ports while the board is in its
+# bootloader), with its own SYMLINK name if you select by path.

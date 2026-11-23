@@ -23,6 +23,21 @@ token_presentation = "header"
 # request_timeout_s = 15                    # how long one relayed request may wait for the device
 # ping_interval_s = 20                      # WebSocket control pings; 0 turns them off
 
+# Bootloader serial DFU (optional, off by default). With it the Connector declares serial_dfu on the hold and,
+# for an update job the Backend arms on the live socket, fetches the release's DFU package with the token above,
+# checks it, and sends it to the device's bootloader when the device resets into it. The bootloader is a
+# different USB device from the application: select its own port (path, by_id, or vid and pid, as device.select;
+# never the same selector, never a /dev/ttyACM0 node). Find it with --list-ports while the board is in its
+# bootloader. Without an armed job the bootloader port is never opened.
+# [dfu]
+# enabled = true
+# bootloader = { by_id = "usb-REPLACE_WITH_YOUR_BOOTLOADER_ID-*" }
+# bootloader_wait_s = 30      # how long to look for the bootloader port after the device reset
+# app_return_wait_s = 120     # how long to wait for the application port after the transfer
+# arm_window_s = 60           # a job keeps the socket across a reset only within this long of the job
+# attempts = 3                # transfer attempts before the job is reported failed
+# package_max_bytes = 2097152
+
 [health]
 enabled = true
 bind = "127.0.0.1"

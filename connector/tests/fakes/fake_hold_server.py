@@ -55,6 +55,10 @@ class FakeHoldServer:
         self.conns: list[Conn] = []
         self.handshakes = 0  # connection attempts, including rejected ones
         self.handshake_times: list[float] = []
+        # the DFU package route (GET /gateway/dfu-package/{job}); served only with the right token
+        self.packages: dict[str, bytes] = {}
+        self.package_requests: list[tuple[str, dict]] = []  # (path, headers) of every package GET
+        self.package_status: int | None = None  # when set, every package GET is answered with this status
         self._lock = threading.Lock()
         self._server = serve(
             self._handler,
@@ -85,6 +89,8 @@ class FakeHoldServer:
         return "mecon-bridge" in offered and f"bearer.{self.token}" in offered
 
     def _process_request(self, connection, request):
+        if request.path.startswith("/gateway/dfu-package/"):
+            return self._package(connection, request)  # plain HTTP, not a hold handshake
         with self._lock:
             self.handshakes += 1
             self.handshake_times.append(time.monotonic())
@@ -93,6 +99,23 @@ class FakeHoldServer:
         if not self._authorized(request) and self.reject_style == "http":
             return connection.respond(HTTPStatus.FORBIDDEN, "forbidden\n")
         return None
+
+    def _package(self, connection, request):
+        """The Backend's package route: the zip of an open job of the token's device, else 404 (not told apart)."""
+        with self._lock:
+            self.package_requests.append((request.path, {k.lower(): v for k, v in request.headers.raw_items()}))
+        if self.package_status is not None:
+            return connection.respond(HTTPStatus(self.package_status), "synthetic\n")
+        job = request.path[len("/gateway/dfu-package/"):]
+        data = self.packages.get(job)
+        if request.headers.get("Authorization") != f"Bearer {self.token}" or data is None:
+            return connection.respond(HTTPStatus.NOT_FOUND, "not found\n")
+        resp = connection.respond(HTTPStatus.OK, "")
+        resp.body = data
+        for name, value in (("Content-Length", str(len(data))), ("Content-Type", "application/zip")):
+            del resp.headers[name]
+            resp.headers[name] = value
+        return resp
 
     # -- the accepted socket -----------------------------------------------------------------
 

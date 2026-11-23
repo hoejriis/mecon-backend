@@ -118,6 +118,19 @@ class HoldConfig:
 
 
 @dataclass(frozen=True)
+class DfuConfig:
+    """Bootloader serial DFU for the hold transport (contracts/connector-hold/v1, section 12). Present only when
+    [dfu] enabled = true; the bootloader port is opened only for a job the Backend armed on the live socket."""
+
+    bootloader: Selector  # the bootloader's own USB serial port (a different USB device from the application's)
+    bootloader_wait_s: float  # how long to look for the bootloader port after the application port dropped
+    app_return_wait_s: float  # how long to wait for the application port after a transfer
+    arm_window_s: float  # a dfu_job arms the socket-keeping exception for this long
+    attempts: int  # transfer attempts before the job is reported failed
+    package_max_bytes: int
+
+
+@dataclass(frozen=True)
 class Config:
     device: DeviceConfig
     mqtt: MqttConfig | None  # None when transport = "hold"
@@ -128,6 +141,7 @@ class Config:
     problems: list[str] = field(default_factory=list, compare=False)
     transport: str = "mqtt"  # "mqtt" | "hold"
     hold: HoldConfig | None = None  # set when transport = "hold"
+    dfu: DfuConfig | None = None  # set when [dfu] enabled = true (hold transport only)
 
 
 def _get(d: dict[str, Any], key: str, typ: type | tuple, default: Any, errs: list[str], where: str) -> Any:
@@ -165,7 +179,12 @@ def check_path(path: str, where: str) -> list[str]:
     return errs
 
 
-def check_selector(sel: Selector) -> list[str]:
+def check_selector(sel: Selector, where: str = "device.select") -> list[str]:
+    errs = [e.replace("device.select", where) for e in _check_selector(sel)]
+    return errs
+
+
+def _check_selector(sel: Selector) -> list[str]:
     errs: list[str] = []
     n = sum(x is not None for x in (sel.by_id, sel.path)) + (1 if sel.vid is not None or sel.pid is not None else 0)
     if n == 0 or (sel.vid is None) != (sel.pid is None):
@@ -235,9 +254,63 @@ def parse_hold(h: dict[str, Any], errs: list[str]) -> HoldConfig | None:
     return HoldConfig(base, ws_url, token_file, pres, plain_ok, ca, ctimeout, rtimeout, ping)
 
 
+def parse_dfu(d: dict[str, Any], device_sel: Selector, transport: str, errs: list[str]) -> DfuConfig | None:
+    """The [dfu] table. Off unless enabled = true; enabling needs the hold transport and a bootloader selector
+    (path, by_id, or vid and pid, as device.select) that is not the application port's own."""
+    if not isinstance(d, dict):
+        errs.append("dfu must be a table")
+        return None
+    _check_unknown(
+        d,
+        {"enabled", "bootloader", "bootloader_wait_s", "app_return_wait_s", "arm_window_s", "attempts",
+         "package_max_bytes"},
+        "dfu",
+        errs,
+    )
+    enabled = _get(d, "enabled", bool, False, errs, "dfu")
+    b = d.get("bootloader", {})
+    if not isinstance(b, dict):
+        errs.append("dfu.bootloader must be a table")
+        b = {}
+    _check_unknown(b, {"by_id", "path", "vid", "pid", "usb_serial"}, "dfu.bootloader", errs)
+    sel = Selector(
+        by_id=_get(b, "by_id", str, None, errs, "dfu.bootloader"),
+        path=_get(b, "path", str, None, errs, "dfu.bootloader"),
+        vid=_get(b, "vid", int, None, errs, "dfu.bootloader"),
+        pid=_get(b, "pid", int, None, errs, "dfu.bootloader"),
+        usb_serial=_get(b, "usb_serial", str, None, errs, "dfu.bootloader"),
+    )
+    boot_wait = float(_get(d, "bootloader_wait_s", (int, float), 30.0, errs, "dfu"))
+    app_wait = float(_get(d, "app_return_wait_s", (int, float), 120.0, errs, "dfu"))
+    window = float(_get(d, "arm_window_s", (int, float), 60.0, errs, "dfu"))
+    attempts = _get(d, "attempts", int, 3, errs, "dfu")
+    max_bytes = _get(d, "package_max_bytes", int, 2 * 1024 * 1024, errs, "dfu")
+    if not enabled:
+        return None
+    if transport != "hold":
+        errs.append("dfu.enabled needs transport = 'hold' (the Backend arms a DFU job on the hold's socket)")
+    if not b:
+        errs.append("dfu.enabled needs a dfu.bootloader selector: path, by_id, or vid and pid of the bootloader's port")
+    else:
+        errs.extend(check_selector(sel, "dfu.bootloader"))
+        if sel == device_sel:
+            errs.append("dfu.bootloader must select the bootloader's port, not the same port as device.select")
+    if not 5 <= boot_wait <= 300:
+        errs.append("dfu.bootloader_wait_s must be 5-300")
+    if not 10 <= app_wait <= 900:
+        errs.append("dfu.app_return_wait_s must be 10-900")
+    if not 10 <= window <= 600:
+        errs.append("dfu.arm_window_s must be 10-600")
+    if not 1 <= attempts <= 10:
+        errs.append("dfu.attempts must be 1-10")
+    if not 64 * 1024 <= max_bytes <= 16 * 1024 * 1024:
+        errs.append("dfu.package_max_bytes must be 65536-16777216")
+    return DfuConfig(sel, boot_wait, app_wait, window, attempts, max_bytes)
+
+
 def parse(raw: dict[str, Any]) -> Config:
     errs: list[str] = []
-    _check_unknown(raw, {"transport", "device", "mqtt", "hold", "downlink", "queues", "health", "log"}, "", errs)
+    _check_unknown(raw, {"transport", "device", "mqtt", "hold", "dfu", "downlink", "queues", "health", "log"}, "", errs)
     transport = raw.get("transport", "mqtt")
     if transport not in ("mqtt", "hold"):
         errs.append("transport must be 'mqtt' or 'hold'")
@@ -418,9 +491,10 @@ def parse(raw: dict[str, Any]) -> Config:
     level = _get(lg, "level", str, "info", errs, "log")
     if level not in ("info", "debug"):
         errs.append("log.level must be info or debug")
+    dfu = parse_dfu(raw["dfu"], selector, transport, errs) if "dfu" in raw else None
     if errs:
         raise ConfigError(errs)
-    return Config(device, mqtt, gate, queues, health, level, transport=transport, hold=hold_cfg)
+    return Config(device, mqtt, gate, queues, health, level, transport=transport, hold=hold_cfg, dfu=dfu)
 
 
 def load(path: str | Path) -> Config:

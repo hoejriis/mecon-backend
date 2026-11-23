@@ -31,9 +31,13 @@ export function validateRawCapture(dir = 'raw-capture/v1') {
 
   // What an archive must answer for a request: the captures it must reject (malformed), and the valid ones
   // past the payload limit that it commits as a stub.
-  const expectedRejections = (request) => request.captures.flatMap((c, index) => (v.capture(c) ? [] : [{ index, reason: 'malformed' }]));
+  // Beyond the schema (section 2): payload_b64 must really decode (with the pattern, that is a length that is a
+  // multiple of 4), and the topic must have a UTF-8 encoding (no unpaired surrogate).
+  const LONE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+  const acceptable = (c) => v.capture(c) && !LONE.test(c.topic) && (c.stub !== undefined || c.payload_b64.length % 4 === 0);
+  const expectedRejections = (request) => request.captures.flatMap((c, index) => (acceptable(c) ? [] : [{ index, reason: 'malformed' }]));
   const expectedStubs = (request, limits) => request.captures.flatMap((c, index) =>
-    (v.capture(c) && Buffer.from(c.payload_b64, 'base64').length > limits.max_payload_bytes ? [index] : []));
+    (acceptable(c) && (c.stub !== undefined || Buffer.from(c.payload_b64, 'base64').length > limits.max_payload_bytes) ? [index] : []));
 
   const fixtureSchema = ajv.compile(readJson('fixtures.schema.json'));
   const outcomes = {};

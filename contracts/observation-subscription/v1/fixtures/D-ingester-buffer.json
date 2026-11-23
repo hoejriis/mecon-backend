@@ -1,0 +1,12 @@
+{
+  "fixture": "D", "title": "The receive bound, a full buffer and an unavailable archive, counted", "kind": "ingester",
+  "limits": { "buffer_bound": 2, "max_receive_bytes": 100 },
+  "events": [
+    { "event": "message", "size": 10, "expect": { "received": 1, "handed_on": 0, "buffered": 1, "bound": 2, "shed": 0, "oversize": 0 } },
+    { "event": "message", "size": 500, "expect": { "received": 2, "handed_on": 0, "buffered": 2, "bound": 2, "shed": 0, "oversize": 1 } },
+    { "event": "message", "size": 10, "expect": { "received": 3, "handed_on": 0, "buffered": 2, "bound": 2, "shed": 1, "oversize": 1 } },
+    { "event": "append", "storage": "unavailable", "expect": { "received": 3, "handed_on": 0, "buffered": 2, "bound": 2, "shed": 1, "oversize": 1 } },
+    { "event": "append", "storage": "available", "expect": { "received": 3, "handed_on": 2, "buffered": 0, "bound": 2, "shed": 1, "oversize": 1 } },
+    { "event": "message", "size": 10, "expect": { "received": 4, "handed_on": 2, "buffered": 1, "bound": 2, "shed": 1, "oversize": 1 } }
+  ]
+}

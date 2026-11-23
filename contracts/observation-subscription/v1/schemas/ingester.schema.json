@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "observation-subscription/v1/ingester",
+  "title": "Ingester counters",
+  "description": "The ingester's own counts, across its profiles: totals since it started, except the levels buffered and oldest_buffered_ms. At every instant received = handed_on + buffered + shed.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["received", "handed_on", "buffered", "bound", "shed", "oversize", "oldest_buffered_ms"],
+  "properties": {
+    "received": { "type": "integer", "minimum": 0, "description": "Messages received from brokers, each counted on arrival." },
+    "handed_on": { "type": "integer", "minimum": 0, "description": "Captures the archive answered available for (committed or rejected there)." },
+    "buffered": { "type": "integer", "minimum": 0, "description": "A level: captures waiting for the archive now." },
+    "bound": { "type": "integer", "minimum": 1, "description": "The most captures the ingester holds." },
+    "shed": { "type": "integer", "minimum": 0, "description": "Captures lost because the buffer was full when they arrived." },
+    "oversize": { "type": "integer", "minimum": 0, "description": "Of received, messages over the receive bound, handed on as a stub (size and hash only)." },
+    "oldest_buffered_ms": { "type": ["integer", "null"], "minimum": 0, "description": "How long the oldest waiting capture has waited since it arrived; null when none waits." }
+  }
+}

@@ -2,17 +2,19 @@
 
 How an **observation ingester** subscribes to MQTT brokers to capture MeshCore observation traffic: what a source profile names, what the ingester does on the wire, and what it reports. The ingester only reads. Parsing, deduplication and everything downstream are outside this contract; what it captures is handed on by the [raw capture append](../../raw-capture/v1/README.md) contract.
 
-**Status: draft, version `1.0.0-draft.1`.** The text is derived from a Backend's ingester. Statements marked **(observed)** describe what that implementation does today and are SHOULD here; section 8 lists where it falls short of the contract. The fixtures are synthetic: no real hosts, users, keys or device ids.
+**Status: draft, version `1.0.0-draft.2`.** The text is derived from a Backend's ingester. Statements marked **(observed)** describe what that implementation does today and are SHOULD here; section 8 lists where it falls short of the contract. The fixtures are synthetic: no real hosts, users, keys or device ids.
 
 | File | What it is |
 | --- | --- |
 | `README.md` | This profile. |
 | `schemas/profile.schema.json` | JSON Schema for one source profile. |
 | `schemas/status.schema.json` | JSON Schema for the status an ingester reports per profile. |
+| `schemas/ingester.schema.json` | JSON Schema for the ingester's own counters (section 5a). |
 | `fixtures.schema.json` | JSON Schema for the fixtures. |
 | `fixtures/A-valid-profiles.json` | Fixture A: profiles a conforming ingester accepts. |
 | `fixtures/B-invalid-profiles.json` | Fixture B: profiles the schema rejects (verification off, a credential value, no topic, a WebSocket path on TCP, QoS above 0, a publish topic). |
 | `fixtures/C-connect-refuse-reconnect.json` | Fixture C: connect, a topic the broker refuses, an authorisation error, a reconnect. |
+| `fixtures/D-ingester-buffer.json` | Fixture D: the receive bound, a full buffer and an unavailable archive, counted. |
 
 `npm test` in `contracts/` validates every schema and fixture, replays the rules of fixture C, and fails on a schema or fixture file this README does not reference.
 
@@ -52,6 +54,12 @@ A profile is one source. Its `name` is the **source identity** carried by every 
 - A **retained** message (the broker's stored copy, delivered at subscribe time) is captured and flagged `retained`, never dropped at capture. It may be old, so downstream MUST NOT treat it as a live observation. **(observed: stored flagged, then skipped by normalization.)**
 - The ingester does not inspect, parse or validate payloads.
 
+**The receive bound.** An ingester MUST bound what one message can make it hold, because a broker may send any size MQTT allows (256 MB in MQTT 3.1.1):
+- Over MQTT 5, it SHOULD set the CONNECT property Maximum Packet Size, so the broker never sends it a larger packet.
+- In any case it measures each payload on receipt. One over its bound, `max_receive_bytes`, is handed on as a stub, with its size and content hash only (the [raw capture append](../../raw-capture/v1/README.md), section 2), and counted `oversize`. Its bytes are not held past the hash.
+
+**The buffer.** Captures wait for the archive in a buffer of a fixed bound. One that arrives while the buffer is full is lost and counted `shed`, never by the archive. The network thread never waits on the archive.
+
 ## 5. Status
 
 `schemas/status.schema.json`: per profile, `state` is `unknown`, `connecting`, `connected`, `disconnected` or `error`.
@@ -60,6 +68,10 @@ A profile is one source. Its `name` is the **source identity** carried by every 
 - `last_connected_at` changes only on a successful connect.
 - `subscribed` and `refused` are the SUBACK's outcome.
 - A failed authorisation is an `error` with the broker's reason. **(observed: it arrives as a nonzero CONNACK code.)**
+
+## 5a. The ingester's counters
+
+`schemas/ingester.schema.json`, across all profiles: `received` (every message, counted on arrival), `handed_on` (captures the archive answered `available` for), `buffered` and `oldest_buffered_ms` (levels), `bound`, `shed` and `oversize`. At every instant `received` = `handed_on` + `buffered` + `shed`. This is where the lag before the archive shows; an archive that accepts at its commit reports `buffered` 0.
 
 ## 6. Fixture C's rules
 
@@ -70,13 +82,16 @@ The validator replays fixture C and checks:
 - `last_connected_at` moves only on a successful connect;
 - `subscribed` and `refused` equal the SUBACK's `granted` and `refused`.
 
+And it replays fixture D's events, a message of a given size or an append's answer, against section 4's receive bound and buffer, and checks the counters after each, with the identity of section 5a.
+
 ## 7. Out of scope
 
 Device-control traffic and the Connector transport each have their own profiles. Payload formats, normalization, deduplication and decryption are downstream.
 
 ## 8. Gaps in the observed implementation
 
-- No payload size limit at receive time. A conforming ingester SHOULD bound the message size it accepts and count what it refuses; the bound is not yet set.
+- No receive bound (section 4): a message of any size is held and stored whole.
 - No reconnect counter.
+- No buffer of its own with a bound and a `shed` count: a full in-memory buffer writes through on the receiving thread.
 - Topics a broker refuses are not reported per topic.
 - Certificate verification has no override (as the contract wants), but there is also no per-profile CA file.

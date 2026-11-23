@@ -2,15 +2,71 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "raw-capture/v1/capture",
   "title": "One raw capture",
-  "description": "One message as received: who it came from, where, when, and its bytes unchanged.",
+  "description": "One message as received: who it came from, where, when, and its bytes unchanged, or, when its producer bounded what it keeps, their size and content hash.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["source", "topic", "payload_b64", "retained", "received_at"],
+  "required": [
+    "source",
+    "topic",
+    "retained",
+    "received_at"
+  ],
   "properties": {
-    "source": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,62}$", "description": "The source identity (the subscription profile's name, or the device path's own)." },
-    "topic": { "type": "string", "minLength": 1, "maxLength": 512 },
-    "payload_b64": { "type": "string", "contentEncoding": "base64", "pattern": "^[A-Za-z0-9+/]*={0,2}$", "description": "The payload bytes exactly as received, base64." },
-    "retained": { "type": "boolean", "description": "The broker's retained copy, delivered at subscribe: stored, flagged, never treated as live." },
-    "received_at": { "type": "string", "pattern": "^\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\d\\.\\d{3}Z$", "description": "The receiver's clock at arrival, UTC, milliseconds. Not the observation time a payload may carry." }
-  }
+    "source": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,62}$",
+      "description": "The source identity (the subscription profile's name, or the device path's own)."
+    },
+    "topic": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "payload_b64": {
+      "type": "string",
+      "contentEncoding": "base64",
+      "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+      "description": "The payload bytes exactly as received, base64."
+    },
+    "retained": {
+      "type": "boolean",
+      "description": "The broker's retained copy, delivered at subscribe: stored, flagged, never treated as live."
+    },
+    "received_at": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\d\\.\\d{3}Z$",
+      "description": "The receiver's clock at arrival, UTC, milliseconds. Not the observation time a payload may carry."
+    },
+    "stub": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "size",
+        "content_hash"
+      ],
+      "description": "A capture its producer did not keep the bytes of, because the payload was over the producer's receive bound: its size and content hash (section 2).",
+      "properties": {
+        "size": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "content_hash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    }
+  },
+  "oneOf": [
+    {
+      "required": [
+        "payload_b64"
+      ]
+    },
+    {
+      "required": [
+        "stub"
+      ]
+    }
+  ]
 }

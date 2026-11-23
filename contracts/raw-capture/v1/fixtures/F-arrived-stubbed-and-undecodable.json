@@ -1,0 +1,11 @@
+{
+  "fixture": "F", "title": "A capture that arrives as a stub, an undecodable payload and a topic with no UTF-8 encoding", "kind": "append",
+  "limits": { "max_payload_bytes": 65536 },
+  "request": { "batch_id": "f-1", "captures": [
+    { "source": "open-feed", "topic": "packets/obs-9", "stub": { "size": 300000, "content_hash": "4f3c2a1b00000000000000000000000000000000000000000000000000c0ffee" }, "retained": false, "received_at": "2026-01-01T00:00:05.000Z" },
+    { "source": "own-broker", "topic": "meshcore/AB12/obs-1/packets", "payload_b64": "YQ", "retained": false, "received_at": "2026-01-01T00:00:05.100Z" },
+    { "source": "own-broker", "topic": "meshcore/AB12/\ud800/packets", "payload_b64": "eyJyYXciOiIxNTAwYWEifQ==", "retained": false, "received_at": "2026-01-01T00:00:05.200Z" },
+    { "source": "own-broker", "topic": "meshcore/AB12/obs-1/packets", "payload_b64": "eyJyYXciOiIxNTAwYWEifQ==", "retained": false, "received_at": "2026-01-01T00:00:05.300Z" }
+  ] },
+  "result": { "batch_id": "f-1", "storage": "available", "committed": 2, "rejected": [ { "index": 1, "reason": "malformed" }, { "index": 2, "reason": "malformed" } ], "stubbed": [0] }
+}

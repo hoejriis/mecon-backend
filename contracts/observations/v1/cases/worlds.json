@@ -3,11 +3,10 @@
   "synthetic": true,
   "worlds": {
     "two-fleets-observed": {
-      "description": "Two fleets, each with its own observers, plus one observer of an approved public source. Every name, address and position is made up; positions are open ocean. Each case starts from a fresh copy of this world. `ago_s` is how many seconds before the case starts a reception was received; each reception's `rssi` is unique in the world, so a case can tell receptions apart without comparing opaque ids across callers. A user's `observations` is the grant `GET /session` reports as `capabilities.observations`: `available` unless the user says otherwise. The `east` fleet has no observers.",
+      "description": "Two fleets, each with its own observers, plus one observer of an approved public source. Every name, address and position is made up; positions are open ocean. Each case starts from a fresh copy of this world. `ago_s` is how many seconds before the case starts a reception was received; each reception's `rssi` is unique in the world, so a case can tell receptions apart without comparing opaque ids across callers. A user's `observations` is the grant `GET /session` reports as `capabilities.observations`: `available` unless the user says otherwise.",
       "fleets": [
         "north",
-        "south",
-        "east"
+        "south"
       ],
       "users": {
         "alice": {
@@ -25,11 +24,6 @@
           "display_name": "Dora (synthetic)",
           "fleet": "north",
           "observations": "forbidden"
-        },
-        "erin": {
-          "email": "erin@example.test",
-          "display_name": "Erin (synthetic)",
-          "fleet": "east"
         }
       },
       "observers": {
@@ -104,6 +98,22 @@
           "snr": 1.5
         }
       ]
+    },
+    "unobserved": {
+      "description": "One fleet, no observer of its own and no approved public source either: nothing anyone may observe. Every name and address is made up.",
+      "fleets": [
+        "east"
+      ],
+      "users": {
+        "erin": {
+          "email": "erin@example.test",
+          "display_name": "Erin (synthetic)",
+          "fleet": "east"
+        }
+      },
+      "observers": {},
+      "packets": {},
+      "receptions": []
     }
   },
   "actions": {

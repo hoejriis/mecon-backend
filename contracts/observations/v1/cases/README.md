@@ -7,7 +7,7 @@ The format and the replay rules are the Reader API's, in [`../../../reader-api/v
 ## Files
 
 - `cases.schema.json`: the shape of a case file.
-- `worlds.json`: the world the cases start from (fleets, users, observers, packets and receptions), and the runner actions a case may take.
+- `worlds.json`: the worlds the cases start from (fleets, users, observers, packets and receptions), and the runner actions a case may take. `two-fleets-observed` is the main one; `unobserved` has nothing anyone may observe, not even an approved public source, which every member may otherwise see.
 - `observations.json`: the cases.
 
 ## What the world needs from a Backend
@@ -27,6 +27,6 @@ The format and the replay rules are the Reader API's, in [`../../../reader-api/v
 - Cursors that are no cursor, `Last-Event-ID` winning over the query, and cursors moved out of retention.
 - A stream continuing from a snapshot's cursor.
 - A session ended on the server.
-- A user without the grant: 403 from every operation. A user whose fleet has no observer: 200 and empty, never 403.
+- A user without the grant: 403 from every operation. A user with the grant and nothing to see: 200 and empty, never 403.
 
 **Not covered yet:** a stream's `access_revoked` while open, `resync_required`, the heartbeat and freshness states. They need a runner that holds a stream open across an action, or a clock it controls.

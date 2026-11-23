@@ -1,6 +1,6 @@
 # MECON Reader backend (facade)
 
-A public implementation of the Reader API ([`contracts/reader-api/v1`](../contracts/reader-api/v1/openapi.yaml)): a Starlette app that serves the HTTP side of the contract and hands everything else to a core through two ports. It is groundwork. There are no real adapters yet, it is not deployed anywhere, and nothing in production depends on it.
+A public implementation of the Reader API ([`contracts/reader-api/v1`](../contracts/reader-api/v1/openapi.yaml)): a Starlette app that serves the HTTP side of the contract and hands everything else to a core through two ports. It also serves the authorized observation projection ([`contracts/observations/v1`](../contracts/observations/v1/openapi.yaml), see below). It is groundwork. There are no real adapters for the session and core ports yet, it is not deployed anywhere, and nothing in production depends on it.
 
 ## What the facade owns
 
@@ -42,6 +42,16 @@ A public implementation of the Reader API ([`contracts/reader-api/v1`](../contra
 
 Read answers are cached for at most `lookup_cache_s` (5 s), never past the caller's expiry, never across a revocation the facade has heard of, and only while the revocation feed is up. An answer is not cached if a revocation arrived while its lookup ran. The cache holds at most `lookup_cache_max` entries (10,000): an insert prunes timed-out entries from the oldest end, then evicts the oldest while full. Logout drops the entry at once.
 
+## Observations
+
+[`observations.py`](src/mecon_reader_backend/observations.py) mounts `GET /observers`, `GET /snapshot` and `GET /events` (SSE) at `/api/observations/v1/authorized`, in the same app. They share the session resolver, the session cookie and the error body. They are GET only, so there is no CSRF token. `create_app(lookup, core, config, observation_scope=, reception_store=)` mounts them; without both ports the routes do not exist.
+
+- **Access** comes from the resolved session's `capabilities.observations`: `forbidden` is 403 `forbidden` on all three operations, `unavailable` (or a scope or store that cannot answer) is 503 `unavailable`, retryable, and a caller who may observe but sees nothing gets 200 with an empty list or snapshot and a stream of heartbeats only. The grant is read on every request and every stream reconnect (a session answer may come from the 5 s read cache; a revocation drops it at once).
+- **Scope** never comes from capabilities and the facade never computes or widens it. `ObservationScope.visible_observers(caller)` is a core call: the observers the caller may see, each with its provenance (`own_fleet`, `shared_fleet`, `approved_public_source`) and how precisely its location may be shown (none: withheld). It is asked again on every request and on every read of an open stream. `ReceptionStore` answers only for the observers it was handed.
+- **The store.** [`fakes/observations.py`](src/mecon_reader_backend/fakes/observations.py) is the in-memory adapter for the cases. [`sqlite_receptions.py`](src/mecon_reader_backend/sqlite_receptions.py) reads the processor's SQLite store (`processing/`) on read-only connections: observer ids and reception ids are keyed hashes, the packet correlation id is a keyed hash bound to the caller (never the packet hash), cursors are bound to the caller, `rssi` is rounded and null outside -200..0, `transport` is `mqtt`, `packet_kind` is mapped from the packet type, and no hash, hop count, route type or transmitter position is ever read into a response. Labels and positions come from an `ObserverDirectory` the deployment supplies. There is no real `ObservationScope` yet: only the fake in tests.
+- **The stream** sends `id:` = `event_id` and one `ObservationEvent` per `data:` line, the held backlog first, then a heartbeat comment at least every `heartbeat_s` (25 s by default) while idle. `Last-Event-ID` wins over `?cursor=`. A malformed, foreign or out-of-retention cursor is 410 `cursor_expired` before the stream starts. When the session is revoked it sends one `access_revoked` and closes; when a read finds the cursor gone it sends `resync_required` and closes. The control events' ids are never cursors, so resuming from one is a 410.
+- List and snapshot answers carry `Cache-Control: no-store`.
+
 ## Fake adapters
 
 [`fakes/`](src/mecon_reader_backend/fakes/) builds an in-memory world from a `worlds.json` description and implements both ports over it: users, fleets, devices, identities, contacts, channels, messages, read marks, the two switches, send attempts, events and their retention, and Ed25519 lease keys that can be rotated and revoked. A lease is signed as `LeaseToken` describes. The fakes exist for the tests and for poking at the API locally. They are not an implementation of the core.
@@ -51,8 +61,8 @@ Read answers are cached for at most `lookup_cache_s` (5 s), never past the calle
 ```sh
 cd reader-backend
 pip install --require-hashes --no-deps -r requirements-dev.lock
-python -m pytest -q                 # cases, facade rules, guards, validator cross-check
-python scripts/mutation.py          # mutants on the facade's own rules; every one must be killed
+python -m pytest -q                 # Reader API and observation cases, facade rules, SQLite store, guards, validator cross-check
+python scripts/mutation.py          # mutants on the facade's own rules and the observation scope filters; every one must be killed
 PYTHONPATH=src python -m mecon_reader_backend --world ../contracts/reader-api/v1/cases/worlds.json --port 8787 --origin http://127.0.0.1:8787
 ```
 
@@ -60,13 +70,15 @@ The last command serves the synthetic world on the loopback address only. Logins
 
 ## What CI proves, and what it does not
 
-The `reader-backend` workflow replays every published case from `contracts/reader-api/v1/cases`, read in place and never copied, against this app with the fake adapters. One pytest item runs per case id. A case whose action the implementation cannot express would be skipped as not applicable; none is. The workflow also runs:
+The `reader-backend` workflow replays every published case from `contracts/reader-api/v1/cases` and `contracts/observations/v1/cases`, read in place and never copied, against this app with the fake adapters (one runner, parameterised by contract). One pytest item runs per case id. A case whose action the implementation cannot express would be skipped as not applicable; none is. The workflow also runs:
 
 - unit tests of the facade's own rules;
 - guard tests: the case count equals the files, every operation is exercised, every world action is mapped, and the routes and declared statuses match the OpenAPI;
 - a cross-check of the hand-written validators against the OpenAPI schemas;
 - a self-test showing that the runner fails a case whose expectation is not met;
 - the mutation check.
+
+The observation cases do not cover a stream's `access_revoked` while open, `resync_required`, the heartbeat or the freshness states; this package's own tests do, but the cases do not pin them for another implementation.
 
 It does **not** prove isolation. The isolation cases (another fleet's devices, contacts, channels, conversations, attempts and events) pass here only because the fake core scopes correctly, and the facade does no scoping at all. The real proof is the core passing the same cases, and later this facade passing them on real adapters. CI also does not prove:
 

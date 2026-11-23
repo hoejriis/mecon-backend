@@ -15,7 +15,7 @@ from starlette.responses import JSONResponse, Response, StreamingResponse
 from starlette.routing import Route
 
 from . import validation as v
-from .ports import Caller, CoreError, Denied, Page, ReaderCore, SessionLookup
+from .ports import Caller, CoreError, Denied, ObservationScope, Page, ReaderCore, ReceptionStore, SessionLookup
 from .sessions import SessionResolver
 from .sse import event_stream
 
@@ -58,6 +58,7 @@ class FacadeConfig:
     login_origin_precheck: bool = True  # the core checks the login Origin on its own either way
     contract_version: str = CONTRACT_VERSION
     heartbeat_s: float = 25.0
+    observation_poll_s: float = 1.0  # how often an open observation stream reads and re-asks the scope
     lookup_cache_s: float = 5.0
     lookup_cache_max: int = 10_000
     lookup_timeout_s: float = 2.0
@@ -115,7 +116,10 @@ def _page(p: Page) -> dict[str, Any]:
     return {"items": p.items, "next_cursor": p.next_cursor, "as_of": iso(p.as_of)}
 
 
-def create_app(lookup: SessionLookup, core: ReaderCore, config: FacadeConfig | None = None) -> Starlette:
+def create_app(lookup: SessionLookup, core: ReaderCore, config: FacadeConfig | None = None, *,
+               observation_scope: ObservationScope | None = None,
+               reception_store: ReceptionStore | None = None) -> Starlette:
+    """The Reader API app. Given both observation ports it also serves contracts/observations/v1."""
     cfg = config or FacadeConfig()
     sessions = SessionResolver(lookup, cache_s=cfg.lookup_cache_s, cache_max=cfg.lookup_cache_max, timeout_s=cfg.lookup_timeout_s,
                                feed_retry_s=cfg.feed_retry_s)
@@ -341,6 +345,16 @@ def create_app(lookup: SessionLookup, core: ReaderCore, config: FacadeConfig | N
         ("/leases/keys", "GET", "listLeaseKeys", list_lease_keys),
     ]
     routes = [Route(PREFIX + path, endpoint(op, fn), methods=[method], name=op) for path, method, op, fn in table]
+    operations = {op: (method, PREFIX + path) for path, method, op, _ in table}
+    if (observation_scope is None) != (reception_store is None):
+        raise ValueError("observations need both ports: an ObservationScope and a ReceptionStore")
+    if observation_scope is not None and reception_store is not None:
+        from . import observations as obs
+
+        routes += obs.observation_routes(authenticate, sessions, observation_scope, reception_store,
+                                         heartbeat_s=cfg.heartbeat_s, poll_s=cfg.observation_poll_s,
+                                         core_timeout_s=cfg.core_timeout_s, feed_down_close_s=cfg.feed_down_close_s,
+                                         cookie_name=COOKIE)
 
     async def not_found(request: Request, exc: Exception) -> Response:
         status = getattr(exc, "status_code", 404)
@@ -350,5 +364,7 @@ def create_app(lookup: SessionLookup, core: ReaderCore, config: FacadeConfig | N
     app = Starlette(routes=routes, exception_handlers={404: not_found, 405: not_found})
     app.state.sessions = sessions
     app.state.config = cfg
-    app.state.operations = {op: (method, PREFIX + path) for path, method, op, _ in table}
+    app.state.operations = operations
+    if observation_scope is not None:
+        app.state.observation_operations = {r.name: ("GET", r.path) for r in routes[len(table):]}
     return app

@@ -14,11 +14,11 @@ class FakeSessionLookup:
         self.world = world
         self.unavailable = False  # tests flip this to model a lookup that cannot answer
 
-    def capabilities(self) -> dict[str, str]:
+    def capabilities(self, user) -> dict[str, str]:
         w = self.world
         return {"devices": "available", "messaging": "available",
                 "send": "available" if w.switches.get("sending") == "on" else "unavailable",
-                "events": "available", "observations": "unavailable"}
+                "events": "available", "observations": user.observations if w.observes else "unavailable"}
 
     async def resolve(self, credential: str, purpose: str, *, csrf_token: str | None = None,
                       origin: str | None = None) -> Union[Caller, Denied]:
@@ -40,7 +40,7 @@ class FakeSessionLookup:
         u = self.world.users[s.user]
         return Caller(session_ref=self.world.session_ref(s), user_id=u.id, display_name=u.display_name,
                       role="instance_admin" if u.role == "instance_admin" else "user", break_glass=False,
-                      capabilities=self.capabilities(), expires_at=s.expires_at, csrf_token=expected)
+                      capabilities=self.capabilities(u), expires_at=s.expires_at, csrf_token=expected)
 
     async def revocations(self) -> AsyncIterator[Union[Subscribed, Revocation]]:
         q: asyncio.Queue = asyncio.Queue()

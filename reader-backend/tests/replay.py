@@ -12,8 +12,9 @@ import base64
 import json
 import pathlib
 import re
+from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any
+from typing import Any, Callable
 from urllib.parse import quote, urlencode
 
 import httpx
@@ -26,12 +27,10 @@ from referencing.jsonschema import DRAFT202012
 
 from mecon_reader_backend import FacadeConfig, create_app
 from mecon_reader_backend.app import COOKIE, PREFIX
-from mecon_reader_backend.fakes import build
+from mecon_reader_backend.fakes import build, build_observations
+from mecon_reader_backend.observations import PREFIX as OBS_PREFIX
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
-CONTRACT = REPO / "contracts" / "reader-api" / "v1"
-CASES_DIR = CONTRACT / "cases"
-CASE_FILES = ("session", "devices", "messaging", "send", "events", "leases")
 BASE = "https://reader.example.test"
 SAME_ORIGIN = BASE
 FOREIGN_ORIGIN = "https://foreign.example.test"
@@ -47,45 +46,77 @@ class NotApplicable(Exception):
     pass
 
 
-def load_openapi() -> dict:
-    return yaml.safe_load((CONTRACT / "openapi.yaml").read_text(encoding="utf-8"))
+@dataclass
+class Contract:
+    """One published contract the runner replays: its OpenAPI document, cases directory and case files, the URL
+    prefix its operations are served under, the world actions it maps, and how to build a world behind the app."""
+
+    name: str
+    root: pathlib.Path
+    case_files: tuple[str, ...]
+    prefix: str
+    actions: tuple[str, ...]
+    build: Callable[[dict], tuple[Any, Any, Any, dict]]  # world description -> (world, lookup, core, create_app kwargs)
+    cases_dir: pathlib.Path = field(init=False)
+    openapi: dict = field(init=False)
+    worlds: dict = field(init=False)
+    ops: dict[str, dict] = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.cases_dir = self.root / "cases"
+        self.openapi = yaml.safe_load((self.root / "openapi.yaml").read_text(encoding="utf-8"))
+        self.worlds = json.loads((self.cases_dir / "worlds.json").read_text(encoding="utf-8"))
+        self._registry = Registry().with_resource(
+            f"urn:{self.name}", Resource.from_contents(self.openapi, default_specification=DRAFT202012))
+        self.ops = self.operations()
+
+    def schema_validator(self, name: str) -> Draft202012Validator:
+        return Draft202012Validator({"$ref": f"urn:{self.name}#/components/schemas/{name}"}, registry=self._registry,
+                                    format_checker=Draft202012Validator.FORMAT_CHECKER)
+
+    def operations(self) -> dict[str, dict]:
+        """operationId -> {method, path, csrf, statuses}."""
+        out = {}
+        for path, item in self.openapi["paths"].items():
+            for method, op in item.items():
+                params = op.get("parameters", [])
+                csrf = any(p.get("$ref", "").endswith("/Csrf") or p.get("name") == "X-CSRF-Token" for p in params)
+                out[op["operationId"]] = {"method": method.upper(), "path": path, "csrf": csrf,
+                                          "statuses": {int(s) for s in op["responses"]}}
+        return out
+
+    def streams(self) -> set[str]:
+        """The operations whose 200 is a server-sent event stream."""
+        return {op_id for path, item in self.openapi["paths"].items() for op in item.values()
+                for op_id in [op["operationId"]]
+                if "text/event-stream" in op["responses"].get("200", {}).get("content", {})}
+
+    def load_cases(self) -> list[tuple[str, dict]]:
+        cases = []
+        for f in self.case_files:
+            doc = json.loads((self.cases_dir / f"{f}.json").read_text(encoding="utf-8"))
+            cases += [(f, c) for c in doc["cases"]]
+        return cases
+
+    def case_files_on_disk(self) -> list[str]:
+        return sorted(p.stem for p in self.cases_dir.glob("*.json") if p.stem not in ("worlds", "cases.schema"))
 
 
-OPENAPI = load_openapi()
-WORLDS = json.loads((CASES_DIR / "worlds.json").read_text(encoding="utf-8"))
-_REGISTRY = Registry().with_resource("urn:reader-api", Resource.from_contents(OPENAPI, default_specification=DRAFT202012))
+READER = Contract("reader-api", REPO / "contracts" / "reader-api" / "v1",
+                  ("session", "devices", "messaging", "send", "events", "leases"), PREFIX,
+                  ("sign-in", "approve-login", "set-switch", "events-checkpoint", "age-out-events",
+                   "rotate-lease-key", "revoke-lease-keys", "end-session", "session-authority-down",
+                   "session-authority-up"),
+                  lambda desc: (*build(desc), {}))
+OBSERVATIONS = Contract("mecon-observations", REPO / "contracts" / "observations" / "v1", ("observations",),
+                        OBS_PREFIX, ("sign-in", "end-session", "add-reception", "age-out-events"),
+                        build_observations)
 
-
-def schema_validator(name: str) -> Draft202012Validator:
-    return Draft202012Validator({"$ref": f"urn:reader-api#/components/schemas/{name}"}, registry=_REGISTRY,
-                                format_checker=Draft202012Validator.FORMAT_CHECKER)
-
-
-def operations() -> dict[str, dict]:
-    """operationId -> {method, path, csrf, statuses}."""
-    out = {}
-    for path, item in OPENAPI["paths"].items():
-        for method, op in item.items():
-            params = op.get("parameters", [])
-            csrf = any(p.get("$ref", "").endswith("/Csrf") or p.get("name") == "X-CSRF-Token" for p in params)
-            out[op["operationId"]] = {"method": method.upper(), "path": path, "csrf": csrf,
-                                      "statuses": {int(s) for s in op["responses"]}}
-    return out
-
-
-OPS = operations()
-
-
-def load_cases() -> list[tuple[str, dict]]:
-    cases = []
-    for f in CASE_FILES:
-        doc = json.loads((CASES_DIR / f"{f}.json").read_text(encoding="utf-8"))
-        cases += [(f, c) for c in doc["cases"]]
-    return cases
-
-
-def case_files_on_disk() -> list[str]:
-    return sorted(p.stem for p in CASES_DIR.glob("*.json") if p.stem not in ("worlds", "cases.schema"))
+# The Reader API's names, kept for the tests written before the runner took a contract.
+CONTRACT, CASES_DIR, CASE_FILES = READER.root, READER.cases_dir, READER.case_files
+OPENAPI, WORLDS, OPS = READER.openapi, READER.worlds, READER.ops
+schema_validator = READER.schema_validator
+load_cases, case_files_on_disk = READER.load_cases, READER.case_files_on_disk
 
 
 # ---- JSON pointers ----
@@ -119,12 +150,14 @@ def b64u_decode(s: str) -> bytes:
 # ---- the replay ----
 
 class Replay:
-    def __init__(self, case: dict, *, config: FacadeConfig | None = None, stream_bound_s: float = 2.0):
+    def __init__(self, case: dict, *, contract: Contract = READER, config: FacadeConfig | None = None,
+                 stream_bound_s: float = 2.0):
         self.case = case
-        desc = WORLDS["worlds"][case["world"]]
-        self.world, self.lookup, self.core = build(desc)
+        self.contract = contract
+        desc = contract.worlds["worlds"][case["world"]]
+        self.world, self.lookup, self.core, ports = contract.build(desc)
         self.world.reader_origins = (SAME_ORIGIN,)
-        self.app = create_app(self.lookup, self.core, config or FacadeConfig(reader_origins=(SAME_ORIGIN,)))
+        self.app = create_app(self.lookup, self.core, config or FacadeConfig(reader_origins=(SAME_ORIGIN,)), **ports)
         self.captures: dict[str, Any] = {}
         self.clients: dict[str, httpx.AsyncClient] = {}
         self.stream_bound_s = stream_bound_s
@@ -155,14 +188,12 @@ class Replay:
     def fail(self, step: int, msg: str) -> None:
         raise CaseFailed(f"{self.case['id']} step {step}: {msg}\n" + "\n".join(self.log[-6:]))
 
-    # actions
-    ACTIONS = ("sign-in", "approve-login", "set-switch", "events-checkpoint", "age-out-events",
-               "rotate-lease-key", "revoke-lease-keys", "end-session", "session-authority-down",
-               "session-authority-up")
-
+    # actions (each contract names the ones it maps: Contract.actions)
     def act(self, step: dict) -> None:
         name, args = step["action"], self.sub(step.get("args", {}))
         w = self.world
+        if name not in self.contract.actions:
+            raise NotApplicable(f"action {name} is not mapped for {self.contract.name}")
         if name == "sign-in":
             s = w.mint_session(args["user"])
             c = self.client(args["client"])
@@ -175,6 +206,8 @@ class Replay:
             w.switches[args["switch"]] = args["value"]
         elif name == "events-checkpoint":
             self.captures[step["capture"]] = self.core.checkpoint()
+        elif name == "add-reception":
+            w.add_reception(args["observer"], args["packet"], args["rssi"])
         elif name == "age-out-events":
             w.age_out()
         elif name == "rotate-lease-key":
@@ -211,7 +244,7 @@ class Replay:
     async def request(self, i: int, step: dict) -> None:
         req = step["request"]
         op_id = req["operation"]
-        op = OPS[op_id]
+        op = self.contract.ops[op_id]
         self.operations_seen.add(op_id)
         anon = "as" not in step
         client = self.client(step.get("as"))
@@ -219,7 +252,7 @@ class Replay:
             path = op["path"]
             for k, val in (req.get("path") or {}).items():
                 path = path.replace("{" + k + "}", quote(str(self.sub(val)), safe=""))
-            url = PREFIX + path
+            url = self.contract.prefix + path
             query = {k: str(self.sub(x)) for k, x in (req.get("query") or {}).items()}
             if query:
                 url += "?" + urlencode(query)
@@ -245,10 +278,10 @@ class Replay:
                 content = json.dumps(self.sub(req["body"])).encode()
                 headers["Content-Type"] = "application/json"
             expect = step["expect"]
-            if op_id == "streamEvents":
+            if op_id in self.contract.streams():
                 status, resp_headers, raw = await self.stream(client, url, headers)
                 self.log.append(f"{op_id} {url} -> {status}")
-                await self.check_stream(i, expect, status, resp_headers, raw)
+                await self.check_stream(i, op, expect, status, resp_headers, raw)
                 body = None
             else:
                 r = await client.request(op["method"], url, headers=headers, content=content)
@@ -295,7 +328,7 @@ class Replay:
                 body = json.loads(raw)
             except ValueError:
                 self.fail(i, f"body is not JSON: {raw[:100]!r}")
-            errs = sorted(schema_validator(expect["schema"]).iter_errors(body), key=str)
+            errs = sorted(self.contract.schema_validator(expect["schema"]).iter_errors(body), key=str)
             if errs:
                 self.fail(i, f"body fails {expect['schema']}: {errs[0].message}")
         self.check_headers(i, expect, headers)
@@ -320,18 +353,18 @@ class Replay:
         if "at_least" in m and n < m["at_least"]:
             self.fail(i, f"match {where} counts {n}, expected at least {m['at_least']}")
 
-    async def check_stream(self, i: int, expect: dict, status: int, headers, raw: bytes) -> None:
+    async def check_stream(self, i: int, op: dict, expect: dict, status: int, headers, raw: bytes) -> None:
         if status != expect["status"]:
             self.fail(i, f"status {status}, expected {expect['status']}")
         if status != 200:
-            self.check(i, OPS["streamEvents"], expect, status, headers, raw)
+            self.check(i, op, expect, status, headers, raw)
             return
         self.check_headers(i, expect, headers)
         ctype = headers.get("content-type", "")
         if not ctype.startswith("text/event-stream"):
             self.fail(i, f"content-type {ctype!r}")
         frames = parse_sse(raw)
-        val = schema_validator(expect["schema"])
+        val = self.contract.schema_validator(expect["schema"])
         for f in frames:
             errs = list(val.iter_errors(f))
             if errs:
@@ -358,7 +391,7 @@ class Replay:
         except InvalidSignature:
             self.fail(i, "lease signature does not verify")
         payload = json.loads(payload_bytes)
-        errs = list(schema_validator("LeasePayload").iter_errors(payload))
+        errs = list(self.contract.schema_validator("LeasePayload").iter_errors(payload))
         if errs:
             self.fail(i, f"lease payload fails LeasePayload: {errs[0].message}")
         if "user_id" in rule and payload["user_id"] != rule["user_id"]:

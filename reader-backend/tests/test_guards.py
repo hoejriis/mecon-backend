@@ -3,7 +3,7 @@ import asyncio
 import json
 
 from mecon_reader_backend.app import DECLARED, PREFIX
-from replay import CASE_FILES, CASES_DIR, OPS, WORLDS, Replay, case_files_on_disk, load_cases
+from replay import CASE_FILES, CASES_DIR, OPS, READER, WORLDS, case_files_on_disk, load_cases
 
 from mecon_reader_backend import create_app
 from mecon_reader_backend.fakes import build
@@ -29,7 +29,7 @@ def test_every_world_action_is_mapped():
     declared = set(WORLDS["actions"])
     used = {s["action"] for _, c in load_cases() for s in c["steps"] if "action" in s}
     assert used <= declared
-    assert declared == set(Replay.ACTIONS)
+    assert declared == set(READER.actions)
 
 
 def test_every_case_world_exists():

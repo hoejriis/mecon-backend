@@ -41,6 +41,7 @@ class User:
     devices: list[str]
     identities: list[str]
     role: str = "user"
+    observations: str = "available"  # the grant GET /session reports as capabilities.observations
 
 
 @dataclass
@@ -92,6 +93,16 @@ class Event:
 
 
 @dataclass
+class ObsReception:
+    seq: int  # the reception's position: the observation cursor is made from it
+    observer: str
+    packet: str
+    received_at: datetime
+    rssi: int
+    snr: float
+
+
+@dataclass
 class LeaseKey:
     key_id: str
     private: Any
@@ -123,6 +134,13 @@ class World:
     retention_floor: int = 0
     lease_keys: list[LeaseKey] = field(default_factory=list)
     revocation_queues: list[asyncio.Queue] = field(default_factory=list)
+    # Observations (contracts/observations/v1): present in a world that has an "observers" key.
+    observers: dict[str, dict] = field(default_factory=dict)
+    packets: dict[str, dict] = field(default_factory=dict)
+    obs_receptions: list[ObsReception] = field(default_factory=list)
+    obs_seq: int = 0
+    obs_floor: int = 0
+    observes: bool = False
     csrf_secret: bytes = field(default_factory=lambda: secrets.token_bytes(32))
     reader_origins: tuple[str, ...] = ("https://reader.example.test",)
     login_lifetime: timedelta = timedelta(minutes=15)
@@ -136,10 +154,13 @@ class World:
         users = {}
         for name, u in desc["users"].items():
             users[name] = User(name, "usr_" + secrets.token_hex(8), u["email"], u["display_name"], u["fleet"],
-                               list(u["devices"]), list(u["identities"]), u.get("role", "user"))
-        w = cls(fleets=list(desc["fleets"]), users=users, devices=dict(desc["devices"]),
-                identities=dict(desc["identities"]), contacts=dict(desc["contacts"]),
-                channels=dict(desc["channels"]), switches={"sending": "on", "lease_signing": "on"})
+                               list(u.get("devices", [])), list(u.get("identities", [])), u.get("role", "user"),
+                               u.get("observations", "available"))
+        w = cls(fleets=list(desc["fleets"]), users=users, devices=dict(desc.get("devices", {})),
+                identities=dict(desc.get("identities", {})), contacts=dict(desc.get("contacts", {})),
+                channels=dict(desc.get("channels", {})), switches={"sending": "on", "lease_signing": "on"},
+                observers=dict(desc.get("observers", {})), packets=dict(desc.get("packets", {})),
+                observes="observers" in desc)
         for kind, prefix in (("devices", "dev_"), ("identities", "idn_"), ("contacts", "cnt_"), ("channels", "chn_")):
             for name in getattr(w, kind):
                 w.ids[(kind, name)] = prefix + secrets.token_hex(8)
@@ -151,6 +172,10 @@ class World:
             seq = next(w._seq)
             w.messages.append(Message("msg_" + secrets.token_hex(8), seq, m["identity"], key, m["direction"],
                                       m["text"], m.get("sender_label"), at, bool(m.get("read", False))))
+        for name in w.observers:
+            w.ids[("observers", name)] = "obs_" + secrets.token_hex(8)
+        for r in sorted(desc.get("receptions", []), key=lambda r: -r["ago_s"]):  # oldest first
+            w.add_reception(r["observer"], r["packet"], r["rssi"], r.get("snr", 0), ago_s=r["ago_s"])
         w.switches.update(desc.get("switches", {}))
         w.switches.update({"sending": "on", "lease_signing": "on"})  # every case starts with both on
         w.add_lease_key()
@@ -235,6 +260,32 @@ class World:
         self.event_seq += 1
         self.retention_floor = self.event_seq
         self.events = [e for e in self.events if e.seq > self.retention_floor]
+        self.obs_seq += 1
+        self.obs_floor = self.obs_seq
+        self.obs_receptions = [r for r in self.obs_receptions if r.seq > self.obs_floor]
+
+    # ---- observations ----
+
+    def add_reception(self, observer: str, packet: str, rssi: int, snr: float = 0, *, ago_s: float = 0) -> ObsReception:
+        self.obs_seq += 1
+        r = ObsReception(self.obs_seq, observer, packet, now() - timedelta(seconds=ago_s), int(rssi), snr)
+        self.obs_receptions.append(r)
+        return r
+
+    @staticmethod
+    def obs_cursor(seq: int) -> str:
+        return f"obc_{seq:08d}"
+
+    def parse_obs_cursor(self, cursor: str) -> int | None:
+        if not cursor.startswith("obc_"):
+            return None
+        try:
+            seq = int(cursor[4:], 10)
+        except ValueError:
+            return None
+        if seq < self.obs_floor or seq > self.obs_seq:
+            return None
+        return seq
 
     @staticmethod
     def cursor(seq: int) -> str:

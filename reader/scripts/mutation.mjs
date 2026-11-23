@@ -27,7 +27,6 @@ const T = {
   gate: ['src/offline', 'src/device', 'src/messaging'],
   probe: ['src/device'],
 };
-const uniq = (...a) => [...new Set(a.flat())];
 
 /** @type {Array<{id:string, description:string, file:string, edits:Array<[string,string]>, tests:string[]}>} */
 const MUTANTS = [

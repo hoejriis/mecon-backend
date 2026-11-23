@@ -1,0 +1,42 @@
+# MECON observation capture: example configuration. Every value is a placeholder.
+# Validate with:  python -m mecon_capture --check-config --config config.toml
+
+[archive]
+path = "/var/lib/mecon-capture/archive.sqlite3"
+max_payload_bytes = 65536     # a larger payload is stored as a stub (size and hash, no bytes)
+
+[ingester]
+instance_tag = "a"            # 1-8 of [a-z0-9]; unique per ingester instance reading the same broker
+client_id_prefix = "mecon-capture"
+buffer_max = 5000             # captures held in memory; a full buffer counts a capture as dropped
+batch_max = 500               # at most 500 (the contract's bound)
+flush_interval_s = 1.0
+
+[health]
+enabled = true
+bind = "127.0.0.1"
+port = 9470
+
+[log]
+level = "info"
+
+# One [[profile]] per source, exactly as contracts/observation-subscription/v1 profile.schema.json.
+[[profile]]
+name = "own-broker"           # the source identity of every capture from it
+host = "broker.example.test"
+port = 8883
+transport = "tcp"
+topics = ["meshcore/#"]
+adapter = "observer_envelope" # read downstream; capture never parses
+tls = { enabled = true, verify = true }                  # verify is always true
+credential = { username_ref = "OBSERVER_USERNAME", password_ref = "OBSERVER_PASSWORD" }  # variable NAMES
+
+[[profile]]
+name = "feed-wss"
+host = "feed.example.test"
+port = 443
+transport = "websockets"
+ws_path = "/mqtt"
+topics = ["meshcore/+/+/packets", "meshcore/+/+/status"]
+adapter = "observer_envelope"
+tls = { enabled = true, verify = true }

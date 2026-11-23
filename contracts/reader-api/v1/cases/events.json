@@ -1,5 +1,5 @@
 {
-  "contract": "mecon-reader-api/1.0.0-draft.10",
+  "contract": "mecon-reader-api/1.0.0-draft.11",
   "synthetic": true,
   "group": "events",
   "cases": [
@@ -37,6 +37,8 @@
       { "action": "events-checkpoint", "capture": "cp" },
       { "as": "alice", "request": { "operation": "streamEvents", "query": { "cursor": "${old}" }, "headers": { "Last-Event-ID": "${cp}" } }, "expect": { "status": 200, "schema": "EventEnvelope", "stream": {} } } ] },
     { "id": "events-04", "title": "The stream needs a session", "world": "two-fleets", "steps": [
-      { "request": { "operation": "streamEvents" }, "expect": { "status": 401, "schema": "Error", "body": { "/code": "unauthenticated" } } } ] }
+      { "request": { "operation": "streamEvents" }, "expect": { "status": 401, "schema": "Error", "body": { "/code": "unauthenticated" } } } ] },
+    {"id": "events-05", "title": "A session ended on the server cannot open the stream again", "world": "two-fleets", "steps": [{"action": "sign-in", "args": {"client": "alice", "user": "alice"}}, {"as": "alice", "request": {"operation": "streamEvents"}, "expect": {"status": 200, "schema": "EventEnvelope", "stream": {}}}, {"action": "end-session", "args": {"client": "alice"}}, {"as": "alice", "request": {"operation": "streamEvents"}, "expect": {"status": 401, "schema": "Error", "body": {"/code": "unauthenticated"}}}, {"as": "alice", "request": {"operation": "getSession"}, "expect": {"status": 401, "schema": "Error", "body": {"/code": "unauthenticated"}}}]},
+    {"id": "events-06", "title": "A cursor longer than the parameter allows is 422 invalid, not 410", "world": "two-fleets", "steps": [{"action": "sign-in", "args": {"client": "alice", "user": "alice"}}, {"as": "alice", "request": {"operation": "streamEvents", "query": {"cursor": "ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"}}, "expect": {"status": 422, "schema": "Error", "body": {"/code": "invalid", "/retryable": false}}}]}
   ]
 }

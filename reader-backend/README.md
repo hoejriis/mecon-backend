@@ -12,10 +12,10 @@ A public implementation of the Reader API ([`contracts/reader-api/v1`](../contra
 
   Anything else gets 403 `origin_rejected`. The facade's optional pre-check (`login_origin_precheck`) applies the same rule with the same list (`reader_origins`), so it never refuses what the core would accept, and the core's check holds without it.
 - The `Idempotency-Key` rule: the header is required on `POST /send-attempts` and must equal `client_attempt_id`.
-- Validating request bodies, path and query parameters (422 `invalid`). A lease request with a body is refused.
+- Validating request bodies, path and query parameters (422 `invalid`). A `limit` or `cursor` outside its schema is refused, never clamped; a cursor the core did not issue is the core's to refuse (`invalid`). A lease request with a body is refused.
 - Error bodies `{code, message, request_id, retryable}` and mapping each core error to a status the operation declares. A core error whose status the operation does not declare is never passed on: it becomes 404 where the operation has one (forbidden or not found), else 503.
 - `Cache-Control: no-store` on every answer.
-- The event stream: SSE framing (one `id:` and one `data:` line per `EventEnvelope`), `Last-Event-ID` winning over `?cursor=`, 410 `cursor_expired` before the stream starts, a `: heartbeat` comment right after the backlog and then while idle, and closing the stream when its session is revoked.
+- The event stream: SSE framing (one `id:` and one `data:` line per `EventEnvelope`), `Last-Event-ID` winning over `?cursor=`, 410 `cursor_expired` before the stream starts, a `: heartbeat` comment right after the backlog and then while idle, and closing the stream when its session is revoked, after one `session_revoked` envelope (`resource_id` null, no `id:` line).
 - Failing closed on the session lookup. `expired`, `revoked` and `unknown` give 401 and clear the cookie. `core_unavailable`, a timeout, an adapter error or a malformed answer give 503 `unavailable` (retryable) and keep the cookie. A caller whose `expires_at` has passed is refused even when the lookup returned it.
 
 ## Ports

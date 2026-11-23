@@ -37,12 +37,20 @@ export interface EventStreamOptions<E = EventEnvelope> {
   onStatus?(s: StreamStatus): void;
   /** Called when a 401 ends the stream; the caller's sign-out path runs. */
   onUnauthorized?(): void;
+  /**
+   * Kinds that mean the server ended this stream's session (Reader API:
+   * `session_revoked`). The stream stops for good, as on a 401, and
+   * `onSessionRevoked` runs (falling back to `onUnauthorized`).
+   */
+  sessionEndKinds?: readonly string[];
+  onSessionRevoked?(): void;
   deadAfterMs?: number;
 }
 
 /**
  * SSE over fetch + ReadableStream (EventSource hides comment lines). Resumes
- * with Last-Event-ID. 410 drops the cursor and asks for a resync; 401 stops.
+ * with Last-Event-ID. 410 drops the cursor and asks for a resync; 401 and a
+ * `session_revoked` envelope stop it for good.
  * Returns a stop function.
  */
 export function startEventStream<E = EventEnvelope>(o: EventStreamOptions<E>): () => void {
@@ -51,6 +59,7 @@ export function startEventStream<E = EventEnvelope>(o: EventStreamOptions<E>): (
   const parse = (o.parse ?? parseEnvelope) as (d: string) => (E & EnvelopeLike) | null;
   const resyncKinds = o.resyncKinds ?? ['authorization_changed', 'resync_required'];
   const revokedKinds = o.revokedKinds ?? [];
+  const sessionEndKinds = o.sessionEndKinds ?? ['session_revoked'];
   let lastEventId: string | null = null;
   let stopped = false;
 
@@ -107,6 +116,11 @@ export function startEventStream<E = EventEnvelope>(o: EventStreamOptions<E>): (
           if (item.id) lastEventId = item.id;
           const env = parse(item.data);
           if (!env) continue;
+          if (sessionEndKinds.includes(env.kind)) {
+            // Never reconnect with a session the server ended; sign out as on a 401.
+            (o.onSessionRevoked ?? o.onUnauthorized)?.();
+            return 'stop';
+          }
           if (!item.id) lastEventId = env.event_id;
           if (revokedKinds.includes(env.kind)) {
             o.onRevoked?.(env.kind);

@@ -16,7 +16,7 @@ Replayable cases for `../openapi.yaml`. A Backend that claims to serve the Reade
 2. **Clients.** `as` names a client: a cookie jar that persists for the whole case. A step without `as` uses a fresh anonymous client. The `sign-in` action gives a client a session by the implementation's own means, since the magic link is out of band.
 3. **Requests.** Send the `operation` with its `path`, `query`, `headers` and `body`. `${name}` is replaced by an earlier capture: a whole-string value becomes the captured JSON value; inside a path it is the string.
    - **Origin.** `same` sends the Reader's own origin, `foreign` a different one, and `absent` none.
-   - **CSRF.** On operations with an `X-CSRF-Token` parameter, `valid` sends the client's token from `GET /session`, `wrong` a different string of the same length, and `absent` none. A client without a session sends none.
+   - **CSRF.** On operations with an `X-CSRF-Token` parameter, `valid` sends the client's token from `GET /session` (the last one it read, when `GET /session` cannot answer, as during `session-authority-down`), `wrong` a different string of the same length, and `absent` none. A client that has no token to send (it never had a session, or its session ended) sends, for `valid` and `wrong`, a made-up token of valid form instead (`csrf_synthetic_no_session`): a Backend cannot judge it without resolving the session, so the cases pin no order between the CSRF check and session resolution.
 4. **Expectations.**
    - `status` must equal.
    - The body must validate against the component `schema` (none for `null`).
@@ -27,7 +27,10 @@ Replayable cases for `../openapi.yaml`. A Backend that claims to serve the Reade
 6. **Leases.**
    - `lease` decodes `token`, finds its `key_id` in `keys` (a pointer into this response or a capture), and verifies the Ed25519 signature as `LeaseToken` describes.
    - It checks `user_id`, that the lifetime is at most `max_lifetime_s`, and that every identity's operations include or exclude the listed ones.
-7. **Captures.** `capture` stores a value from the response for later steps: a JSON pointer, or `{at, where, field}` for the first matching array item. A capturing action (`events-checkpoint`) stores its result under its `capture` name.
+7. **Session outages and revocations.** `session-authority-down` makes the Backend unable to establish who any session is, until `session-authority-up`. A client's cookie jar applies whatever `Set-Cookie` the Backend sends, so a session that works again afterwards proves no answer during the outage cleared the cookie. `end-session` ends a client's session on the server while the client keeps its cookie.
+8. **Captures.** `capture` stores a value from the response for later steps: a JSON pointer, or `{at, where, field}` for the first matching array item. A capturing action (`events-checkpoint`) stores its result under its `capture` name.
+
+**Not covered yet:** an open stream receiving `session_revoked` when its session is revoked. A case's stream read stops once caught up, so it cannot hold a stream open across an action; `events-05` covers what follows instead (the old session cannot open the stream again). Like the observation cases' `access_revoked`, it needs a runner that holds a stream open across an action. The Reader API document still requires the envelope.
 
 A case whose action the implementation cannot express (for example `lease_signing: absent` on a Backend that always offers leases) is reported as not applicable, never as passed.
 

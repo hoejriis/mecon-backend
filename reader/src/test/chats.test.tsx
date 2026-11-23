@@ -14,6 +14,7 @@ import {
   deepConversation,
   dmConversation,
   dmMessages,
+  envelope,
   identities,
   notFound404,
   olderConversation,
@@ -108,6 +109,23 @@ describe('conversation list', () => {
     b.on('GET /conversations?limit=50', json(fx.error401, 401));
     mount();
     expect(await screen.findByLabelText('Email address')).toBeInTheDocument();
+  });
+});
+
+describe('event stream', () => {
+  it('a session_revoked envelope takes the existing sign-out path and the stream is not reopened', async () => {
+    routes();
+    b.on('GET /session', json(sessionWith({ messaging: 'available', send: 'available', events: 'available' })));
+    b.on('GET /events', () =>
+      new Response(`data: ${JSON.stringify(envelope('session_revoked', 'evc_1'))}\n\n`, {
+        status: 200,
+        headers: { 'Content-Type': 'text/event-stream' },
+      }),
+    );
+    mount();
+    expect(await screen.findByLabelText('Email address')).toBeInTheDocument();
+    await tick(60_000);
+    expect(b.count('GET /events')).toBe(1);
   });
 });
 

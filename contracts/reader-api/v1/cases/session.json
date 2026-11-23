@@ -1,5 +1,5 @@
 {
-  "contract": "mecon-reader-api/1.0.0-draft.10",
+  "contract": "mecon-reader-api/1.0.0-draft.11",
   "synthetic": true,
   "group": "session",
   "cases": [
@@ -50,6 +50,8 @@
       { "action": "sign-in", "args": { "client": "alice", "user": "alice" } },
       { "as": "alice", "request": { "operation": "logout", "origin": "foreign" }, "expect": { "status": 403, "schema": "Error", "body": { "/code": "origin_rejected" } } },
       { "as": "alice", "request": { "operation": "getSession" }, "expect": { "status": 200, "schema": "Session" } } ] },
-    {"id": "session-14", "title": "A login from a foreign Origin is refused", "world": "two-fleets", "steps": [{"request": {"operation": "startLogin", "origin": "foreign", "body": {"email": "alice@example.test"}}, "expect": {"status": 403, "schema": "Error", "body": {"/code": "origin_rejected"}}}]}
+    {"id": "session-14", "title": "A login from a foreign Origin is refused", "world": "two-fleets", "steps": [{"request": {"operation": "startLogin", "origin": "foreign", "body": {"email": "alice@example.test"}}, "expect": {"status": 403, "schema": "Error", "body": {"/code": "origin_rejected"}}}]},
+    {"id": "session-15", "title": "A Backend that cannot resolve the session answers 503 retryable on reads, and the session survives the outage", "world": "two-fleets", "steps": [{"action": "sign-in", "args": {"client": "alice", "user": "alice"}}, {"action": "session-authority-down"}, {"as": "alice", "request": {"operation": "getSession"}, "expect": {"status": 503, "schema": "Error", "body": {"/code": "unavailable", "/retryable": true}}}, {"as": "alice", "request": {"operation": "listConversations"}, "expect": {"status": 503, "schema": "Error", "body": {"/code": "unavailable", "/retryable": true}}}, {"as": "alice", "request": {"operation": "streamEvents"}, "expect": {"status": 503, "schema": "Error", "body": {"/code": "unavailable", "/retryable": true}}}, {"action": "session-authority-up"}, {"as": "alice", "request": {"operation": "getSession"}, "expect": {"status": 200, "schema": "Session"}}]},
+    {"id": "session-16", "title": "A Backend that cannot resolve the session answers 503 retryable on writes, and the session survives the outage", "world": "two-fleets", "steps": [{"action": "sign-in", "args": {"client": "alice", "user": "alice"}}, {"as": "alice", "request": {"operation": "getSession"}, "expect": {"status": 200, "schema": "Session"}}, {"action": "session-authority-down"}, {"as": "alice", "request": {"operation": "logout"}, "expect": {"status": 503, "schema": "Error", "body": {"/code": "unavailable", "/retryable": true}}}, {"as": "alice", "request": {"operation": "createLease"}, "expect": {"status": 503, "schema": "Error", "body": {"/code": "unavailable", "/retryable": true}}}, {"action": "session-authority-up"}, {"as": "alice", "request": {"operation": "getSession"}, "expect": {"status": 200, "schema": "Session"}}, {"as": "alice", "request": {"operation": "logout"}, "expect": {"status": 204, "schema": null}}]}
   ]
 }

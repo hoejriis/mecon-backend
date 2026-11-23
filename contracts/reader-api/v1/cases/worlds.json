@@ -1,5 +1,5 @@
 {
-  "contract": "mecon-reader-api/1.0.0-draft.10",
+  "contract": "mecon-reader-api/1.0.0-draft.11",
   "synthetic": true,
   "worlds": {
     "two-fleets": {
@@ -184,6 +184,20 @@
     "revoke-lease-keys": {
       "args": [],
       "description": "Revoke every lease key recorded so far and activate a new one."
+    },
+    "end-session": {
+      "args": [
+        "client"
+      ],
+      "description": "End `client`'s session on the server, as signing out elsewhere or an operator's revocation would. The client keeps its cookie."
+    },
+    "session-authority-down": {
+      "args": [],
+      "description": "From this step on the Backend cannot establish who any session is: whatever it asks (a session store, a core) is unreachable or times out. Session answers it cached before this step are dropped, as if they had timed out. Sessions themselves are unchanged."
+    },
+    "session-authority-up": {
+      "args": [],
+      "description": "Undo `session-authority-down`: sessions resolve again."
     }
   }
 }

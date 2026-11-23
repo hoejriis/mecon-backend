@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: MECON Reader API
-  version: 1.0.0-draft.10
+  version: 1.0.0-draft.11
   summary: Interface between the MECON Reader and an authorized MECON Backend.
   description: |
     Machine-readable form of docs/READER_API_CONTRACT.md. Target specification,
@@ -20,6 +20,20 @@ info:
     host-only, `Secure`, `HttpOnly` session cookie named `__Host-mecon_session`.
     No bearer tokens, no CORS. State-changing requests carry `X-CSRF-Token`
     (from `GET /session`) and an `Origin` header the Backend allowlists.
+
+    **When the session cannot be resolved.** Every operation that takes the
+    session cookie first establishes who the session belongs to. A Backend
+    that cannot establish it (whatever answers "who is this session" is
+    unreachable, times out or answers nonsense) answers **503 `unavailable`**
+    with `retryable: true` and leaves the cookie alone. It never answers 401
+    for that: 401 means the Backend established that there is no valid
+    session, and the Reader signs out on it. The Reader retries a 503 and
+    keeps the user signed in. Every operation that resolves a session
+    declares this 503.
+
+    A Backend may refuse a request on what it can judge without the session
+    (Origin, request shape) before resolving the session; the cases pin no
+    order between CSRF and session resolution.
   license:
     name: Apache-2.0
     identifier: Apache-2.0
@@ -146,6 +160,7 @@ paths:
                 deviceUser: { externalValue: fixtures/session-device-user.json }
                 noDevices: { externalValue: fixtures/session-no-devices.json }
         '401': { $ref: '#/components/responses/Unauthenticated' }
+        '503': { $ref: '#/components/responses/Unavailable' }
 
   /logout:
     post:
@@ -154,11 +169,17 @@ paths:
       summary: Revoke the current session server-side
       parameters:
         - $ref: '#/components/parameters/Csrf'
+      description: |
+        On 503, or no answer at all, the Reader signs out locally and retries
+        the server-side logout later; until then it does not use the session.
+        It keeps the user signed in only on 403 (`csrf_failed` after one token
+        refetch and retry, or `origin_rejected`).
       responses:
         '204':
           description: Session revoked; cookie cleared
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '503': { $ref: '#/components/responses/Unavailable' }
 
   /devices:
     get:
@@ -179,6 +200,8 @@ paths:
                 empty: { externalValue: fixtures/devices-empty.json }
                 one: { externalValue: fixtures/devices-one.json }
         '401': { $ref: '#/components/responses/Unauthenticated' }
+        '422': { $ref: '#/components/responses/BadQuery' }
+        '503': { $ref: '#/components/responses/Unavailable' }
 
   /identities:
     get:
@@ -194,6 +217,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/IdentityList' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
+        '503': { $ref: '#/components/responses/Unavailable' }
 
   /conversations:
     get:
@@ -216,6 +240,8 @@ paths:
               examples:
                 mergedPair: { externalValue: fixtures/conversations-merged-pair.json }
         '401': { $ref: '#/components/responses/Unauthenticated' }
+        '422': { $ref: '#/components/responses/BadQuery' }
+        '503': { $ref: '#/components/responses/Unavailable' }
 
   /conversations/{conversation_id}:
     get:
@@ -248,6 +274,7 @@ paths:
               schema: { $ref: '#/components/schemas/Error' }
               examples:
                 notVisible: { externalValue: fixtures/error-404-conversation.json }
+        '503': { $ref: '#/components/responses/Unavailable' }
 
   /conversations/{conversation_id}/read:
     post:
@@ -289,6 +316,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+        '503': { $ref: '#/components/responses/Unavailable' }
 
   /conversations/{conversation_id}/messages:
     get:
@@ -316,6 +344,8 @@ paths:
                 channelNullIdentity: { externalValue: fixtures/messages-channel-null-identity.json }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/BadQuery' }
+        '503': { $ref: '#/components/responses/Unavailable' }
 
   /contacts:
     get:
@@ -341,6 +371,8 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ContactList' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
+        '422': { $ref: '#/components/responses/BadQuery' }
+        '503': { $ref: '#/components/responses/Unavailable' }
 
   /channels:
     get:
@@ -359,6 +391,7 @@ paths:
                 withHash: { externalValue: fixtures/channels-list.json }
                 hashUnknown: { externalValue: fixtures/channels-list-no-hash.json }
         '401': { $ref: '#/components/responses/Unauthenticated' }
+        '503': { $ref: '#/components/responses/Unavailable' }
 
   /send-attempts:
     post:
@@ -445,6 +478,7 @@ paths:
               schema: { $ref: '#/components/schemas/SendAttempt' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/Unavailable' }
 
   /events:
     get:
@@ -470,6 +504,18 @@ paths:
         stream from a dead one. The Reader treats 2 missed intervals (no bytes
         for 50 s) as dead and reconnects with `Last-Event-ID`. A comment line
         counts as a heartbeat.
+
+        **Control events.** `resync_required`: the server cannot continue the
+        stream faithfully; the client reloads its snapshots.
+        `authorization_changed`: the caller's rights changed while the session
+        goes on; the client re-reads the session, then reloads its snapshots.
+        `session_revoked`: the session this stream belongs to was revoked or
+        ended on the server (signed out elsewhere, revoked by an operator);
+        the Backend sends it once, with `resource_id` null, then ends the
+        stream. Nothing after revocation is sent. The client returns to
+        sign-in, as on a 401, and never reconnects with that session. A
+        stream whose session simply expires may end without it; the reconnect
+        then answers 401.
       parameters:
         - $ref: '#/components/parameters/Cursor'
         - name: Last-Event-ID
@@ -482,6 +528,8 @@ paths:
           content:
             text/event-stream:
               schema: { $ref: '#/components/schemas/EventEnvelope' }
+              examples:
+                sessionRevoked: { externalValue: fixtures/event-session-revoked.json }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '410':
           description: Cursor expired or outside retention; reload snapshots
@@ -490,6 +538,8 @@ paths:
               schema: { $ref: '#/components/schemas/Error' }
               examples:
                 expired: { externalValue: fixtures/error-410-events.json }
+        '422': { $ref: '#/components/responses/BadQuery' }
+        '503': { $ref: '#/components/responses/Unavailable' }
 
   /leases:
     post:
@@ -568,6 +618,7 @@ paths:
                 keys: { externalValue: fixtures/lease-keys.json }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/Unavailable' }
 
 components:
   securitySchemes:
@@ -617,13 +668,31 @@ components:
     Invalid:
       description: Request failed validation
       content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    BadQuery:
+      description: |
+        A malformed `limit` or `cursor` (code `invalid`, `retryable: false`).
+        Malformed means outside the parameter's schema (a `limit` that is not
+        an integer from 1 to 200, a `cursor` longer than 512 characters) or,
+        on a history list, a `cursor` the Backend cannot read as one it issued
+        for that list. The request is refused, never clamped or read from the
+        start. History cursors never expire, so a well-formed history cursor
+        the Backend does not recognise as one it issued for that list is 422
+        `invalid`; there is no 410 on history lists. On `/events` a
+        well-formed cursor that cannot be resumed is 410 `cursor_expired`,
+        not 422.
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
     Throttled:
       description: Rate limited
       headers:
         Retry-After: { schema: { type: integer } }
       content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
     Unavailable:
-      description: Temporarily unavailable
+      description: |
+        Temporarily unavailable (code `unavailable`, `retryable: true`): the
+        Backend, or the session authority it needs to resolve the session,
+        cannot answer now. The cookie is left as it is. An operation may name
+        another code for its own 503 (`POST /leases`: `lease_signing_unavailable`,
+        `retryable: false`).
       content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
 
   schemas:
@@ -642,7 +711,7 @@ components:
       required: [code, message, request_id, retryable]
       additionalProperties: false
       properties:
-        code: { type: string, examples: [unauthenticated, forbidden, csrf_failed, origin_rejected, not_found, conflict, invalid, throttled, unavailable, cursor_expired] }
+        code: { type: string, examples: [unauthenticated, forbidden, csrf_failed, origin_rejected, sending_disabled, not_found, conflict, invalid, validation_failed, throttled, unavailable, lease_signing_unavailable, cursor_expired] }
         message: { type: string }
         request_id: { type: string }
         retryable: { type: boolean }
@@ -994,15 +1063,17 @@ components:
       description: |
         `resource_id` by `kind`: the conversation id for `message` and
         `conversation`; the server attempt `id` for `attempt_status`; the
-        device id for `device_status`, which a client may ignore. A client may
-        refetch its open attempts when it meets an unknown id.
+        device id for `device_status`, which a client may ignore; null for the
+        control events `authorization_changed`, `resync_required` and
+        `session_revoked` (see `GET /events`). A client may refetch its open
+        attempts when it meets an unknown id.
       type: object
       required: [event_id, kind, occurred_at, version]
       properties:
         event_id: { type: string }
         kind:
           type: string
-          enum: [message, conversation, device_status, attempt_status, authorization_changed, resync_required]
+          enum: [message, conversation, device_status, attempt_status, authorization_changed, resync_required, session_revoked]
         occurred_at: { $ref: '#/components/schemas/Timestamp' }
         resource_id: { type: [string, 'null'] }
         version: { type: integer, minimum: 1 }

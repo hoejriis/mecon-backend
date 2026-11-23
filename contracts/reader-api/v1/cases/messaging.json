@@ -1,5 +1,5 @@
 {
-  "contract": "mecon-reader-api/1.0.0-draft.10",
+  "contract": "mecon-reader-api/1.0.0-draft.11",
   "synthetic": true,
   "group": "messaging",
   "cases": [
@@ -100,6 +100,7 @@
       { "request": { "operation": "getConversation", "path": { "conversation_id": "cnv_unknown_synthetic" } }, "expect": { "status": 401, "schema": "Error", "body": { "/code": "unauthenticated" } } },
       { "request": { "operation": "listMessages", "path": { "conversation_id": "cnv_unknown_synthetic" } }, "expect": { "status": 401, "schema": "Error", "body": { "/code": "unauthenticated" } } },
       { "request": { "operation": "listContacts" }, "expect": { "status": 401, "schema": "Error", "body": { "/code": "unauthenticated" } } },
-      { "request": { "operation": "listChannels" }, "expect": { "status": 401, "schema": "Error", "body": { "/code": "unauthenticated" } } } ] }
+      { "request": { "operation": "listChannels" }, "expect": { "status": 401, "schema": "Error", "body": { "/code": "unauthenticated" } } } ] },
+    {"id": "messaging-14", "title": "History lists refuse a malformed limit and a cursor they did not issue with 422 invalid", "world": "two-fleets", "steps": [{"action": "sign-in", "args": {"client": "alice", "user": "alice"}}, {"as": "alice", "request": {"operation": "listConversations", "query": {"limit": 0}}, "expect": {"status": 422, "schema": "Error", "body": {"/code": "invalid"}}}, {"as": "alice", "request": {"operation": "listConversations"}, "expect": {"status": 200, "schema": "ConversationList"}, "capture": {"dm": {"at": "/items", "where": {"/target/kind": "contact"}, "field": "/id"}}}, {"as": "alice", "request": {"operation": "listConversations", "query": {"limit": 1}}, "expect": {"status": 200, "schema": "ConversationList"}, "capture": {"next": "/next_cursor"}}, {"as": "alice", "request": {"operation": "listConversations", "query": {"cursor": "${next}"}}, "expect": {"status": 200, "schema": "ConversationList"}}, {"as": "alice", "request": {"operation": "listConversations", "query": {"cursor": "not-a-cursor-synthetic"}}, "expect": {"status": 422, "schema": "Error", "body": {"/code": "invalid"}}}, {"as": "alice", "request": {"operation": "listMessages", "path": {"conversation_id": "${dm}"}, "query": {"limit": 201}}, "expect": {"status": 422, "schema": "Error", "body": {"/code": "invalid"}}}, {"as": "alice", "request": {"operation": "listContacts", "query": {"cursor": "not-a-cursor-synthetic"}}, "expect": {"status": 422, "schema": "Error", "body": {"/code": "invalid"}}}]}
   ]
 }

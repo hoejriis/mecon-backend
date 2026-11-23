@@ -3,8 +3,8 @@
 Each event is one frame: an `id:` line (the event's cursor, so a reconnect sends it back as
 `Last-Event-ID`) and one `data:` line holding the EventEnvelope as JSON. A comment line
 (`: heartbeat`) follows the held backlog at once, so a client can tell it has caught up, and then
-repeats while idle. The stream closes when its session is revoked (after one `authorization_changed`
-envelope, with no `id:`, so nothing private follows), when the session expires, or when the
+repeats while idle. The stream closes when its session is revoked (after one `session_revoked`
+envelope, with no `id:` and `resource_id` null, so nothing private follows), when the session expires, or when the
 revocation feed has been down too long to trust.
 """
 from __future__ import annotations
@@ -27,7 +27,7 @@ def frame(envelope: dict[str, Any], with_id: bool = True) -> bytes:
 
 
 def revoked_frame(cursor: str) -> bytes:
-    env = {"event_id": cursor, "kind": "authorization_changed",
+    env = {"event_id": cursor, "kind": "session_revoked",
            "occurred_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
            "resource_id": None, "version": 1}
     return frame(env, with_id=False)

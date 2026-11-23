@@ -21,10 +21,11 @@ def canonical_json(obj: Any) -> bytes:
 def _offset_page(items: list[dict], cursor: str | None, limit: int) -> tuple[list[dict], str | None]:
     start = 0
     if cursor:
-        try:
-            start = int(cursor.removeprefix("off_"), 10)
-        except ValueError:
-            start = 0
+        # A cursor this list did not issue is refused, never read from the start.
+        digits = cursor.removeprefix("off_")
+        if not cursor.startswith("off_") or not (digits.isascii() and digits.isdigit()):
+            raise CoreError("invalid", "invalid", "cursor was not issued for this list")
+        start = int(digits, 10)
     chunk = items[start:start + limit]
     nxt = f"off_{start + limit}" if start + limit < len(items) else None
     return chunk, nxt

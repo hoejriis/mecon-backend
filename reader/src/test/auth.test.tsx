@@ -4,17 +4,20 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { App } from '../App';
 import { AuthProvider, useAuth } from '../auth/AuthContext';
+import { LOGOUT_PENDING_KEY } from '../auth/logoutPending';
 import { PENDING_KEY } from '../auth/pendingLogin';
 import { createBackend, empty, fx, json, type Backend } from './backend';
 
 let backend: Backend;
 const holder: { v: ReturnType<typeof useAuth> | null } = { v: null };
+const statuses: string[] = [];
 const probe = () => holder.v!;
 
 function Probe() {
   const auth = useAuth();
   useEffect(() => {
     holder.v = auth;
+    statuses.push(auth.status);
   });
   return null;
 }
@@ -37,6 +40,7 @@ beforeEach(() => {
   localStorage.clear();
   sessionStorage.clear();
   holder.v = null;
+  statuses.length = 0;
   backend = createBackend();
   vi.stubGlobal('fetch', backend.fetchMock);
 });
@@ -203,6 +207,148 @@ describe('signed-in session', () => {
   });
 });
 
+describe('logout the Backend cannot complete', () => {
+  const unavailable = json({ code: 'unavailable', message: 'Try again.', request_id: 'req_synthetic_503', retryable: true }, 503);
+  const noAnswer = () => {
+    throw new TypeError('Failed to fetch');
+  };
+  const owed = () => localStorage.getItem(LOGOUT_PENDING_KEY) !== null;
+
+  it.each([
+    ['a 503', unavailable],
+    ['a network error', noAnswer],
+  ])('%s signs out locally, owes the server-side logout, and settles it once the Backend answers', async (_, failure) => {
+    backend.on('GET /session', json(fx.session));
+    backend.on('POST /logout', failure, failure, empty());
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    mount('/settings');
+    await user.click(await screen.findByRole('button', { name: 'Sign out' }));
+    await screen.findByLabelText('Email address');
+    expect(screen.queryByText('Could not sign out. Try again.')).toBeNull();
+    expect(probe().session).toBeNull();
+    expect(owed()).toBe(true);
+    await waitFor(() => expect(backend.count('POST /logout')).toBe(2));
+    expect(owed()).toBe(true);
+    await tick(5000); // the retry backoff
+    await waitFor(() => expect(owed()).toBe(false));
+    expect(backend.count('POST /logout')).toBe(3);
+    expect(probe().status).toBe('signedOut');
+  });
+
+  it('on the next start, logs out first (GET /session for the token only) and never adopts the session', async () => {
+    localStorage.setItem(LOGOUT_PENDING_KEY, '1');
+    backend.on('GET /session', json(fx.session));
+    backend.on('POST /logout', empty());
+    mount('/settings');
+    await screen.findByLabelText('Email address');
+    await waitFor(() => expect(owed()).toBe(false));
+    const order = backend.calls.filter((c) => c.api).map((c) => `${c.method} ${c.path}`);
+    expect(order).toEqual(['GET /session', 'POST /logout']);
+    expect(backend.callsTo('POST /logout')[0]!.headers.get('X-CSRF-Token')).toBe(fx.session.csrf_token);
+    await tick(10_000);
+    expect(statuses).not.toContain('signedIn');
+    expect(probe().session).toBeNull();
+  });
+
+  it('on the next start, a 401 settles it without a logout request', async () => {
+    localStorage.setItem(LOGOUT_PENDING_KEY, '1');
+    backend.on('GET /session', json(fx.error401, 401));
+    mount('/settings');
+    await screen.findByLabelText('Email address');
+    await waitFor(() => expect(owed()).toBe(false));
+    expect(backend.count('POST /logout')).toBe(0);
+  });
+
+  it('while the Backend stays down, the marker stays and the user is never shown signed in', async () => {
+    localStorage.setItem(LOGOUT_PENDING_KEY, '1');
+    backend.on('GET /session', json(fx.session));
+    backend.on('POST /logout', unavailable);
+    mount('/settings');
+    await screen.findByLabelText('Email address');
+    await tick(30_000);
+    expect(backend.count('POST /logout')).toBeGreaterThanOrEqual(2);
+    expect(owed()).toBe(true);
+    expect(statuses).not.toContain('signedIn');
+  });
+});
+
+describe('a login started while a logout is owed', () => {
+  const unavailable = json({ code: 'unavailable', message: 'Try again.', request_id: 'req_synthetic_503', retryable: true }, 503);
+  const owed = () => localStorage.getItem(LOGOUT_PENDING_KEY) !== null;
+  const apiOrder = () => backend.calls.filter((c) => c.api).map((c) => `${c.method} ${c.path}`);
+
+  // The background retry fails once at start (then waits 5 s), so what follows is the login's own settle.
+  async function startLogin() {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    mount('/settings');
+    await user.type(await screen.findByLabelText('Email address'), 'alice@example.invalid');
+    await user.click(screen.getByRole('button', { name: 'Email me a sign-in link' }));
+    await waitFor(() => expect(backend.count('POST /login')).toBe(1));
+  }
+
+  beforeEach(() => {
+    localStorage.setItem(LOGOUT_PENDING_KEY, '1');
+    backend.on('POST /login', json(fx.loginStarted, 202));
+    backend.on('GET /login/' + fx.loginStarted.request_id, json(fx.loginPending));
+  });
+
+  it('logs out the old session first (GET /session for the token, then POST /logout) and clears the marker on 204', async () => {
+    backend.on('GET /session', json(fx.session));
+    backend.on('POST /logout', unavailable, empty());
+    await startLogin();
+    const order = apiOrder();
+    const login = order.indexOf('POST /login');
+    expect(order.slice(0, login)).toEqual(['GET /session', 'POST /logout', 'GET /session', 'POST /logout']);
+    expect(owed()).toBe(false);
+    expect(statuses).not.toContain('signedIn');
+  });
+
+  it('a 401 on GET /session settles it with no logout POST, and the login proceeds', async () => {
+    backend.on('GET /session', unavailable, json(fx.error401, 401));
+    backend.on('POST /logout', empty());
+    await startLogin();
+    const order = apiOrder();
+    expect(order.slice(0, order.indexOf('POST /login'))).toEqual(['GET /session', 'GET /session']);
+    expect(backend.count('POST /logout')).toBe(0);
+    expect(owed()).toBe(false);
+  });
+
+  it('a logout that still fails lets the login proceed with a warning; approval clears the marker', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    backend.on('GET /session', json(fx.session));
+    backend.on('POST /logout', unavailable);
+    backend.on('GET /login/' + fx.loginStarted.request_id, json(fx.loginPending), json(fx.loginApproved));
+    await startLogin();
+    const order = apiOrder();
+    expect(order.slice(0, order.indexOf('POST /login'))).toEqual(['GET /session', 'POST /logout', 'GET /session', 'POST /logout']);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0]![0])).toMatch(/left to expire/);
+    expect(owed()).toBe(true);
+    expect(statuses).not.toContain('signedIn');
+    await tick(3000); // poll_after_ms, then approved
+    await waitFor(() => expect(probe().status).toBe('signedIn'));
+    expect(owed()).toBe(false);
+    const logouts = backend.count('POST /logout');
+    await tick(60_000);
+    expect(backend.count('POST /logout')).toBe(logouts); // the new session is never logged out
+    warn.mockRestore();
+  });
+
+  it('while the login is pending, the background retry sends no logout traffic', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    backend.on('GET /session', json(fx.session));
+    backend.on('POST /logout', unavailable);
+    await startLogin(); // settles nothing: the logout keeps answering 503, so the marker stays
+    expect(owed()).toBe(true);
+    const sessions = backend.count('GET /session');
+    const logouts = backend.count('POST /logout');
+    await tick(60_000); // the login stays pending throughout; the background backoff would have fired several times
+    expect(backend.count('GET /session')).toBe(sessions);
+    expect(backend.count('POST /logout')).toBe(logouts);
+    warn.mockRestore();
+  });
+});
+
 describe('csrf_failed', () => {
   const newSession = { ...fx.session, csrf_token: 'csrf_synthetic_rotated_0000' };
 
@@ -232,6 +378,7 @@ describe('csrf_failed', () => {
     expect(backend.count('POST /logout')).toBe(2);
     expect(backend.count('GET /session')).toBe(2);
     expect(probe().status).toBe('signedIn');
+    expect(localStorage.getItem(LOGOUT_PENDING_KEY)).toBeNull();
   });
 
   it('a 403 with another code is not retried', async () => {

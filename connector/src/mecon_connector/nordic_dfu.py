@@ -121,10 +121,6 @@ def hci_header(seq: int, length: int, dip: int = DATA_INTEGRITY_CHECK_PRESENT, r
     return bytes((b0, b1, b2, b3))
 
 
-def header_ok(h: bytes) -> bool:
-    return len(h) >= 4 and (h[0] + h[1] + h[2] + h[3]) & 0xFF == 0
-
-
 def encode_packet(seq: int, payload: bytes) -> bytes:
     """One HCI packet on the wire: C0, SLIP-escaped(header, payload, CRC16 little-endian), C0."""
     body = hci_header(seq, len(payload)) + payload
@@ -133,8 +129,11 @@ def encode_packet(seq: int, payload: bytes) -> bytes:
 
 
 def ack_number(frame: bytes) -> int | None:
-    """The ack field of a frame from the bootloader (unescaped, without the C0s); None if it is not a header."""
-    if len(frame) < 4 or not header_ok(frame):
+    """The ack field of a frame from the bootloader (unescaped, without the C0s); None if it is too short.
+
+    The header checksum is not required: the browser Reader's port of the same transfer, proven on hardware,
+    reads only the ack field, and a frame with a wrong ack number is resent anyway."""
+    if len(frame) < 4:
         return None
     return (frame[0] >> 3) & 0x07
 

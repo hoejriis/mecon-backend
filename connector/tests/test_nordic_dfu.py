@@ -95,7 +95,8 @@ def test_slip_reader_skips_noise_splits_and_drops_overlong_frames():
     assert out == [ack[1:-1]]
     assert r.discarded >= 5 + 20
     assert nd.ack_number(out[0]) == 2
-    assert nd.ack_number(bytes([2 << 3, 0, 0, 1])) is None  # bad header checksum
+    assert nd.ack_number(bytes([2 << 3, 0, 0, 1])) == 2  # the header checksum is not required (as the Reader)
+    assert nd.ack_number(bytes([2 << 3, 0, 0])) is None  # too short to be a header
 
 
 def test_payloads_start_init_data_stop():

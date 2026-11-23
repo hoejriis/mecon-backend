@@ -56,11 +56,47 @@ def test_a_stub_is_never_parsed(tmp_path):
     assert outcomes(store) == [(1, "stub")]
 
 
-def test_unknown_source_fails_the_capture_once_and_it_is_not_retried(tmp_path):
-    store, proc, src = run(tmp_path, [env_cap(1, P, source="nobody"), env_cap(2, P)])
-    assert outcomes(store) == [(1, "failed"), (2, "reception")]
-    assert proc.counters(src)["skipped"]["failed"] == 1
-    assert proc.drain(src) == 0 and outcomes(store)[0] == (1, "failed")
+def test_an_unconfigured_source_stops_processing_before_it_and_leaves_it_pending(tmp_path):
+    """A configuration gap must not burn data: nothing at or after the capture gets an outcome, the mark stays
+    before it, and once the source is configured the same captures are processed."""
+    caps = [env_cap(1, P), env_cap(2, P, source="nobody"), env_cap(3, P)]
+    store, proc, src = run(tmp_path, caps)
+    assert outcomes(store) == [(1, "reception")]
+    assert store.progress() == 1 and proc.blocked_on == "nobody"
+    assert proc.counters(src)["pending"] == 2 and proc.counters(src)["skipped"]["failed"] == 0
+    assert proc.drain(src) == 0  # still stopped, and drain returns instead of spinning
+    fixed = Processor(store, {**SOURCES, "nobody": "observer_envelope"})
+    fixed.drain(src)
+    assert outcomes(store) == [(1, "reception"), (2, "reception"), (3, "reception")]
+    assert store.progress() == 3 and fixed.blocked_on is None
+
+
+def test_a_data_error_on_one_capture_fails_that_capture_only(tmp_path, monkeypatch):
+    """The store refusing one capture's data must not retry the batch for ever: the batch is re-run capture by
+    capture and only the refused one is failed. A storage error (OperationalError) still propagates."""
+    from mecon_processing import store as store_mod
+
+    batch_cls = next(v for v in vars(store_mod).values() if isinstance(v, type) and hasattr(v, "add_reception"))
+    real = batch_cls.add_reception
+
+    def refuse_two(self, r):
+        if r["capture_id"] == 2:
+            raise sqlite3.IntegrityError("refused")
+        return real(self, r)
+
+    monkeypatch.setattr(batch_cls, "add_reception", refuse_two)
+    store, proc, src = run(tmp_path, [env_cap(1, P), env_cap(2, P, topic="meshcore/AB12/obs-2/packets"), env_cap(3, P, topic="meshcore/AB12/obs-3/packets")])
+    assert outcomes(store) == [(1, "reception"), (2, "failed"), (3, "reception")]
+    assert store.progress() == 3 and proc.counters(src)["skipped"]["failed"] == 1
+
+    def storage_down(self, r):
+        raise sqlite3.OperationalError("disk I/O error")
+
+    monkeypatch.setattr(batch_cls, "add_reception", storage_down)
+    store2, proc2 = make(tmp_path, name="q.sqlite3")
+    with pytest.raises(sqlite3.OperationalError):
+        proc2.drain(ListSource([env_cap(1, P)]))
+    assert store2.outcomes() == [] and store2.progress() == 0
 
 
 def test_a_failed_capture_does_not_stop_the_batch_or_leave_a_packet(tmp_path):
@@ -291,9 +327,11 @@ def test_counters_include_duplicates_and_every_reason(tmp_path, schemas):
             env_cap(9, P, source="nobody")]
     _, proc, src = run(tmp_path, caps)
     c = proc.counters(src)
+    # Capture 9's source is not configured: processing stops before it and it stays pending (failed comes only
+    # from data the store refuses; see test_a_data_error_on_one_capture_fails_that_capture_only).
     assert c["skipped"] == {"retained": 1, "stub": 1, "not_a_packet": 1, "malformed": 1, "origin_mismatch": 1,
-                            "unparseable": 1, "duplicate_report": 1, "failed": 1}
-    assert c["receptions"] == 1 and c["processed"] == 9 and schemas["counters"].is_valid(c)
+                            "unparseable": 1, "duplicate_report": 1, "failed": 0}
+    assert c["receptions"] == 1 and c["processed"] == 8 and c["pending"] == 1 and schemas["counters"].is_valid(c)
 
 
 def test_an_unknown_adapter_is_a_configuration_error_never_a_fallback(tmp_path):

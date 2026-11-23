@@ -3,6 +3,7 @@ outcome per capture, one transaction per batch."""
 
 from __future__ import annotations
 
+import sqlite3
 import threading
 import time
 from typing import Any, Callable, Protocol
@@ -38,6 +39,7 @@ class Processor:
         self._receptions = 0
         self._skipped = {r: 0 for r in REASONS}
         self._progress = store.progress()
+        self.blocked_on: str | None = None  # a source with no adapter that processing has stopped at
 
     # ---- one capture ----------------------------------------------------------------------
 
@@ -83,6 +85,47 @@ class Processor:
         left alone. Returns how many captures got an outcome now."""
         if len(captures) > self.batch_max:
             raise ValueError(f"a batch holds at most {self.batch_max} captures")
+        # A capture from a source this processor has no adapter for is a configuration gap, not bad data: stop
+        # before it and leave it pending, so fixing the configuration recovers it (README section 4).
+        for i, c in enumerate(captures):
+            if c["source"] not in self.sources:
+                if self.blocked_on != c["source"]:
+                    self._log.error("source_not_configured", source=c["source"], capture_id=c["capture_id"])
+                self.blocked_on = c["source"]
+                captures = captures[:i]
+                break
+        else:
+            self.blocked_on = None
+        try:
+            return self._commit(captures, fault)
+        except (sqlite3.IntegrityError, sqlite3.DataError) as e:
+            # Data that the store refuses: one capture is at fault, not the batch. Re-run it capture by capture
+            # and record the one the store refuses as failed. An OperationalError (storage) propagates: retried.
+            if len(captures) <= 1:
+                return self._commit_failed(captures, e)
+            done = 0
+            for c in captures:
+                try:
+                    done += self._commit([c], fault)
+                except (sqlite3.IntegrityError, sqlite3.DataError) as e1:
+                    done += self._commit_failed([c], e1)
+            return done
+
+    def _commit_failed(self, captures: list[dict[str, Any]], e: Exception) -> int:
+        if not captures:
+            return 0
+        c = captures[0]
+        self._log.warn("capture_failed", capture_id=c["capture_id"], error=type(e).__name__)
+        with self.store.batch() as b:
+            if not b.has_outcome(c["capture_id"]):
+                b.add_outcome(c["capture_id"], "skipped", "failed")
+            b.set_progress(c["capture_id"])
+        with self._lock:
+            self._skipped["failed"] += 1
+            self._progress = max(self._progress, c["capture_id"])
+        return 1
+
+    def _commit(self, captures: list[dict[str, Any]], fault: Callable[[], None] | None) -> int:
         done: list[tuple[str, str | None]] = []
         with self.store.batch() as b:
             for c in captures:
@@ -119,6 +162,8 @@ class Processor:
             if n == 0:
                 return total
             total += self.process_batch(batch)
+            if self.blocked_on is not None:
+                return total  # stopped at an unconfigured source: what follows waits for the configuration
 
     # ---- counters -------------------------------------------------------------------------
 

@@ -86,7 +86,9 @@ The route type, transport codes and path are not part of it. The same packet rel
 | `origin_mismatch` | The envelope names another observer (section 2). |
 | `unparseable` | The packet bytes do not frame (section 3). |
 | `duplicate_report` | The same reception, reported again (below). |
-| `failed` | An unexpected error. The capture is not retried. |
+| `failed` | An unexpected error in this capture's own data (it fails to analyse, or the store refuses it). The capture is not retried, and the rest of its batch is processed. |
+
+**A source with no payload format.** A capture whose source the processor has no adapter for is a configuration gap, not bad data. The processor stops before it, leaves it and everything after it pending, and reports it, so fixing the configuration recovers them. It is never `failed`. A storage failure likewise leaves the batch pending, and it is retried.
 
 **Packets.** A reception's packet is recorded by its identity. The first reception of a packet, in capture order, sets `first_seen_at` to its `received_at`. Any later capture with the same packet that reaches the duplicate check raises `last_seen_at` to its `received_at` if that is later, and never lowers it. The packet's other fields come from its first reception and are never rewritten.
 

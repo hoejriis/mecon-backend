@@ -272,6 +272,69 @@ describe('logout the Backend cannot complete', () => {
   });
 });
 
+describe('a login started while a logout is owed', () => {
+  const unavailable = json({ code: 'unavailable', message: 'Try again.', request_id: 'req_synthetic_503', retryable: true }, 503);
+  const owed = () => localStorage.getItem(LOGOUT_PENDING_KEY) !== null;
+  const apiOrder = () => backend.calls.filter((c) => c.api).map((c) => `${c.method} ${c.path}`);
+
+  // The background retry fails once at start (then waits 5 s), so what follows is the login's own settle.
+  async function startLogin() {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    mount('/settings');
+    await user.type(await screen.findByLabelText('Email address'), 'alice@example.invalid');
+    await user.click(screen.getByRole('button', { name: 'Email me a sign-in link' }));
+    await waitFor(() => expect(backend.count('POST /login')).toBe(1));
+  }
+
+  beforeEach(() => {
+    localStorage.setItem(LOGOUT_PENDING_KEY, '1');
+    backend.on('POST /login', json(fx.loginStarted, 202));
+    backend.on('GET /login/' + fx.loginStarted.request_id, json(fx.loginPending));
+  });
+
+  it('logs out the old session first (GET /session for the token, then POST /logout) and clears the marker on 204', async () => {
+    backend.on('GET /session', json(fx.session));
+    backend.on('POST /logout', unavailable, empty());
+    await startLogin();
+    const order = apiOrder();
+    const login = order.indexOf('POST /login');
+    expect(order.slice(0, login)).toEqual(['GET /session', 'POST /logout', 'GET /session', 'POST /logout']);
+    expect(owed()).toBe(false);
+    expect(statuses).not.toContain('signedIn');
+  });
+
+  it('a 401 on GET /session settles it with no logout POST, and the login proceeds', async () => {
+    backend.on('GET /session', unavailable, json(fx.error401, 401));
+    backend.on('POST /logout', empty());
+    await startLogin();
+    const order = apiOrder();
+    expect(order.slice(0, order.indexOf('POST /login'))).toEqual(['GET /session', 'GET /session']);
+    expect(backend.count('POST /logout')).toBe(0);
+    expect(owed()).toBe(false);
+  });
+
+  it('a logout that still fails lets the login proceed with a warning; approval clears the marker', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    backend.on('GET /session', json(fx.session));
+    backend.on('POST /logout', unavailable);
+    backend.on('GET /login/' + fx.loginStarted.request_id, json(fx.loginPending), json(fx.loginApproved));
+    await startLogin();
+    const order = apiOrder();
+    expect(order.slice(0, order.indexOf('POST /login'))).toEqual(['GET /session', 'POST /logout', 'GET /session', 'POST /logout']);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0]![0])).toMatch(/left to expire/);
+    expect(owed()).toBe(true);
+    expect(statuses).not.toContain('signedIn');
+    await tick(3000); // poll_after_ms, then approved
+    await waitFor(() => expect(probe().status).toBe('signedIn'));
+    expect(owed()).toBe(false);
+    const logouts = backend.count('POST /logout');
+    await tick(60_000);
+    expect(backend.count('POST /logout')).toBe(logouts); // the new session is never logged out
+    warn.mockRestore();
+  });
+});
+
 describe('csrf_failed', () => {
   const newSession = { ...fx.session, csrf_token: 'csrf_synthetic_rotated_0000' };
 

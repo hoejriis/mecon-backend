@@ -137,40 +137,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => ctl.abort();
   }, [api, finishSignedIn]);
 
-  // Settle a server-side logout that could not complete: GET /session only for the CSRF token, then
-  // POST /logout, before any session is adopted. Done on 204 or 401; anything else is retried with
-  // the session-load backoff, so it completes the next time the Backend answers.
+  // One attempt at a server-side logout that could not complete: GET /session only for the CSRF
+  // token, then POST /logout. The session is never adopted. Settled (marker cleared) on 204 or 401;
+  // returns false on anything else. `stillOwed` is checked between the two requests.
+  const settleOwedLogout = useCallback(
+    async (stillOwed: () => boolean): Promise<boolean> => {
+      try {
+        await api.getSession(); // the token only
+        if (!stillOwed()) return false;
+        await api.logout();
+      } catch (e) {
+        if (!(e instanceof ApiError && e.status === 401)) return false;
+      }
+      clearLogoutPending();
+      api.reset();
+      logoutPendingRef.current = false;
+      setLogoutPending(false);
+      return true;
+    },
+    [api],
+  );
+
+  // Settle an owed logout before any session is adopted, retrying with the session-load backoff so it
+  // completes the next time the Backend answers.
   useEffect(() => {
     if (!logoutPending) return;
     const ctl = new AbortController();
     const { signal } = ctl;
     (async () => {
       let failures = 0;
-      for (;;) {
-        if (!logoutPendingRef.current) return;
-        try {
-          await api.getSession(); // the token only; the session is not adopted
-          if (signal.aborted || !logoutPendingRef.current) return;
-          await api.logout();
-        } catch (e) {
-          if (signal.aborted) return;
-          if (!(e instanceof ApiError && e.status === 401)) {
-            failures += 1;
-            await sleep(sessionRetryDelay(failures), signal);
-            if (signal.aborted) return;
-            continue;
-          }
-        }
+      while (logoutPendingRef.current && !signal.aborted) {
+        if (await settleOwedLogout(() => logoutPendingRef.current && !signal.aborted)) return;
         if (signal.aborted) return;
-        clearLogoutPending();
-        api.reset();
-        logoutPendingRef.current = false;
-        setLogoutPending(false);
-        return;
+        failures += 1;
+        await sleep(sessionRetryDelay(failures), signal);
       }
     })();
     return () => ctl.abort();
-  }, [logoutPending, api]);
+  }, [logoutPending, settleOwedLogout]);
 
   // Poll the pending login until it is approved, delivered, expired or times out.
   useEffect(() => {
@@ -226,6 +230,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (email: string) => {
       setLoginPhase('sending');
       setLoginMessage(null);
+      // A logout still owed is settled first, with the old cookie still in the jar: a new login would
+      // replace the cookie and leave that session valid on the server until it expires.
+      if (logoutPendingRef.current && !(await settleOwedLogout(() => logoutPendingRef.current))) {
+        console.warn('Reader: the earlier server-side logout could not complete; that session is left to expire.');
+      }
       try {
         const started = await api.startLogin(email.trim());
         const p = { request_id: started.request_id, expires_at: started.expires_at };
@@ -243,7 +252,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         );
       }
     },
-    [api],
+    [api, settleOwedLogout],
   );
 
   const restartLogin = useCallback(() => {

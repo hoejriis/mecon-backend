@@ -1,0 +1,28 @@
+# MECON observation processing: example configuration. Every value is a placeholder.
+# Validate with:  python -m mecon_processing --check-config --config config.toml
+
+[archive]
+path = "/var/lib/mecon-capture/archive.sqlite3"    # the capture archive; opened read-only, never written
+
+[store]
+path = "/var/lib/mecon-processing/processing.sqlite3"  # this processor's own file (created if absent)
+
+[processor]
+batch_max = 500               # captures per batch and per transaction; at most 500 (the contract's bound)
+interval_s = 3.0              # how long to wait when nothing is pending
+
+[health]
+enabled = true
+bind = "127.0.0.1"
+port = 9471
+
+[log]
+level = "info"
+
+# One table per source, named as the capture profile's `name`. The adapter says which payload format it carries:
+# observer_envelope or raw_hex. An unknown adapter, or an unknown field, is a configuration error.
+[sources.own-broker]
+adapter = "observer_envelope"
+
+[sources.open-feed]
+adapter = "raw_hex"

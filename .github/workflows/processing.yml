@@ -1,0 +1,37 @@
+name: processing
+on:
+  pull_request:
+    paths: ['processing/**', 'contracts/observation-processing/**', '.github/workflows/processing.yml']
+  push:
+    branches: [main, 'processing/**']
+    paths: ['processing/**', 'contracts/observation-processing/**', '.github/workflows/processing.yml']
+permissions:
+  contents: read
+concurrency:
+  group: processing-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: processing
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: processing/requirements-dev.lock
+      - name: Install dependencies (hash-pinned)
+        run: pip install --require-hashes --no-deps -r requirements-dev.lock
+      - name: Contract fixtures, unit and end-to-end tests
+        run: python -m pytest -q -ra --junitxml=pytest.xml
+      - name: Mutation check (framing, adapters, duplicate rule, atomic batches, aggregates)
+        run: python scripts/mutation.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: processing-pytest
+          path: processing/pytest.xml
+          if-no-files-found: ignore

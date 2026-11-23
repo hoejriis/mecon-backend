@@ -40,9 +40,9 @@ The adapter decides the observer and extracts the packet bytes and signal readin
 - **The envelope:** the payload must be a JSON object; otherwise `malformed`.
 - **Own transmissions:** an envelope with `direction` `"tx"` is the observer's own transmission, so `not_a_packet`.
 - **Packet bytes:** the first present of `data`, `raw_data` and `raw` must be a string of hex digits in pairs; otherwise `malformed`. A present but unusable field is not passed over for a later one. An empty string is a well-formed envelope carrying zero packet bytes, so the capture is `unparseable` (section 3), not `malformed`.
-- **Origin check:** when `origin_id` is a non-empty string and the topic names an observer, the two must match, ignoring case. Otherwise the capture is `origin_mismatch`: it claims another observer's reception.
+- **Origin check:** when `origin_id` is a string that is not blank and the topic names an observer, the two must match, ignoring case and surrounding whitespace. A blank `origin_id` (empty or whitespace only) claims nothing. Otherwise the capture is `origin_mismatch`: it claims another observer's reception.
 - **Signal readings:** `rssi` is `RSSI` if present, else `rssi`; `snr` is `SNR` if present, else `snr`.
-  - Each is a JSON number, or a string holding one: an optional sign, digits with an optional fraction (or a fraction alone), an optional exponent, surrounding whitespace ignored. Anything else reads as null.
+  - Each is a JSON number, or a string holding one: an optional sign, digits with an optional fraction (or a fraction alone), an optional exponent, surrounding whitespace ignored. Anything else, and any value too large to be a finite number, reads as null.
   - An RSSI of exactly 0 means "not measured" and reads as null. SNR 0 is a reading.
 - **Device time:** `device_observed_at` is `ts`, epoch seconds (a number or a numeric string, truncated to whole seconds; never a boolean). It is kept only when trusted: no earlier than 2025-01-01T00:00:00Z, and no later than the capture's `received_at` plus 60 seconds. Otherwise it is null, because an unsynchronised or forward-skewed clock is not corrected, only not trusted.
 
@@ -86,7 +86,9 @@ The route type, transport codes and path are not part of it. The same packet rel
 | `origin_mismatch` | The envelope names another observer (section 2). |
 | `unparseable` | The packet bytes do not frame (section 3). |
 | `duplicate_report` | The same reception, reported again (below). |
-| `failed` | An unexpected error. The capture is not retried. |
+| `failed` | An unexpected error in this capture's own data (it fails to analyse, or the store refuses it). The capture is not retried, and the rest of its batch is processed. |
+
+**A source with no payload format.** A capture whose source the processor has no adapter for is a configuration gap, not bad data. The processor stops before it, leaves it and everything after it pending, and reports it, so fixing the configuration recovers them. It is never `failed`. A storage failure likewise leaves the batch pending, and it is retried.
 
 **Packets.** A reception's packet is recorded by its identity. The first reception of a packet, in capture order, sets `first_seen_at` to its `received_at`. Any later capture with the same packet that reaches the duplicate check raises `last_seen_at` to its `received_at` if that is later, and never lowers it. The packet's other fields come from its first reception and are never rewritten.
 

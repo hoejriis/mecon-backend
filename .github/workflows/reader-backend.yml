@@ -1,0 +1,37 @@
+name: reader-backend
+on:
+  pull_request:
+    paths: ['reader-backend/**', 'contracts/reader-api/**', '.github/workflows/reader-backend.yml']
+  push:
+    branches: [main, 'reader-backend/**']
+    paths: ['reader-backend/**', 'contracts/reader-api/**', '.github/workflows/reader-backend.yml']
+permissions:
+  contents: read
+concurrency:
+  group: reader-backend-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: reader-backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: reader-backend/requirements-dev.lock
+      - name: Install dependencies (hash-pinned)
+        run: pip install --require-hashes --no-deps -r requirements-dev.lock
+      - name: Reader API cases, facade rules and guards
+        run: python -m pytest -q -ra --junitxml=pytest.xml
+      - name: Mutation check (CSRF, Origin, fail-closed lookup, idempotency, no-store, events)
+        run: python scripts/mutation.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: reader-backend-pytest
+          path: reader-backend/pytest.xml
+          if-no-files-found: ignore

@@ -43,8 +43,10 @@ export function validateRawCapture(dir = 'raw-capture/v1') {
     const before = failures;
     if (doc.kind === 'append') {
       const { request, result, limits } = doc;
-      if (!v['append-request'](request)) fail(`fixtures/${f}: request ${JSON.stringify(v['append-request'].errors)}`);
-      if (!v['append-result'](result)) fail(`fixtures/${f}: result ${JSON.stringify(v['append-result'].errors)}`);
+      // A request or result that fails its schema is reported and the fixture skipped: the checks below read its
+      // fields, and must fail it, not crash the validator.
+      if (!v['append-request'](request)) { fail(`fixtures/${f}: request ${JSON.stringify(v['append-request'].errors)}`); continue; }
+      if (!v['append-result'](result)) { fail(`fixtures/${f}: result ${JSON.stringify(v['append-result'].errors)}`); continue; }
       if (result.batch_id !== request.batch_id) fail(`fixtures/${f}: the result names another batch`);
       const n = request.captures.length;
       if (result.storage === 'available') {

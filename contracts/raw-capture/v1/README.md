@@ -43,7 +43,8 @@ How a capture producer (the [observation ingester](../../observation-subscriptio
 - The archive checks each capture against `capture.schema.json`.
   - One that fails is **rejected alone**, with its index and the reason `malformed`.
   - It never fails the batch.
-- A valid capture whose payload is larger than the archive's limit, `max_payload_bytes`, is **committed as a stub**: every field of the capture, the payload's size and a content hash of it, but not its bytes.
+- A valid capture whose payload is larger than the archive's limit, `max_payload_bytes`, is **committed as a stub**: every field of the capture, the payload's size and its content hash, but not its bytes.
+  - The content hash is SHA-256, as lowercase hex, over the topic's UTF-8 bytes, one zero byte, then the decoded payload bytes. It is the same function an archive uses for every capture, so a stub and a full copy of the same message hash alike.
   - The message is still recorded as received; only its body is not kept.
   - Its index is listed in `stubbed`, and it counts in `committed`.
   - Downstream never parses a stub.

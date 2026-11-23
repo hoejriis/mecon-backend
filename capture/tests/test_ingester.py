@@ -8,7 +8,8 @@ from conftest import sub_fixture
 from fakes.faulty_connection import FaultyConnection
 from fakes.fake_transport import FakeTransport
 from helpers import Clock, make_ingester
-from mecon_capture.ingester import iso_ms
+from mecon_capture.archive import content_hash
+from mecon_capture.ingester import iso_ms, utc_now
 import datetime as dt
 
 PROF = sub_fixture("A")["cases"][2]["value"]
@@ -47,7 +48,11 @@ def test_iso_ms_format_and_truncation():
     assert iso_ms(t2) == "2026-01-02T01:04:05.000Z"
 
 
-def test_full_buffer_counts_dropped_and_never_blocks(tmp_path):
+def ing_identity(c):
+    return c["received"] == c["handed_on"] + c["buffered"] + c["shed"]
+
+
+def test_full_buffer_counts_shed_in_the_ingester_and_never_blocks(tmp_path):
     ig, archive, _t, _l = make_ingester([PROF], tmp_path, buffer_max=3)
     s = ig.sessions[0]
     gate = threading.Lock()
@@ -65,15 +70,99 @@ def test_full_buffer_counts_dropped_and_never_blocks(tmp_path):
         s.on_message("t", b"x", False)
     elapsed = time.monotonic() - t0
     assert elapsed < 1.0
-    c = archive.counters()
-    assert c["dropped"] == 997 and c["received"] == 997 and len(ig.buffer) == 3
-    assert c["received"] == c["committed"] + c["rejected"] + c["buffered"] + c["dropped"]
+    c = ig.buffer.counters(utc_now())
+    assert (c["received"], c["handed_on"], c["buffered"], c["shed"]) == (1000, 0, 3, 997) and ing_identity(c)
+    assert len(ig.buffer) == 3
+    a = archive.counters()  # the archive has seen nothing, and never counts the ingester's shed captures
+    assert (a["received"], a["dropped"]) == (0, 0)
     gate.release()
     archive.append = real
     assert ig.flush_once()
-    c = archive.counters()
-    assert c["received"] == 1000 and c["committed"] == 3 and c["dropped"] == 997
-    assert c["received"] == c["committed"] + c["rejected"] + c["buffered"] + c["dropped"]
+    c = ig.buffer.counters(utc_now())
+    assert (c["received"], c["handed_on"], c["buffered"], c["shed"]) == (1000, 3, 0, 997) and ing_identity(c)
+    assert c["oldest_buffered_ms"] is None
+    a = archive.counters()
+    assert (a["received"], a["committed"], a["dropped"]) == (3, 3, 0)
+
+
+def test_handed_on_counts_rejected_too_and_waits_for_an_available_answer(tmp_path):
+    ig, archive, _t, _l = make_ingester([PROF], tmp_path)
+    for _ in range(4):
+        ig.sessions[0].on_message("t", b"x", False)
+    good = archive._conn
+    archive._conn = FaultyConnection(good, lambda w, n: w == "BEGIN")
+    assert not ig.flush_once()
+    c = ig.buffer.counters(utc_now())
+    assert (c["handed_on"], c["buffered"]) == (0, 4) and ing_identity(c)  # unavailable: not handed on
+    archive._conn = good
+    ig.buffer._q[1]["topic"] = ""  # the archive will reject this one as malformed: still answered available
+    assert ig.flush_once()
+    c = ig.buffer.counters(utc_now())
+    assert (c["handed_on"], c["buffered"]) == (4, 0) and ing_identity(c)
+    a = archive.counters()
+    assert (a["committed"], a["rejected"]) == (3, 1)
+
+
+def test_a_payload_over_the_receive_bound_is_handed_on_as_a_stub_without_its_bytes(tmp_path):
+    ig, archive, _t, _l = make_ingester([PROF], tmp_path, max_receive_bytes=10)
+    s = ig.sessions[0]
+    big = b"0123456789A"  # 11 bytes: one over
+    s.on_message("t/big", big, False)
+    s.on_message("t/edge", b"0123456789", True)  # exactly at the bound: kept whole
+    queued = ig.buffer.peek(10)
+    assert "payload_b64" not in queued[0] and base64.b64encode(big).decode() not in repr(queued)
+    assert queued[0]["stub"] == {"size": 11, "content_hash": content_hash("t/big", big)}
+    assert queued[1]["payload_b64"] == base64.b64encode(b"0123456789").decode() and "stub" not in queued[1]
+    c = ig.buffer.counters(utc_now())
+    assert (c["received"], c["oversize"], c["buffered"]) == (2, 1, 2)
+    assert ig.flush_once()
+    stub, whole = archive.read_committed()
+    assert stub["stub"] and stub["payload"] is None and stub["payload_size"] == 11
+    assert stub["content_hash"] == content_hash("t/big", big) and stub["retained"] is False
+    assert not whole["stub"] and whole["retained"] is True
+    assert archive.counters()["stubbed"] == 1  # the archive's limit (65536) is not what made it a stub
+
+
+def test_a_large_message_is_never_held_whole_even_when_the_buffer_is_full(tmp_path):
+    ig, _a, _t, _l = make_ingester([PROF], tmp_path, buffer_max=1, max_receive_bytes=100)
+    s = ig.sessions[0]
+    s.on_message("t", b"x", False)
+    s.on_message("t", b"y" * 5_000_000, False)  # shed, and counted both shed and oversize
+    c = ig.buffer.counters(utc_now())
+    assert (c["received"], c["shed"], c["oversize"], c["buffered"]) == (2, 1, 1, 1) and ing_identity(c)
+    ig.flush_once()
+    s.on_message("t", b"y" * 5_000_000, False)
+    assert len(repr(ig.buffer.peek(5))) < 1000
+
+
+def test_the_ingester_identity_holds_at_every_instant_under_concurrency(tmp_path):
+    ig, archive, _t, _l = make_ingester([PROF], tmp_path, buffer_max=50, max_receive_bytes=4, flush_interval_s=0.01)
+    ig.start()
+    bad = []
+    stop = threading.Event()
+
+    def reader():
+        while not stop.is_set():
+            c = ig.buffer.counters(utc_now())
+            if not ing_identity(c):
+                bad.append(c)
+
+    def producer():
+        for i in range(2000):
+            ig.sessions[0].on_message("t", b"x" * (i % 8), False)
+
+    r = threading.Thread(target=reader)
+    ps = [threading.Thread(target=producer) for _ in range(3)]
+    r.start()
+    [p.start() for p in ps]
+    [p.join() for p in ps]
+    ig.stop()
+    stop.set()
+    r.join()
+    c = ig.buffer.counters(utc_now())
+    assert not bad and c["received"] == 6000 and ing_identity(c) and c["buffered"] == 0
+    assert c["oversize"] == 3 * 2000 * 3 // 8  # payload lengths 5, 6, 7 of 0..7 are over 4
+    assert c["handed_on"] == archive.counters()["received"] == archive.counters()["committed"] + archive.counters()["rejected"]
 
 
 def test_network_thread_never_touches_the_archive_file(tmp_path):
@@ -173,18 +262,18 @@ def test_log_never_carries_payloads(tmp_path):
     assert not any("SECRET-PAYLOAD" in ln for ln in stream.lines)
 
 
-def test_the_buffer_level_shows_what_waits_for_the_archive_and_for_how_long():
-    """While storage is unavailable the archive's counters see nothing of what waits; the buffer's level does."""
+def test_the_buffer_counters_show_what_waits_for_the_archive_and_for_how_long():
+    """While storage is unavailable the archive's counters see nothing of what waits; the buffer's do."""
     import datetime as dt
 
-    from mecon_capture.archive import Archive
     from mecon_capture.ingester import CaptureBuffer
 
-    buf = CaptureBuffer(3, Archive(":memory:"))
+    buf = CaptureBuffer(3)
     now = dt.datetime(2026, 1, 1, 0, 0, 5, tzinfo=dt.timezone.utc)
-    assert buf.level(now) == {"buffered": 0, "bound": 3, "oldest_buffered_ms": None}
+    zero = {"received": 0, "handed_on": 0, "buffered": 0, "bound": 3, "shed": 0, "oversize": 0, "oldest_buffered_ms": None}
+    assert buf.counters(now) == zero
     for at in ("2026-01-01T00:00:01.250Z", "2026-01-01T00:00:03.000Z"):
         buf.put({"source": "own-broker", "topic": "t/a", "payload_b64": "", "retained": False, "received_at": at})
-    assert buf.level(now) == {"buffered": 2, "bound": 3, "oldest_buffered_ms": 3750}
-    buf.discard(1)
-    assert buf.level(now)["oldest_buffered_ms"] == 2000
+    assert buf.counters(now) == dict(zero, received=2, buffered=2, oldest_buffered_ms=3750)
+    buf.hand_on(1)
+    assert buf.counters(now) == dict(zero, received=2, handed_on=1, buffered=1, oldest_buffered_ms=2000)

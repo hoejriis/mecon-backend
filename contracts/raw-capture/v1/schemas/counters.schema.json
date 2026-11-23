@@ -5,15 +5,56 @@
   "description": "Totals since the archive started, except buffered, a level. At every instant received = committed + rejected + buffered + dropped.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["received", "committed", "rejected", "stubbed", "unavailable_batches", "buffered", "dropped"],
+  "required": [
+    "received",
+    "committed",
+    "rejected",
+    "stubbed",
+    "unavailable_batches",
+    "buffered",
+    "dropped"
+  ],
   "properties": {
-    "received": { "type": "integer", "minimum": 0, "description": "Captures in appends the archive accepted, counted at acceptance." },
-    "committed": { "type": "integer", "minimum": 0 },
-    "rejected": { "type": "integer", "minimum": 0 },
-    "stubbed": { "type": "integer", "minimum": 0, "description": "Of committed, the captures stored as a stub (payload over the limit). Never more than committed." },
-    "unavailable_batches": { "type": "integer", "minimum": 0, "description": "Appends answered storage unavailable." },
-    "buffered": { "type": "integer", "minimum": 0, "description": "A level: captures accepted and not yet answered, now." },
-    "dropped": { "type": "integer", "minimum": 0, "description": "Captures accepted and lost while the archive kept running (a buffer shed under pressure). A crash's loss is not counted: counters start at zero; the producer sees no result. A conforming archive that never drops reports 0." },
-    "oldest_buffered_ms": { "type": ["integer", "null"], "minimum": 0, "description": "How long the oldest buffered capture has waited: the lag." }
+    "received": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Captures in appends the archive accepted, counted at acceptance: the moment it can no longer answer unavailable (section 4)."
+    },
+    "committed": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "rejected": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "stubbed": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Of committed, the captures stored as a stub (payload over the limit). Never more than committed."
+    },
+    "unavailable_batches": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Appends answered storage unavailable."
+    },
+    "buffered": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "A level: captures the archive accepted and has not yet answered, now. A synchronous archive, which accepts at its commit, reports 0; the lag before it is its producer's."
+    },
+    "dropped": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Captures the archive accepted and then lost while it kept running (an archive that sheds its own buffer). A producer's own shed captures are the producer's, never counted here. A crash's loss is not counted: counters start at zero; the producer sees no result. A conforming archive that never drops reports 0."
+    },
+    "oldest_buffered_ms": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0,
+      "description": "How long the oldest buffered capture has waited: the lag."
+    }
   }
 }

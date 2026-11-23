@@ -1,8 +1,9 @@
 """A small read-only health endpoint (stdlib), loopback by default.
 
 GET /healthz returns JSON: `profiles` (one status per source, status.schema.json) and `counters`
-(the archive's counters, counters.schema.json), and `ingester`: the captures waiting in the ingester's own
-buffer for the archive, its bound, and how long the oldest has waited. It reports; it never changes anything.
+(the archive's counters, counters.schema.json), and `ingester` (the ingester's own counters, ingester.schema.json:
+received, handed on, buffered, bound, shed, oversize and how long the oldest waiting capture has waited).
+It reports; it never changes anything.
 """
 
 from __future__ import annotations

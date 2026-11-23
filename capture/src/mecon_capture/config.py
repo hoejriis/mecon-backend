@@ -15,6 +15,7 @@ TAG_RE = re.compile(r"[a-z0-9]{1,8}")
 PREFIX_RE = re.compile(r"[A-Za-z0-9._-]{1,32}")
 
 DEFAULT_MAX_PAYLOAD_BYTES = 65536
+DEFAULT_MAX_RECEIVE_BYTES = 65536
 MAX_BATCH = 500
 
 
@@ -142,6 +143,7 @@ class Config:
     instance_tag: str = "a"
     client_id_prefix: str = "mecon-capture"
     buffer_max: int = 5000
+    max_receive_bytes: int = DEFAULT_MAX_RECEIVE_BYTES
     batch_max: int = MAX_BATCH
     flush_interval_s: float = 1.0
     health: HealthConfig = field(default_factory=HealthConfig)
@@ -163,7 +165,7 @@ def parse(raw: dict[str, Any]) -> Config:
     for k in sorted(set(raw) - {"archive", "ingester", "health", "log", "profile"}):
         problems.append(f"unknown section {k!r}")
     arch = _section(raw, "archive", {"path", "max_payload_bytes"}, problems)
-    ing = _section(raw, "ingester", {"instance_tag", "client_id_prefix", "buffer_max", "batch_max", "flush_interval_s"}, problems)
+    ing = _section(raw, "ingester", {"instance_tag", "client_id_prefix", "buffer_max", "max_receive_bytes", "batch_max", "flush_interval_s"}, problems)
     hl = _section(raw, "health", {"enabled", "bind", "port"}, problems)
     lg = _section(raw, "log", {"level"}, problems)
 
@@ -182,6 +184,9 @@ def parse(raw: dict[str, Any]) -> Config:
     bmax = ing.get("buffer_max", 5000)
     if not (_is_int(bmax) and 1 <= bmax <= 1_000_000):
         problems.append("ingester.buffer_max must be an integer from 1 to 1000000")
+    mrb = ing.get("max_receive_bytes", DEFAULT_MAX_RECEIVE_BYTES)
+    if not (_is_int(mrb) and mrb >= 1):
+        problems.append("ingester.max_receive_bytes must be an integer of at least 1")
     batch = ing.get("batch_max", MAX_BATCH)
     if not (_is_int(batch) and 1 <= batch <= MAX_BATCH):
         problems.append(f"ingester.batch_max must be an integer from 1 to {MAX_BATCH}")
@@ -219,7 +224,7 @@ def parse(raw: dict[str, Any]) -> Config:
         raise ConfigError(problems)
     return Config(
         profiles=tuple(profiles), archive_path=path, max_payload_bytes=mpb, instance_tag=tag,
-        client_id_prefix=prefix, buffer_max=bmax, batch_max=batch, flush_interval_s=float(fi),
+        client_id_prefix=prefix, buffer_max=bmax, max_receive_bytes=mrb, batch_max=batch, flush_interval_s=float(fi),
         health=HealthConfig(h_enabled, h_bind, h_port), log_level=level,
     )
 

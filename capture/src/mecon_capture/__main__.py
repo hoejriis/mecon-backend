@@ -55,7 +55,7 @@ def main(argv: list[str] | None = None) -> int:
     if cfg.health.enabled:
         server = make_server(cfg.health.bind, cfg.health.port,
                              lambda: {"profiles": ingester.statuses(), "counters": archive.counters(),
-                                      "ingester": ingester.buffer.level(utc_now())})
+                                      "ingester": ingester.buffer.counters(utc_now())})
         serve_in_thread(server)
     log.info("started", version=__version__, sources=len(cfg.profiles))
     ingester.start()

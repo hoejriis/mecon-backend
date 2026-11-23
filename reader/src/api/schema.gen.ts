@@ -97,7 +97,13 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Revoke the current session server-side */
+        /**
+         * Revoke the current session server-side
+         * @description On 503, or no answer at all, the Reader signs out locally and retries
+         *     the server-side logout later; until then it does not use the session.
+         *     It keeps the user signed in only on 403 (`csrf_failed` after one token
+         *     refetch and retry, or `origin_rejected`).
+         */
         post: operations["logout"];
         delete?: never;
         options?: never;
@@ -916,8 +922,11 @@ export interface components {
          *     an integer from 1 to 200, a `cursor` longer than 512 characters) or,
          *     on a history list, a `cursor` the Backend cannot read as one it issued
          *     for that list. The request is refused, never clamped or read from the
-         *     start. On `/events` a well-formed cursor that cannot be resumed is 410
-         *     `cursor_expired`, not 422.
+         *     start. History cursors never expire, so a well-formed history cursor
+         *     the Backend does not recognise as one it issued for that list is 422
+         *     `invalid`; there is no 410 on history lists. On `/events` a
+         *     well-formed cursor that cannot be resumed is 410 `cursor_expired`,
+         *     not 422.
          */
         BadQuery: {
             headers: {

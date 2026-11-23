@@ -16,7 +16,7 @@ Replayable cases for `../openapi.yaml`. A Backend that claims to serve the Reade
 2. **Clients.** `as` names a client: a cookie jar that persists for the whole case. A step without `as` uses a fresh anonymous client. The `sign-in` action gives a client a session by the implementation's own means, since the magic link is out of band.
 3. **Requests.** Send the `operation` with its `path`, `query`, `headers` and `body`. `${name}` is replaced by an earlier capture: a whole-string value becomes the captured JSON value; inside a path it is the string.
    - **Origin.** `same` sends the Reader's own origin, `foreign` a different one, and `absent` none.
-   - **CSRF.** On operations with an `X-CSRF-Token` parameter, `valid` sends the client's token from `GET /session` (the last one it read, when `GET /session` cannot answer, as during `session-authority-down`), `wrong` a different string of the same length, and `absent` none. A client without a session sends none.
+   - **CSRF.** On operations with an `X-CSRF-Token` parameter, `valid` sends the client's token from `GET /session` (the last one it read, when `GET /session` cannot answer, as during `session-authority-down`), `wrong` a different string of the same length, and `absent` none. A client that has no token to send (it never had a session, or its session ended) sends, for `valid` and `wrong`, a made-up token of valid form instead (`csrf_synthetic_no_session`): a Backend cannot judge it without resolving the session, so the cases pin no order between the CSRF check and session resolution.
 4. **Expectations.**
    - `status` must equal.
    - The body must validate against the component `schema` (none for `null`).

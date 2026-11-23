@@ -10,6 +10,7 @@ import {
 } from 'react';
 import { ApiError, createApiClient, type ApiClient } from '../api/client';
 import type { Device, Session } from '../api/types';
+import { clearLogoutPending, isLogoutPending, markLogoutPending } from './logoutPending';
 import { clearPending, loadPending, savePending, type PendingLogin } from './pendingLogin';
 
 export type AuthStatus = 'loading' | 'signedOut' | 'signedIn';
@@ -73,6 +74,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loginMessage, setLoginMessage] = useState<string | null>(null);
   const [signOutError, setSignOutError] = useState<string | null>(null);
   const [pending, setPending] = useState<PendingLogin | null>(null);
+  // A server-side logout still owed (see logoutPending.ts). Read once at start.
+  const [logoutPending, setLogoutPending] = useState<boolean>(() => isLogoutPending());
+  const logoutPendingRef = useRef(logoutPending); // kept equal to the state wherever it changes
   const pollNowRef = useRef(false);
 
   // Any 401 clears the session and every cache derived from it.
@@ -99,10 +103,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { signal } = ctl;
     (async () => {
       let failures = 0;
-      for (;;) {
+      // A logout still owed: never adopt the session that cookie names; the logout effect settles it.
+      for (; !logoutPendingRef.current; ) {
         try {
           const s = await api.getSession();
           if (signal.aborted) return;
+          if (logoutPendingRef.current) break;
           clearPending();
           finishSignedIn(s);
           return;
@@ -131,6 +137,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => ctl.abort();
   }, [api, finishSignedIn]);
 
+  // Settle a server-side logout that could not complete: GET /session only for the CSRF token, then
+  // POST /logout, before any session is adopted. Done on 204 or 401; anything else is retried with
+  // the session-load backoff, so it completes the next time the Backend answers.
+  useEffect(() => {
+    if (!logoutPending) return;
+    const ctl = new AbortController();
+    const { signal } = ctl;
+    (async () => {
+      let failures = 0;
+      for (;;) {
+        if (!logoutPendingRef.current) return;
+        try {
+          await api.getSession(); // the token only; the session is not adopted
+          if (signal.aborted || !logoutPendingRef.current) return;
+          await api.logout();
+        } catch (e) {
+          if (signal.aborted) return;
+          if (!(e instanceof ApiError && e.status === 401)) {
+            failures += 1;
+            await sleep(sessionRetryDelay(failures), signal);
+            if (signal.aborted) return;
+            continue;
+          }
+        }
+        if (signal.aborted) return;
+        clearLogoutPending();
+        api.reset();
+        logoutPendingRef.current = false;
+        setLogoutPending(false);
+        return;
+      }
+    })();
+    return () => ctl.abort();
+  }, [logoutPending, api]);
+
   // Poll the pending login until it is approved, delivered, expired or times out.
   useEffect(() => {
     if (!pending) return;
@@ -157,6 +198,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (signal.aborted) return;
           failures = 0;
           if (res.state === 'approved') {
+            // The new cookie replaced the one whose logout was owed: that session is gone from here.
+            clearLogoutPending();
+            logoutPendingRef.current = false;
+            setLogoutPending(false);
             const s = await api.getSession();
             if (signal.aborted) return;
             clearPending();
@@ -208,21 +253,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoginMessage(null);
   }, []);
 
+  // Sign out. A 403 (csrf_failed after the one refetch and retry, or origin_rejected) keeps the user
+  // signed in with an error. A 503 or no answer signs out locally anyway and owes the server-side
+  // logout, which the logout effect retries; until then the session is never used.
   const signOut = useCallback(async () => {
     setSignOutError(null);
+    let owed = false;
     try {
       await api.logout();
     } catch (e) {
-      if (!(e instanceof ApiError && e.status === 401)) {
+      if (e instanceof ApiError && e.status === 403) {
         setSignOutError('Could not sign out. Try again.');
         return;
       }
+      owed = !(e instanceof ApiError && e.status === 401);
     }
+    if (owed) markLogoutPending();
+    else clearLogoutPending();
+    logoutPendingRef.current = owed;
     api.reset();
     clearPending();
     setPending(null);
     setLoginPhase('idle');
     dropSession();
+    setLogoutPending(owed);
   }, [api, dropSession]);
 
   const loadDevices = useCallback(async () => {

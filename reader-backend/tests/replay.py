@@ -36,6 +36,7 @@ BASE = "https://reader.example.test"
 SAME_ORIGIN = BASE
 FOREIGN_ORIGIN = "https://foreign.example.test"
 LEASE_PREFIX = b"MECON-LEASE-1\x00"
+NO_SESSION_CSRF = "csrf_synthetic_no_session"
 
 
 class CaseFailed(AssertionError):
@@ -231,9 +232,13 @@ class Replay:
             if op["csrf"]:
                 mode = req.get("csrf", "valid")
                 token = await self.csrf_token(client)
-                if token is not None and mode == "valid":
+                if token is None and mode in ("valid", "wrong"):
+                    # No session to take a token from: a made-up one of valid form, which a Backend cannot
+                    # judge without resolving the session (the cases pin no CSRF-versus-session order).
+                    headers["X-CSRF-Token"] = NO_SESSION_CSRF
+                elif mode == "valid":
                     headers["X-CSRF-Token"] = token
-                elif token is not None and mode == "wrong":
+                elif mode == "wrong":
                     headers["X-CSRF-Token"] = ("x" if token[0] != "x" else "y") + token[1:]
             content = None
             if "body" in req:

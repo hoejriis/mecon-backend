@@ -8,8 +8,9 @@ This public contract defines the interface between the MECON Reader and an autho
 - Use the Backend's authenticated session with secure HttpOnly cookies, same-origin by default, CSRF protection for writes and explicit CORS allowlisting for separate Reader origins. SSE uses the same authenticated session; never put credentials in query strings.
 - Every request is scoped by server-side account/identity authorization. Device ownership and administrative role never grant another user's private-message read rights.
 - Error format: `{code, message, request_id, retryable}`; 401 unauthenticated, 403 unauthorized, 404 unavailable/not found without existence disclosure, 409 conflict, 422 invalid request, 429 throttled, 503 temporarily unavailable. Unsupported capabilities are explicitly reported, not simulated.
-- A Backend that cannot establish who a session is (whatever answers that is unreachable) answers 503 `unavailable`, `retryable: true`, and leaves the cookie alone; never 401, which signs the Reader out. Every operation that resolves a session declares this 503.
-- A malformed `limit` or `cursor` on a list is refused with 422 `invalid`, never clamped.
+- A Backend that cannot establish who a session is (whatever answers that is unreachable) answers 503 `unavailable`, `retryable: true`, and leaves the cookie alone; never 401, which signs the Reader out. Every operation that resolves a session declares this 503. A Backend may refuse on what it can judge without the session (Origin, request shape) before resolving it; the cases pin no order between CSRF and session resolution.
+- When `POST /logout` answers 503 or not at all, the Reader signs out locally and retries the server-side logout later; until then it does not use the session.
+- A malformed `limit` or `cursor` on a list is refused with 422 `invalid`, never clamped. History cursors never expire: one the Backend does not recognise as issued for that list is 422, never 410.
 - Login (`POST /login`) is throttled silently: over a limit it answers the same 202 and sends no mail, so throttling never reveals which addresses have accounts. It never answers 429.
 - Public contract schema uses OpenAPI 3.1 with synthetic, non-sensitive fixtures.
 

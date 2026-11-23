@@ -5,12 +5,17 @@ Run from the repository root:   python3 connector/scripts/gen_hold_fixtures.py [
 --check writes nothing and fails if a file on disk differs from what this script would write.
 Everything is synthetic: <token>, <issuer>, <sig> and <pubkey> stand for secrets and identifiers.
 """
+import base64
+import hashlib
+import io
 import json
 import pathlib
+import struct
 import sys
+import zipfile
 
 OUT = pathlib.Path(__file__).resolve().parents[2] / "contracts" / "connector-hold" / "v1" / "fixtures"
-CONTRACT = "mecon-connector-hold/1.0.0-draft.1"
+CONTRACT = "mecon-connector-hold/1.0.0-draft.2"
 
 
 def j(o):
@@ -46,6 +51,68 @@ def prelude():
         {"step": "send", "frame": {"type": "iface_hello", "ref": 1, "hello": HELLO}},
         {"step": "recv", "frame": {"type": "iface_ack", "of": "iface_hello", "ref": 1, "outcome": "recorded"}},
     ]
+
+
+# ---- fixture F: bootloader serial DFU (section 12). Its own HCI/SLIP encoder, independent of the Connector's.
+
+F_JOB = "fw-7"
+F_IMAGE = bytes((i * 7 + 3) & 0xFF for i in range(1000))  # a synthetic application image: two data packets
+F_INIT = bytes(range(0xC0, 0xC0 + 14))  # a synthetic init packet (.dat), with a C0 and a DB in it
+
+
+def f_package():
+    """A deterministic DFU zip (stored, fixed times), so its SHA-256 is stable."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_STORED) as z:
+        for name, data in (("manifest.json", j({"manifest": {"application": {"bin_file": "app.bin", "dat_file": "app.dat"}}}).encode()),
+                           ("app.bin", F_IMAGE), ("app.dat", F_INIT)):
+            zi = zipfile.ZipInfo(name, date_time=(2026, 1, 1, 0, 0, 0))
+            zi.create_system = 3
+            zi.external_attr = 0o644 << 16
+            z.writestr(zi, data)
+    return buf.getvalue()
+
+
+def crc16(data):
+    crc = 0xFFFF
+    for b in data:
+        crc ^= b << 8
+        for _ in range(8):
+            crc = ((crc << 1) ^ 0x1021) & 0xFFFF if crc & 0x8000 else (crc << 1) & 0xFFFF
+    return crc
+
+
+def slip(data):
+    return data.replace(b"\xdb", b"\xdb\xdd").replace(b"\xc0", b"\xdb\xdc")
+
+
+def hci(seq, payload):
+    n = len(payload)
+    h = [seq | ((seq + 1) % 8) << 3 | 1 << 6 | 1 << 7, 14 | (n & 0xF) << 4, (n >> 4) & 0xFF]
+    h.append(-sum(h) & 0xFF)
+    body = bytes(h) + payload
+    c = crc16(body)
+    return b"\xc0" + slip(body + bytes((c & 0xFF, c >> 8))) + b"\xc0"
+
+
+def ack(n):
+    h = [n << 3, 0, 0]
+    h.append(-sum(h) & 0xFF)
+    return b"\xc0" + slip(bytes(h)) + b"\xc0"
+
+
+def f_transfer():
+    u32 = lambda v: struct.pack("<I", v)  # noqa: E731
+    packets = [("start", u32(3) + u32(4) + u32(0) + u32(0) + u32(len(F_IMAGE))),
+               ("init", u32(1) + F_INIT + b"\x00\x00")]
+    packets += [("data", u32(4) + F_IMAGE[i : i + 512]) for i in range(0, len(F_IMAGE), 512)]
+    packets.append(("stop", u32(5)))
+    steps = []
+    for k, (kind, payload) in enumerate(packets):
+        seq = (k + 1) % 8
+        steps.append({"step": "bootloader_write", "packet": kind, "seq": seq, "hex": hci(seq, payload).hex(),
+                      "ack_hex": ack((seq + 1) % 8).hex()})
+    return steps
 
 
 def fixture(fid, title, description, link, steps):
@@ -116,6 +183,45 @@ def build():
          {"step": "recv", "frame": {"type": "iface_ack", "of": "iface_event", "ref": 4, "outcome": "refused: signature does not verify"}},
          {"step": "device_read", "text": j({"v": 1, "ev": "result", "seq": 1, "epoch": 1, "usig": "<sig>"}), "not_sent": True},
          {"step": "recv", "frame": {"type": "registered", "id": 3}, "ignored": True}])
+    pkg = f_package()
+    offer = wrapper("j11", "update.offer")
+    offered = j({"v": 1, "id": "j11", "op": "update.offer", "status": "ok", "usig_boot": 1, "usig_seq": 20,
+                 "result": {"job": F_JOB, "state": "awaiting-confirm", "dfu": "serial"}, "usig": "<sig>"})
+    hello2 = {"epoch": 2, "node_public_key_hex": "<pubkey>"}
+    relay_dfu = {"type": "iface_relay", "serial_dfu": True}
+    out["F-serial-dfu.json"] = fixture(
+        "F", "Bootloader serial DFU on a held device",
+        "The agent declared serial_dfu. The Backend arms it with dfu_job, then relays the bootloader-dfu offer. The agent fetched and "
+        "checked the package before the device reset; the application port drops within the arming window, so the socket is kept and "
+        "nothing is relayed. The agent opens the bootloader's own port and sends the package as HCI packets in SLIP frames (start, init, "
+        "data, stop; every byte shown), then the application port returns and the agent declares and says hello again on the same "
+        "socket. The offer's arguments are illustrative; the firmware's update contract is authoritative. The package is synthetic.",
+        "companion",
+        [HANDSHAKE_HDR,
+         {"step": "send", "frame": relay_dfu},
+         {"step": "send", "frame": {"type": "iface_hello", "ref": 1, "hello": HELLO}},
+         {"step": "recv", "frame": {"type": "iface_ack", "of": "iface_hello", "ref": 1, "outcome": "recorded"}},
+         {"step": "recv", "frame": {"type": "dfu_job", "job": F_JOB, "sha256": hashlib.sha256(pkg).hexdigest(), "size": len(pkg)}},
+         {"step": "send", "frame": {"type": "dfu_state", "job": F_JOB, "state": "fetching"}},
+         {"step": "package_get", "path": f"/gateway/dfu-package/{F_JOB}", "authorization": "Bearer <token>", "status": 200,
+          "size": len(pkg), "sha256": hashlib.sha256(pkg).hexdigest(), "body_base64": base64.b64encode(pkg).decode()},
+         {"step": "recv", "frame": {"type": "iface_req", "id": "j11", "wire": offer}},
+         {"step": "device_write", "wire": offer},
+         {"step": "device_read", "text": offered},
+         {"step": "send", "frame": {"type": "iface_result", "ref": 2, "message": offered}},
+         {"step": "recv", "frame": {"type": "iface_ack", "of": "iface_result", "ref": 2, "outcome": "update.offer: ok"}},
+         {"step": "device_link", "port": "application", "event": "lost"},
+         {"step": "send", "frame": {"type": "dfu_state", "job": F_JOB, "state": "waiting-bootloader"}},
+         {"step": "device_link", "port": "bootloader", "event": "opened"},
+         {"step": "send", "frame": {"type": "dfu_state", "job": F_JOB, "state": "transferring"}},
+         *f_transfer(),
+         {"step": "device_link", "port": "bootloader", "event": "closed"},
+         {"step": "send", "frame": {"type": "dfu_state", "job": F_JOB, "state": "rebooting"}},
+         {"step": "device_link", "port": "application", "event": "opened"},
+         {"step": "send", "frame": {"type": "dfu_state", "job": F_JOB, "state": "installed-pending-hello"}},
+         {"step": "send", "frame": relay_dfu},
+         {"step": "send", "frame": {"type": "iface_hello", "ref": 3, "hello": hello2}},
+         {"step": "recv", "frame": {"type": "iface_ack", "of": "iface_hello", "ref": 3, "outcome": "recorded"}}])
     out["invalid-frames.json"] = {
         "contract": CONTRACT, "synthetic": True, "id": "invalid", "title": "Frames the schemas must reject",
         "description": "Each frame must fail the schema of its direction and type.",
@@ -138,6 +244,15 @@ def build():
             {"direction": "backend_to_agent", "why": "iface_ack without an outcome", "frame": {"type": "iface_ack", "of": "iface_result", "ref": 1}},
             {"direction": "backend_to_agent", "why": "iface_ack with a numeric outcome", "frame": {"type": "iface_ack", "of": "iface_result", "ref": 1, "outcome": 1}},
             {"direction": "backend_to_agent", "why": "refused without a reason", "frame": {"type": "refused"}},
+            {"direction": "agent_to_backend", "why": "iface_relay with serial_dfu false (absent means no)", "frame": {"type": "iface_relay", "serial_dfu": False}},
+            {"direction": "backend_to_agent", "why": "dfu_job with an upper-case sha256", "frame": {"type": "dfu_job", "job": "fw-1", "sha256": "A" * 64, "size": 10}},
+            {"direction": "backend_to_agent", "why": "dfu_job with a size of 0", "frame": {"type": "dfu_job", "job": "fw-1", "sha256": "a" * 64, "size": 0}},
+            {"direction": "backend_to_agent", "why": "dfu_job whose job is not one path segment", "frame": {"type": "dfu_job", "job": "../fw", "sha256": "a" * 64, "size": 10}},
+            {"direction": "backend_to_agent", "why": "dfu_job without a sha256", "frame": {"type": "dfu_job", "job": "fw-1", "size": 10}},
+            {"direction": "agent_to_backend", "why": "dfu_state with an unknown state", "frame": {"type": "dfu_state", "job": "fw-1", "state": "done"}},
+            {"direction": "agent_to_backend", "why": "dfu_state failed without a stage", "frame": {"type": "dfu_state", "job": "fw-1", "state": "failed", "error": "no-ack"}},
+            {"direction": "agent_to_backend", "why": "dfu_state with a stage on a state that is not failed", "frame": {"type": "dfu_state", "job": "fw-1", "state": "transferring", "stage": "transfer", "error": "x"}},
+            {"direction": "agent_to_backend", "why": "dfu_state with an extra member", "frame": {"type": "dfu_state", "job": "fw-1", "state": "rebooting", "progress": 50}},
         ],
     }
     return out

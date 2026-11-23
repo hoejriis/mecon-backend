@@ -2,12 +2,24 @@
 // (schema, then the protocol's own rules: framing, exactness, ack matching, the line filter), the frames the
 // schemas must reject, and that the README references every schema and fixture file, so an unreferenced
 // fixture fails CI. Called from validate.mjs. The Connector's tests replay the same fixtures.
+import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import Ajv2020 from 'ajv/dist/2020.js';
 
-const AGENT = ['iface_relay', 'status', 'iface_hello', 'iface_result', 'iface_event'];
-const BACKEND = ['iface_req', 'iface_ack', 'refused'];
+const AGENT = ['iface_relay', 'status', 'iface_hello', 'iface_result', 'iface_event', 'dfu_state'];
+const BACKEND = ['iface_req', 'iface_ack', 'refused', 'dfu_job'];
+// dfu_state order (section 12): each state may follow only these
+const DFU_NEXT = {
+  start: ['fetching'],
+  fetching: ['waiting-bootloader', 'failed'],
+  'waiting-bootloader': ['transferring', 'failed'],
+  transferring: ['transferring', 'rebooting', 'failed'],
+  rebooting: ['installed-pending-hello', 'failed'],
+  'installed-pending-hello': [],
+  failed: ['fetching'],
+};
+const OPCODE = { 3: 'start', 1: 'init', 4: 'data', 5: 'stop' };
 const STREAM = /^[a-z][a-z_]{0,31}$/;
 const bytes = (s) => Buffer.from(s, 'utf8');
 
@@ -75,6 +87,52 @@ export function validateHold(dir = 'connector-hold/v1') {
   return { checked, failures };
 }
 
+// ---- legacy Nordic serial DFU, written here independently of the Connector and the fixture generator ----
+
+function crc16(buf) {
+  let crc = 0xffff;
+  for (const b of buf) {
+    crc ^= b << 8;
+    for (let k = 0; k < 8; k++) crc = crc & 0x8000 ? ((crc << 1) ^ 0x1021) & 0xffff : (crc << 1) & 0xffff;
+  }
+  return crc;
+}
+
+// One SLIP frame (C0 ... C0) to its bytes, or a reason it is not one.
+function unslip(buf) {
+  if (buf.length < 2 || buf[0] !== 0xc0 || buf[buf.length - 1] !== 0xc0) return { err: 'not framed by C0' };
+  const out = [];
+  for (let k = 1; k < buf.length - 1; k++) {
+    const b = buf[k];
+    if (b === 0xc0) return { err: 'C0 inside a frame' };
+    if (b === 0xdb) {
+      const n = buf[++k];
+      if (n === 0xdc) out.push(0xc0); else if (n === 0xdd) out.push(0xdb); else return { err: 'bad escape' };
+    } else out.push(b);
+  }
+  return { bytes: Buffer.from(out) };
+}
+
+function headerOk(h) { return h.length >= 4 && ((h[0] + h[1] + h[2] + h[3]) & 0xff) === 0; }
+
+// The stored entries of a zip (no compression), by local file header.
+function storedZip(buf) {
+  const files = {};
+  let k = 0;
+  while (k + 30 <= buf.length && buf.readUInt32LE(k) === 0x04034b50) {
+    const method = buf.readUInt16LE(k + 8);
+    const size = buf.readUInt32LE(k + 18);
+    const nlen = buf.readUInt16LE(k + 26);
+    const xlen = buf.readUInt16LE(k + 28);
+    const name = buf.subarray(k + 30, k + 30 + nlen).toString('utf8');
+    const start = k + 30 + nlen + xlen;
+    if (method !== 0) return null;
+    files[name] = buf.subarray(start, start + size);
+    k = start + size;
+  }
+  return files;
+}
+
 function scenario(doc, file, check, fail) {
   const at = (i, m) => fail(`fixtures/${file} step ${i + 1}: ${m}`);
   const maxWire = doc.link === 'console' ? 1600 : 4096;
@@ -84,6 +142,18 @@ function scenario(doc, file, check, fail) {
   let lastId = null;
   let pending = null; // a device message waiting for its upload: {text, kind}
   let sawSend = false;
+  // section 12
+  let declaredDfu = false;
+  let dfu = null; // the armed job
+  let dfuState = 'start';
+  let appUp = true;
+  let bootOpen = false;
+  let reopened = false; // the application port came back; iface_relay must come again before iface_hello
+  let relayedAgain = false;
+  let pkgFiles = null;
+  const packets = [];
+  let image = Buffer.alloc(0);
+  let startSize = null;
   const steps = doc.steps;
   steps.forEach((s, i) => {
     switch (s.step) {
@@ -98,6 +168,22 @@ function scenario(doc, file, check, fail) {
         for (const e of check(s.frame, 'agent_to_backend')) at(i, `send: ${e}`);
         if (!sawSend && s.frame.type !== 'iface_relay') at(i, 'the first frame after the handshake must be iface_relay');
         sawSend = true;
+        if (s.frame.type === 'iface_relay') {
+          if (s.frame.serial_dfu === true) declaredDfu = true;
+          if (reopened) relayedAgain = true;
+        }
+        if (s.frame.type === 'iface_hello' && reopened && !relayedAgain) at(i, 'after the application port returns, iface_relay comes before iface_hello');
+        if (s.frame.type === 'dfu_state') {
+          if (!dfu) at(i, 'dfu_state without a dfu_job');
+          else if (s.frame.job !== dfu.job) at(i, 'dfu_state for another job');
+          const st = s.frame.state;
+          if (!(DFU_NEXT[dfuState] || []).includes(st)) at(i, `dfu_state ${st} may not follow ${dfuState}`);
+          if (st === 'waiting-bootloader' && appUp) at(i, 'waiting-bootloader before the application port dropped');
+          if (st === 'transferring' && !bootOpen) at(i, 'transferring without the bootloader port open');
+          if (st === 'rebooting' && packets.at(-1) !== 'stop') at(i, 'rebooting before the stop packet was acknowledged');
+          if (st === 'installed-pending-hello' && !appUp) at(i, 'installed-pending-hello before the application port returned');
+          dfuState = st;
+        }
         if ('ref' in s.frame) {
           const key = JSON.stringify(s.frame.ref);
           if (usedRefs.has(key)) at(i, `ref ${key} reused`);
@@ -126,6 +212,11 @@ function scenario(doc, file, check, fail) {
           break;
         }
         for (const e of check(s.frame, 'backend_to_agent')) at(i, `recv: ${e}`);
+        if (s.frame.type === 'dfu_job') {
+          if (!declaredDfu) at(i, 'dfu_job on a socket that did not declare serial_dfu');
+          dfu = { job: s.frame.job, sha256: s.frame.sha256, size: s.frame.size };
+          dfuState = 'start';
+        }
         if (s.frame.type === 'iface_req') {
           if (lastReq) at(i, 'a second request before the first was written');
           lastReq = s.frame;
@@ -144,6 +235,7 @@ function scenario(doc, file, check, fail) {
         break;
       }
       case 'device_write': {
+        if (!appUp) at(i, 'nothing is written while the application port is down');
         if (s.hex !== undefined) {
           if (doc.link !== 'console' || s.hex !== '0d') at(i, 'the only raw write is the console\'s bare CR (0d)');
           break;
@@ -176,6 +268,74 @@ function scenario(doc, file, check, fail) {
         if (!s.skipped) pending = { text: s.text.replace(/^\r*mecon> /, '') };
         break;
       }
+      case 'package_get': {
+        if (!dfu) { at(i, 'package_get without a dfu_job'); break; }
+        if (s.path !== `/gateway/dfu-package/${dfu.job}`) at(i, 'package path is not the job\'s');
+        if (s.size !== dfu.size || s.sha256 !== dfu.sha256) at(i, 'package size or sha256 differs from dfu_job');
+        const body = Buffer.from(s.body_base64, 'base64');
+        if (body.length !== dfu.size) at(i, 'package body length is not dfu_job.size');
+        if (createHash('sha256').update(body).digest('hex') !== dfu.sha256) at(i, 'package body sha256 is not dfu_job.sha256');
+        pkgFiles = storedZip(body);
+        if (!pkgFiles) { at(i, 'the fixture package is not a stored zip'); break; }
+        try {
+          const man = JSON.parse(pkgFiles['manifest.json'].toString('utf8')).manifest.application;
+          pkgFiles = { bin: pkgFiles[man.bin_file], dat: pkgFiles[man.dat_file] };
+          if (!pkgFiles.bin || !pkgFiles.dat) throw new Error();
+        } catch { at(i, 'the package has no application bin_file and dat_file'); pkgFiles = null; }
+        break;
+      }
+      case 'device_link':
+        if (s.port === 'application' && s.event === 'lost') {
+          if (!dfu || dfuState === 'start') at(i, 'the socket stays only for an armed job; otherwise the agent closes it');
+          appUp = false;
+        } else if (s.port === 'application' && s.event === 'opened') {
+          appUp = true;
+          reopened = true;
+          relayedAgain = false;
+        } else if (s.port === 'bootloader' && s.event === 'opened') {
+          if (!dfu || appUp) at(i, 'the bootloader port is opened only for an armed job after the application port dropped');
+          bootOpen = true;
+        } else if (s.port === 'bootloader' && s.event === 'closed') {
+          bootOpen = false;
+        } else at(i, 'unknown device_link event');
+        break;
+      case 'bootloader_write': {
+        if (!bootOpen) at(i, 'bootloader_write while the bootloader port is not open');
+        const f = unslip(Buffer.from(s.hex, 'hex'));
+        if (f.err) { at(i, f.err); break; }
+        const b = f.bytes;
+        if (b.length < 10 || !headerOk(b)) { at(i, 'bad HCI header'); break; }
+        const seq = b[0] & 7;
+        const len = (b[1] >> 4) | (b[2] << 4);
+        if (seq !== s.seq || ((b[0] >> 3) & 7) !== (seq + 1) % 8 || (b[0] >> 6) !== 3 || (b[1] & 0xf) !== 14) at(i, 'HCI header fields');
+        const payload = b.subarray(4, b.length - 2);
+        if (len !== payload.length) at(i, 'HCI length');
+        if (crc16(b.subarray(0, b.length - 2)) !== b.readUInt16LE(b.length - 2)) at(i, 'HCI CRC16');
+        const kind = OPCODE[payload.readUInt32LE(0)];
+        if (kind !== s.packet) at(i, `opcode is ${kind}, the step says ${s.packet}`);
+        const want = { start: [undefined], init: ['start'], data: ['init', 'data'], stop: ['data'] }[s.packet];
+        if (!want.includes(packets.at(-1))) at(i, `${s.packet} after ${packets.at(-1)}`);
+        if (packets.length && s.seq !== (packets.length + 1) % 8) at(i, 'sequence numbers are not consecutive from 1');
+        if (!packets.length && s.seq !== 1) at(i, 'the first packet has sequence number 1');
+        packets.push(s.packet);
+        if (kind === 'start') {
+          if (payload.length !== 20 || payload.readUInt32LE(4) !== 4 || payload.readUInt32LE(8) || payload.readUInt32LE(12)) at(i, 'start: application mode 4, no SoftDevice or bootloader');
+          startSize = payload.readUInt32LE(16);
+        } else if (kind === 'init') {
+          if (payload.readUInt16LE(payload.length - 2) !== 0) at(i, 'init: two zero bytes after the init packet');
+          if (pkgFiles && !payload.subarray(4, payload.length - 2).equals(pkgFiles.dat)) at(i, 'init packet is not the package\'s dat_file');
+        } else if (kind === 'data') {
+          if (payload.length - 4 > 512 || payload.length <= 4) at(i, 'data: 1 to 512 bytes');
+          image = Buffer.concat([image, payload.subarray(4)]);
+        } else if (kind === 'stop') {
+          if (payload.length !== 4) at(i, 'stop: the opcode only');
+          if (startSize !== image.length) at(i, 'the image sent is not the size start announced');
+          if (pkgFiles && !image.equals(pkgFiles.bin)) at(i, 'the image sent is not the package\'s bin_file');
+        }
+        const a = unslip(Buffer.from(s.ack_hex, 'hex'));
+        if (a.err || !headerOk(a.bytes) || ((a.bytes[0] >> 3) & 7) !== (seq + 1) % 8) at(i, 'ack_hex is not the acknowledgement of this packet');
+        break;
+      }
       case 'close':
         if (s.by === 'backend' && s.code === 1008) {
           const prev = steps[i - 1];
@@ -187,6 +347,8 @@ function scenario(doc, file, check, fail) {
     }
   });
   if (lastReq) fail(`fixtures/${file}: a request was received and never written`);
+  if (packets.length && packets.at(-1) !== 'stop') fail(`fixtures/${file}: the transfer does not end with stop`);
+  if (!appUp) fail(`fixtures/${file}: ends with the application port down`);
   if (pending) fail(`fixtures/${file}: a device message was read and never uploaded`);
   if ([...sentRefs.keys()].length && doc.id !== 'E') fail(`fixtures/${file}: uploads without an ack: ${[...sentRefs.keys()].join(',')}`);
 }

@@ -1,5 +1,5 @@
 {
-  "contract": "mecon-connector-hold/1.0.0-draft.1",
+  "contract": "mecon-connector-hold/1.0.0-draft.2",
   "synthetic": true,
   "id": "A",
   "title": "Connect, declare, hello, one request, one result (Companion)",

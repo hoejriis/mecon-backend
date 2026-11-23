@@ -111,7 +111,7 @@ failures += cases.failures;
 const obsCases = validateReaderCases('observations/v1', 'mecon-observations');
 checked += obsCases.checked;
 failures += obsCases.failures;
-// The WebSocket hold contract: frame schemas, fixtures A-E, rejected frames, and the README's references.
+// The WebSocket hold contract: frame schemas, fixtures A-F, rejected frames, and the README's references.
 const hold = validateHold();
 checked += hold.checked;
 failures += hold.failures;

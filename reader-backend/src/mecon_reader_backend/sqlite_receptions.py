@@ -182,30 +182,34 @@ class SqliteReceptionStore:
     _SELECT = ("SELECT r.capture_id, r.packet_id, r.source, r.observer_key, r.received_at, r.device_observed_at, "
                "r.rssi, r.snr, p.packet_type FROM receptions r JOIN packets p ON p.packet_id = r.packet_id ")
 
+    #: (source, observer_key) pairs per query: two bound parameters each, well under SQLite's limit.
+    SCOPE_CHUNK = 200
+
     def _scan(self, conn: sqlite3.Connection, allowed: Mapping[tuple[str, str], ScopedObserver], *, after: int,
               limit: int, newest_first: bool) -> list[tuple]:
-        """Receptions of allowed observers after a position, in chunks, until `limit` are found."""
-        if not allowed:
+        """Receptions of allowed observers after a position, at most `limit`, in position order.
+
+        The scope is a bound `(source, observer_key) IN (VALUES ...)` in the query, in chunks of SCOPE_CHUNK
+        pairs, so a reception of an observer outside the scope is never read; each chunk's answer is already
+        ordered and limited, and the chunks are merged by position."""
+        if not allowed or limit <= 0:
             return []
+        pairs = sorted(allowed)
+        if newest_first:
+            bound, args = "r.capture_id < ? AND r.capture_id > ? ", [self._head(conn) + 1, max(after, self._floor(conn))]
+            order = "ORDER BY r.capture_id DESC "
+        else:
+            bound, args = "r.capture_id > ? ", [after]
+            order = "ORDER BY r.capture_id "
         out: list[tuple] = []
-        edge = after if not newest_first else self._head(conn) + 1
-        floor = max(after, self._floor(conn))
-        while len(out) < limit:
-            if newest_first:
-                rows = conn.execute(self._SELECT + "WHERE r.capture_id < ? AND r.capture_id > ? "
-                                    "ORDER BY r.capture_id DESC LIMIT 500", (edge, floor)).fetchall()
-            else:
-                rows = conn.execute(self._SELECT + "WHERE r.capture_id > ? ORDER BY r.capture_id LIMIT 500",
-                                    (edge,)).fetchall()
-            if not rows:
-                break
-            for row in rows:
-                if (row[2], row[3]) in allowed:
-                    out.append(row)
-                    if len(out) >= limit:
-                        break
-            edge = rows[-1][0]
-        return out
+        for k in range(0, len(pairs), self.SCOPE_CHUNK):
+            chunk = pairs[k:k + self.SCOPE_CHUNK]
+            values = ", ".join("(?, ?)" for _ in chunk)
+            params = [x for pair in chunk for x in pair] + args + [limit]
+            out += conn.execute(self._SELECT + f"WHERE (r.source, r.observer_key) IN (VALUES {values}) AND " + bound
+                                + order + "LIMIT ?", params).fetchall()
+        out.sort(key=lambda row: row[0], reverse=newest_first)
+        return out[:limit]
 
     def _clock_confidence(self, received_at: str, observed: int | None) -> tuple[str, str]:
         """(observed_at, clock_confidence). The processor keeps a device time only after it passed its own checks, so

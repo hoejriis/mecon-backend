@@ -437,3 +437,61 @@ def test_a_cursor_never_shows_the_store_position_and_round_trips_per_caller():
             assert "cursor_expired" in str(e) or e.__class__.__name__ == "CoreError"
     seq = [int(store.cursor(alice, p).split("_")[1], 16) for p in range(100, 110)]
     assert seq != sorted(seq) and len(set(seq)) == 10, "consecutive positions must not stay ordered or adjacent"
+
+
+def _many(tmp_path, n_in=300, n_out=50, per_out=40):
+    """A store with n_in observers in scope (one reception each) and n_out out of scope (per_out each), mixed."""
+    import random
+
+    r = Rig(tmp_path)
+    rng = random.Random(11)
+    rows = [("in", i) for i in range(n_in)] + [("out", i) for i in range(n_out) for _ in range(per_out)]
+    rng.shuffle(rows)
+    with r.store.batch() as b:
+        b.see_packet("PKT", "ADVERT", stamp(60))
+        for cid, (kind, i) in enumerate(rows, start=1):
+            b.add_reception({"capture_id": cid, "packet_id": "PKT", "source": "s1", "observer_key": f"{kind}-{i}",
+                             "received_at": stamp(60), "device_observed_at": None, "rssi": -80, "snr": 1.0,
+                             "hop_count": 1, "route_type": 1})
+    allowed = {("s1", f"in-{i}"): None for i in range(n_in)}
+    return r, allowed
+
+
+@pytest.mark.parametrize("after,limit,newest", [(0, 1000, False), (0, 7, False), (900, 50, False), (0, 1000, True),
+                                                (0, 9, True), (1500, 40, True)])
+def test_the_sql_scope_filter_answers_what_a_full_scan_filtered_in_python_would(tmp_path, after, limit, newest):
+    """The scope filter moved into SQL (chunked IN over source and observer key) must give the same rows, in the
+    same order, as reading every reception and filtering: including a scope larger than one chunk."""
+    import sqlite3
+
+    r, allowed = _many(tmp_path)
+    assert len(allowed) > r.reader.SCOPE_CHUNK
+    conn = sqlite3.connect(r.path)
+    got = r.reader._scan(conn, allowed, after=after, limit=limit, newest_first=newest)
+    every = conn.execute(r.reader._SELECT + "ORDER BY r.capture_id" + (" DESC" if newest else "")).fetchall()
+    if newest:
+        head, floor = r.reader._head(conn) + 1, max(after, r.reader._floor(conn))
+        want = [x for x in every if floor < x[0] < head and (x[2], x[3]) in allowed][:limit]
+    else:
+        want = [x for x in every if x[0] > after and (x[2], x[3]) in allowed][:limit]
+    assert got == want and got, (len(got), len(want))
+
+
+def test_receptions_outside_the_scope_are_not_read_the_index_serves_the_scope(tmp_path):
+    """A reception of an observer outside the scope is never read: the statements _scan really runs (recorded with
+    the trace callback, bound values expanded) go through the observer index, never a scan of every reception."""
+    import sqlite3
+
+    r, allowed = _many(tmp_path, n_in=3)
+    conn = sqlite3.connect(r.path)
+    ran: list[str] = []
+    conn.set_trace_callback(ran.append)
+    for newest in (False, True):
+        r.reader._scan(conn, allowed, after=0, limit=10, newest_first=newest)
+    conn.set_trace_callback(None)
+    scans = [q for q in ran if "FROM receptions r JOIN packets" in q]
+    assert len(scans) == 2, ran
+    for q in scans:
+        plan = " | ".join(str(row[-1]) for row in conn.execute("EXPLAIN QUERY PLAN " + q).fetchall())
+        assert "receptions_observer" in plan, plan
+        assert "SCAN r " not in plan + " " and "SCAN receptions" not in plan, plan

@@ -1,0 +1,804 @@
+{
+ "contract": "mecon-observations/1.0.0-draft.3",
+ "synthetic": true,
+ "group": "observations",
+ "cases": [
+  {
+   "id": "observations-01",
+   "title": "No session: every operation answers 401",
+   "world": "two-fleets-observed",
+   "steps": [
+    {
+     "request": {
+      "operation": "listObservers",
+      "query": {
+       "scope": "self"
+      }
+     },
+     "expect": {
+      "status": 401,
+      "schema": "Error",
+      "body": {
+       "/code": "unauthenticated"
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "getObservationSnapshot",
+      "query": {
+       "scope": "self"
+      }
+     },
+     "expect": {
+      "status": 401,
+      "schema": "Error",
+      "body": {
+       "/code": "unauthenticated"
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "streamObservationEvents",
+      "query": {
+       "scope": "self"
+      }
+     },
+     "expect": {
+      "status": 401,
+      "schema": "Error",
+      "body": {
+       "/code": "unauthenticated"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "observations-02",
+   "title": "A member sees its own fleet's observers and approved public ones, never another fleet's",
+   "world": "two-fleets-observed",
+   "steps": [
+    {
+     "action": "sign-in",
+     "args": {
+      "client": "alice",
+      "user": "alice"
+     }
+    },
+    {
+     "as": "alice",
+     "request": {
+      "operation": "listObservers",
+      "query": {
+       "scope": "self"
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "ObserverList",
+      "match": [
+       {
+        "at": "/items",
+        "where": {
+         "/label": "North mast (synthetic)"
+        },
+        "count": 1
+       },
+       {
+        "at": "/items",
+        "where": {
+         "/label": "North attic (synthetic)"
+        },
+        "count": 1
+       },
+       {
+        "at": "/items",
+        "where": {
+         "/label": "Public buoy (synthetic)"
+        },
+        "count": 1
+       },
+       {
+        "at": "/items",
+        "where": {
+         "/label": "South hill (synthetic)"
+        },
+        "count": 0
+       }
+      ],
+      "headers": {
+       "Cache-Control": "no-store"
+      }
+     }
+    },
+    {
+     "action": "sign-in",
+     "args": {
+      "client": "carol",
+      "user": "carol"
+     }
+    },
+    {
+     "as": "carol",
+     "request": {
+      "operation": "listObservers",
+      "query": {
+       "scope": "self"
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "ObserverList",
+      "match": [
+       {
+        "at": "/items",
+        "where": {
+         "/label": "South hill (synthetic)"
+        },
+        "count": 1
+       },
+       {
+        "at": "/items",
+        "where": {
+         "/label": "North mast (synthetic)"
+        },
+        "count": 0
+       },
+       {
+        "at": "/items",
+        "where": {
+         "/label": "North attic (synthetic)"
+        },
+        "count": 0
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "observations-03",
+   "title": "An observer with no shared position has a null location; one with a position has one",
+   "world": "two-fleets-observed",
+   "steps": [
+    {
+     "action": "sign-in",
+     "args": {
+      "client": "alice",
+      "user": "alice"
+     }
+    },
+    {
+     "as": "alice",
+     "request": {
+      "operation": "listObservers",
+      "query": {
+       "scope": "self"
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "ObserverList",
+      "match": [
+       {
+        "at": "/items",
+        "where": {
+         "/label": "North attic (synthetic)",
+         "/location": null
+        },
+        "count": 1
+       },
+       {
+        "at": "/items",
+        "where": {
+         "/label": "North mast (synthetic)",
+         "/location": null
+        },
+        "count": 0
+       },
+       {
+        "at": "/items",
+        "where": {
+         "/label": "North mast (synthetic)"
+        },
+        "count": 1
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "observations-04",
+   "title": "A snapshot holds the visible receptions only, one packet's receptions share a correlation id, and another packet's do not",
+   "world": "two-fleets-observed",
+   "steps": [
+    {
+     "action": "sign-in",
+     "args": {
+      "client": "alice",
+      "user": "alice"
+     }
+    },
+    {
+     "as": "alice",
+     "request": {
+      "operation": "listObservers",
+      "query": {
+       "scope": "self"
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "ObserverList"
+     },
+     "capture": {
+      "mast": {
+       "at": "/items",
+       "where": {
+        "/label": "North mast (synthetic)"
+       },
+       "field": "/observer_id"
+      },
+      "attic": {
+       "at": "/items",
+       "where": {
+        "/label": "North attic (synthetic)"
+       },
+       "field": "/observer_id"
+      }
+     }
+    },
+    {
+     "as": "alice",
+     "request": {
+      "operation": "getObservationSnapshot",
+      "query": {
+       "scope": "self"
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "Snapshot",
+      "match": [
+       {
+        "at": "/items",
+        "where": {
+         "/observer_id": "${mast}",
+         "/rssi": -90,
+         "/provenance": "own_fleet"
+        },
+        "count": 1
+       },
+       {
+        "at": "/items",
+        "where": {
+         "/rssi": -70,
+         "/provenance": "approved_public_source"
+        },
+        "count": 1
+       },
+       {
+        "at": "/items",
+        "where": {
+         "/rssi": -80
+        },
+        "count": 0
+       }
+      ],
+      "headers": {
+       "Cache-Control": "no-store"
+      }
+     },
+     "capture": {
+      "pc": {
+       "at": "/items",
+       "where": {
+        "/observer_id": "${mast}"
+       },
+       "field": "/packet_correlation_id"
+      }
+     }
+    },
+    {
+     "as": "alice",
+     "request": {
+      "operation": "getObservationSnapshot",
+      "query": {
+       "scope": "self"
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "Snapshot",
+      "match": [
+       {
+        "at": "/items",
+        "where": {
+         "/observer_id": "${attic}",
+         "/packet_correlation_id": "${pc}"
+        },
+        "count": 1
+       },
+       {
+        "at": "/items",
+        "where": {
+         "/observer_id": "${attic}"
+        },
+        "at_least": 1
+       },
+       {
+        "at": "/items",
+        "where": {
+         "/rssi": -70,
+         "/packet_correlation_id": "${pc}"
+        },
+        "count": 0
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "observations-05",
+   "title": "A snapshot `since` that is no cursor answers 410 cursor_expired",
+   "world": "two-fleets-observed",
+   "steps": [
+    {
+     "action": "sign-in",
+     "args": {
+      "client": "alice",
+      "user": "alice"
+     }
+    },
+    {
+     "as": "alice",
+     "request": {
+      "operation": "getObservationSnapshot",
+      "query": {
+       "scope": "self",
+       "since": "not-a-cursor"
+      }
+     },
+     "expect": {
+      "status": 410,
+      "schema": "Error",
+      "body": {
+       "/code": "cursor_expired"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "observations-06",
+   "title": "A stream from a snapshot's cursor carries a new visible reception and not another fleet's",
+   "world": "two-fleets-observed",
+   "steps": [
+    {
+     "action": "sign-in",
+     "args": {
+      "client": "alice",
+      "user": "alice"
+     }
+    },
+    {
+     "as": "alice",
+     "request": {
+      "operation": "getObservationSnapshot",
+      "query": {
+       "scope": "self"
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "Snapshot"
+     },
+     "capture": {
+      "cp": "/cursor"
+     }
+    },
+    {
+     "action": "add-reception",
+     "args": {
+      "observer": "north_mast",
+      "packet": "p3",
+      "rssi": -77
+     }
+    },
+    {
+     "action": "add-reception",
+     "args": {
+      "observer": "south_hill",
+      "packet": "p3",
+      "rssi": -66
+     }
+    },
+    {
+     "as": "alice",
+     "request": {
+      "operation": "streamObservationEvents",
+      "query": {
+       "scope": "self",
+       "cursor": "${cp}"
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "ObservationEvent",
+      "stream": {
+       "match": [
+        {
+         "at": "",
+         "where": {
+          "/kind": "reception",
+          "/reception/rssi": -77
+         },
+         "at_least": 1
+        },
+        {
+         "at": "",
+         "where": {
+          "/kind": "reception",
+          "/reception/rssi": -66
+         },
+         "count": 0
+        }
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "observations-07",
+   "title": "A stream cursor that is no cursor answers 410 before the stream starts, and Last-Event-ID wins over the query",
+   "world": "two-fleets-observed",
+   "steps": [
+    {
+     "action": "sign-in",
+     "args": {
+      "client": "alice",
+      "user": "alice"
+     }
+    },
+    {
+     "as": "alice",
+     "request": {
+      "operation": "getObservationSnapshot",
+      "query": {
+       "scope": "self"
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "Snapshot"
+     },
+     "capture": {
+      "cp": "/cursor"
+     }
+    },
+    {
+     "as": "alice",
+     "request": {
+      "operation": "streamObservationEvents",
+      "query": {
+       "scope": "self",
+       "cursor": "not-a-cursor"
+      }
+     },
+     "expect": {
+      "status": 410,
+      "schema": "Error",
+      "body": {
+       "/code": "cursor_expired"
+      }
+     }
+    },
+    {
+     "as": "alice",
+     "request": {
+      "operation": "streamObservationEvents",
+      "query": {
+       "scope": "self",
+       "cursor": "${cp}"
+      },
+      "headers": {
+       "Last-Event-ID": "not-a-cursor"
+      }
+     },
+     "expect": {
+      "status": 410,
+      "schema": "Error",
+      "body": {
+       "/code": "cursor_expired"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "observations-08",
+   "title": "A cursor moved out of retention answers 410 on the stream and as `since`",
+   "world": "two-fleets-observed",
+   "steps": [
+    {
+     "action": "sign-in",
+     "args": {
+      "client": "alice",
+      "user": "alice"
+     }
+    },
+    {
+     "as": "alice",
+     "request": {
+      "operation": "getObservationSnapshot",
+      "query": {
+       "scope": "self"
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "Snapshot"
+     },
+     "capture": {
+      "cp": "/cursor"
+     }
+    },
+    {
+     "action": "age-out-events",
+     "args": {}
+    },
+    {
+     "as": "alice",
+     "request": {
+      "operation": "streamObservationEvents",
+      "query": {
+       "scope": "self",
+       "cursor": "${cp}"
+      }
+     },
+     "expect": {
+      "status": 410,
+      "schema": "Error",
+      "body": {
+       "/code": "cursor_expired"
+      }
+     }
+    },
+    {
+     "as": "alice",
+     "request": {
+      "operation": "getObservationSnapshot",
+      "query": {
+       "scope": "self",
+       "since": "${cp}"
+      }
+     },
+     "expect": {
+      "status": 410,
+      "schema": "Error",
+      "body": {
+       "/code": "cursor_expired"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "observations-09",
+   "title": "After the session ends, its cookie reads nothing",
+   "world": "two-fleets-observed",
+   "steps": [
+    {
+     "action": "sign-in",
+     "args": {
+      "client": "alice",
+      "user": "alice"
+     }
+    },
+    {
+     "as": "alice",
+     "request": {
+      "operation": "listObservers",
+      "query": {
+       "scope": "self"
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "ObserverList",
+      "match": [
+       {
+        "at": "/items",
+        "where": {
+         "/label": "North mast (synthetic)"
+        },
+        "count": 1
+       }
+      ]
+     }
+    },
+    {
+     "action": "end-session",
+     "args": {
+      "client": "alice"
+     }
+    },
+    {
+     "as": "alice",
+     "request": {
+      "operation": "listObservers",
+      "query": {
+       "scope": "self"
+      }
+     },
+     "expect": {
+      "status": 401,
+      "schema": "Error",
+      "body": {
+       "/code": "unauthenticated"
+      }
+     }
+    },
+    {
+     "as": "alice",
+     "request": {
+      "operation": "getObservationSnapshot",
+      "query": {
+       "scope": "self"
+      }
+     },
+     "expect": {
+      "status": 401,
+      "schema": "Error",
+      "body": {
+       "/code": "unauthenticated"
+      }
+     }
+    },
+    {
+     "as": "alice",
+     "request": {
+      "operation": "streamObservationEvents",
+      "query": {
+       "scope": "self"
+      }
+     },
+     "expect": {
+      "status": 401,
+      "schema": "Error",
+      "body": {
+       "/code": "unauthenticated"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "observations-10",
+   "title": "A member without the observations grant gets 403 from every operation, though its fleet has observers",
+   "world": "two-fleets-observed",
+   "steps": [
+    {
+     "action": "sign-in",
+     "args": {
+      "client": "dora",
+      "user": "dora"
+     }
+    },
+    {
+     "as": "dora",
+     "request": {
+      "operation": "listObservers",
+      "query": {
+       "scope": "self"
+      }
+     },
+     "expect": {
+      "status": 403,
+      "schema": "Error",
+      "body": {
+       "/code": "forbidden"
+      }
+     }
+    },
+    {
+     "as": "dora",
+     "request": {
+      "operation": "getObservationSnapshot",
+      "query": {
+       "scope": "self"
+      }
+     },
+     "expect": {
+      "status": 403,
+      "schema": "Error",
+      "body": {
+       "/code": "forbidden"
+      }
+     }
+    },
+    {
+     "as": "dora",
+     "request": {
+      "operation": "streamObservationEvents",
+      "query": {
+       "scope": "self"
+      }
+     },
+     "expect": {
+      "status": 403,
+      "schema": "Error",
+      "body": {
+       "/code": "forbidden"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "observations-11",
+   "title": "A member whose fleet has no observer gets 200 and nothing, never 403",
+   "world": "two-fleets-observed",
+   "steps": [
+    {
+     "action": "sign-in",
+     "args": {
+      "client": "erin",
+      "user": "erin"
+     }
+    },
+    {
+     "as": "erin",
+     "request": {
+      "operation": "listObservers",
+      "query": {
+       "scope": "self"
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "ObserverList",
+      "body": {
+       "/items": []
+      }
+     }
+    },
+    {
+     "as": "erin",
+     "request": {
+      "operation": "getObservationSnapshot",
+      "query": {
+       "scope": "self"
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "Snapshot",
+      "body": {
+       "/items": []
+      }
+     }
+    },
+    {
+     "as": "erin",
+     "request": {
+      "operation": "streamObservationEvents",
+      "query": {
+       "scope": "self"
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "ObservationEvent",
+      "stream": {}
+     }
+    }
+   ]
+  }
+ ]
+}

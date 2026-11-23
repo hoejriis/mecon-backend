@@ -1,7 +1,7 @@
 // Validates the Reader API conformance cases (contracts/reader-api/v1/cases) against the OpenAPI document they
 // test: each file matches cases.schema.json and names the document's version; every world and action exists
 // with its arguments; every request names a real operation with exactly its path parameters, only its query
-// parameters and its required headers; a request body matches the operation's request schema unless the case
+// parameters (its required ones included) and its required headers; a request body matches the operation's request schema unless the case
 // marks it `invalid`, in which case it must fail (an operation without a request body takes one only so marked);
 // a `count: 0` match is paired with a positive one at the same place; every expected status is declared for the operation, with
 // the schema and headers that status declares; captures are defined before use; and every operation has at
@@ -15,7 +15,7 @@ import addFormats from 'ajv-formats';
 const VAR = /\$\{([a-z][a-z0-9_]*)\}/g;
 const PLACEHOLDER = 'synthetic_capture';
 
-export function validateReaderCases(dir = 'reader-api/v1') {
+export function validateReaderCases(dir = 'reader-api/v1', name = 'mecon-reader-api') {
   let checked = 0;
   let failures = 0;
   const fail = (m) => { failures++; console.error('FAIL', m); };
@@ -23,7 +23,7 @@ export function validateReaderCases(dir = 'reader-api/v1') {
   const doc = parse(readFileSync(join(dir, 'openapi.yaml'), 'utf8'));
   const casesDir = join(dir, 'cases');
   const readJson = (f) => JSON.parse(readFileSync(join(casesDir, f), 'utf8'));
-  const contract = `mecon-reader-api/${doc.info.version}`;
+  const contract = `${name}/${doc.info.version}`;
 
   const ajv = new Ajv2020({ strict: false, allErrors: true });
   addFormats(ajv);
@@ -92,12 +92,14 @@ export function validateReaderCases(dir = 'reader-api/v1') {
         const { op, params } = o;
         use(s.request, 'request');
         use(s.expect, 'expect');
-        // Path parameters: exactly the template's. Query: only declared ones. Headers: required ones given, none unknown.
+        // Path parameters: exactly the template's. Query: only declared ones, required ones given unless the request is
+        // marked invalid. Headers: required ones given, none unknown.
         const want = [...o.path.matchAll(/\{([^}]+)\}/g)].map((m) => m[1]).sort().join(',');
         const got = Object.keys(s.request.path ?? {}).sort().join(',');
         if (want !== got) fail(`${at}: ${o.path} needs path [${want}], got [${got}]`);
         const q = params.filter((p) => p.in === 'query').map((p) => p.name);
         for (const k of Object.keys(s.request.query ?? {})) if (!q.includes(k)) fail(`${at}: query ${k} is not a parameter of ${s.request.operation}`);
+        for (const p of params) if (p.in === 'query' && p.required && !s.request.invalid && !(p.name in (s.request.query ?? {}))) fail(`${at}: required query ${p.name} missing`);
         const hp = params.filter((p) => p.in === 'header' && p.name !== 'X-CSRF-Token');
         const given = Object.keys(s.request.headers ?? {});
         for (const p of hp) if (p.required && !given.includes(p.name)) fail(`${at}: required header ${p.name} missing`);
@@ -140,10 +142,10 @@ export function validateReaderCases(dir = 'reader-api/v1') {
         // Body values that are not captures must themselves fit the schema at that pointer: checked by the replay.
         for (const n of Object.keys(s.capture ?? {})) defined.add(n);
       });
-      if (failures === before) ok(`reader-api/v1/${where}`);
+      if (failures === before) ok(`${dir}/${where}`);
     }
   }
   for (const id of Object.keys(ops)) if (!covered.has(id)) fail(`operation ${id} has no conformance case`);
-  if (Object.keys(ops).every((id) => covered.has(id))) ok(`every one of ${Object.keys(ops).length} reader-api operations has a case`);
+  if (Object.keys(ops).every((id) => covered.has(id))) ok(`every one of ${Object.keys(ops).length} ${name} operations has a case`);
   return { checked, failures };
 }

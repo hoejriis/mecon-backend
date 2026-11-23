@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: MECON Live Observation API (authorized projection)
-  version: 1.0.0-draft.2
+  version: 1.0.0-draft.3
   summary: Session-authenticated, capability-scoped view of observer locations and packet receptions.
   description: |
     Machine-readable form of the authorized projection described in
@@ -18,6 +18,15 @@ info:
     The Reader offers these operations only while `GET /session` reports
     `capabilities.observations` as `available`. The server re-checks the
     caller's rights on **every** request and on every stream reconnect.
+
+    **Access.** A caller whose `capabilities.observations` is `forbidden` (it
+    lacks the grant) gets 403 `forbidden` from every operation alike. When it is
+    `unavailable` (the Backend does not serve observations or cannot reach them
+    now), every operation answers 503, which a client retries. A caller who may observe
+    but sees no observer gets 200 with nothing in it: an empty list, an empty
+    snapshot, a stream of heartbeats only. Whether a caller sees any observer
+    never changes a status, as an observer it may not see is absent, never
+    marked as hidden.
 
     **Scope.** `scope=self` is the only scope in this version. It means
     receptions by observers the caller may see under the server's rules: the
@@ -230,7 +239,7 @@ components:
       description: No valid session
       content: { application/json: { schema: { $ref: '#/components/schemas/Error' }, examples: { e: { externalValue: fixtures/error-401.json } } } }
     Forbidden:
-      description: Authenticated but not permitted to observe (code `forbidden`)
+      description: Authenticated, but `capabilities.observations` is `forbidden` for this caller, who lacks the grant (code `forbidden`). Never answered because the caller sees no observer, nor because observations are unavailable (that is 503).
       content: { application/json: { schema: { $ref: '#/components/schemas/Error' }, examples: { e: { externalValue: fixtures/error-403.json } } } }
     CursorExpired:
       description: Cursor expired or outside retention (code `cursor_expired`); reload the snapshot

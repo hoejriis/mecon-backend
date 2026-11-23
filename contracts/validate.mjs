@@ -107,6 +107,10 @@ for (const docPath of docs) {
 const cases = validateReaderCases();
 checked += cases.checked;
 failures += cases.failures;
+// The observation API's conformance cases, in the same format.
+const obsCases = validateReaderCases('observations/v1', 'mecon-observations');
+checked += obsCases.checked;
+failures += obsCases.failures;
 // The WebSocket hold contract: frame schemas, fixtures A-E, rejected frames, and the README's references.
 const hold = validateHold();
 checked += hold.checked;

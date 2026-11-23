@@ -19,8 +19,10 @@ info:
     `capabilities.observations` as `available`. The server re-checks the
     caller's rights on **every** request and on every stream reconnect.
 
-    **Access.** A caller whose `capabilities.observations` is not `available`
-    gets 403 `forbidden` from every operation alike. A caller who may observe
+    **Access.** A caller whose `capabilities.observations` is `forbidden` (it
+    lacks the grant) gets 403 `forbidden` from every operation alike. When it is
+    `unavailable` (the Backend does not serve observations or cannot reach them
+    now), every operation answers 503, which a client retries. A caller who may observe
     but sees no observer gets 200 with nothing in it: an empty list, an empty
     snapshot, a stream of heartbeats only. Whether a caller sees any observer
     never changes a status, as an observer it may not see is absent, never
@@ -237,7 +239,7 @@ components:
       description: No valid session
       content: { application/json: { schema: { $ref: '#/components/schemas/Error' }, examples: { e: { externalValue: fixtures/error-401.json } } } }
     Forbidden:
-      description: Authenticated, but `capabilities.observations` is not `available` for this caller (code `forbidden`). Never answered because the caller sees no observer.
+      description: Authenticated, but `capabilities.observations` is `forbidden` for this caller, who lacks the grant (code `forbidden`). Never answered because the caller sees no observer, nor because observations are unavailable (that is 503).
       content: { application/json: { schema: { $ref: '#/components/schemas/Error' }, examples: { e: { externalValue: fixtures/error-403.json } } } }
     CursorExpired:
       description: Cursor expired or outside retention (code `cursor_expired`); reload the snapshot

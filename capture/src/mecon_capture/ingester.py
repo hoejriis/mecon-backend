@@ -3,7 +3,8 @@
 It only receives. There is no publish path anywhere in this module or its transports. Every message
 becomes a capture stamped at arrival and goes into a bounded in-memory buffer; a flusher thread appends
 the buffer to the archive in batches. The network thread never writes to disk and never waits: a full
-buffer counts the capture as dropped and moves on.
+buffer counts the capture as shed (the ingester's own count, never the archive's) and moves on. A payload
+over max_receive_bytes is measured on receipt and handed on as a stub: its size and content hash, no bytes.
 """
 
 from __future__ import annotations
@@ -15,7 +16,7 @@ import itertools
 import threading
 from typing import Any, Callable
 
-from .archive import Archive
+from .archive import Archive, content_hash
 from .config import Config, Profile
 from .logutil import Log
 from .transport import CONNACK_TEXT, Transport, TransportError
@@ -34,56 +35,65 @@ def iso_ms(t: dt.datetime) -> str:
 
 
 class CaptureBuffer:
-    """A bounded FIFO. put() never blocks and never does I/O: it is called from the network thread."""
+    """A bounded FIFO and the ingester's counters. put() never blocks and never does I/O: it is called from
+    the network thread. One lock covers the queue and every counter, so received = handed_on + buffered +
+    shed holds at every instant a reader can see."""
 
-    def __init__(self, bound: int, archive: Archive) -> None:
+    def __init__(self, bound: int) -> None:
         self.bound = bound
-        self._archive = archive
         self._q: collections.deque[dict[str, Any]] = collections.deque()
         self._lock = threading.Lock()
+        self._received = self._handed_on = self._shed = self._oversize = 0
 
-    def put(self, capture: dict[str, Any]) -> bool:
+    def put(self, capture: dict[str, Any], oversize: bool = False) -> bool:
+        """Count the message on arrival; keep it, or count it shed when the buffer is full."""
         with self._lock:
+            self._received += 1
+            if oversize:
+                self._oversize += 1
             if len(self._q) < self.bound:
                 self._q.append(capture)
                 return True
-        self._archive.record_dropped(1)
-        return False
+            self._shed += 1
+            return False
 
     def peek(self, n: int) -> list[dict[str, Any]]:
         with self._lock:
             return list(itertools.islice(self._q, n))
 
-    def discard(self, n: int) -> None:
+    def hand_on(self, n: int) -> None:
+        """The archive answered `available` for the first n captures: they leave the buffer and count as
+        handed on, in one step."""
         with self._lock:
             for _ in range(n):
                 self._q.popleft()
+            self._handed_on += n
 
     def __len__(self) -> int:
         with self._lock:
             return len(self._q)
 
-    def level(self, now: dt.datetime) -> dict[str, Any]:
-        """What waits here for the archive: how many captures, the bound, and how long the oldest has waited
-        since its arrival (null when empty). The archive's own counters see a capture only once it is appended,
-        so this is where the lag shows while storage is unavailable."""
+    def counters(self, now: dt.datetime) -> dict[str, Any]:
+        """ingester.schema.json: the totals and levels, read in one step."""
         with self._lock:
             n = len(self._q)
             first = self._q[0]["received_at"] if n else None
-        oldest = None
+            out = {"received": self._received, "handed_on": self._handed_on, "buffered": n, "bound": self.bound,
+                   "shed": self._shed, "oversize": self._oversize, "oldest_buffered_ms": None}
         if first is not None:
             arrived = dt.datetime.strptime(first, "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=dt.timezone.utc)
-            oldest = max(0, int((now - arrived).total_seconds() * 1000))
-        return {"buffered": n, "bound": self.bound, "oldest_buffered_ms": oldest}
+            out["oldest_buffered_ms"] = max(0, int((now - arrived).total_seconds() * 1000))
+        return out
 
 
 class SourceSession:
     """One profile: its transport, its status, and the callbacks the transport drives."""
 
     def __init__(self, profile: Profile, client_id: str, transport: Transport, buffer: CaptureBuffer,
-                 clock: Clock, log: Log) -> None:
+                 clock: Clock, log: Log, max_receive_bytes: int = 65536) -> None:
         self.profile, self.client_id, self.transport = profile, client_id, transport
         self._buffer, self._clock, self._log = buffer, clock, log
+        self._max_receive = max_receive_bytes
         self._lock = threading.Lock()
         self._state = "unknown"
         self._last_error: str | None = None
@@ -154,11 +164,19 @@ class SourceSession:
 
     def on_message(self, topic: str, payload: bytes, retain: bool) -> None:
         received_at = iso_ms(self._clock())  # stamped at arrival, here, before anything is queued
-        self._buffer.put({
-            "source": self.profile.name, "topic": topic,
-            "payload_b64": base64.b64encode(payload).decode("ascii"),
-            "retained": bool(retain), "received_at": received_at,
-        })
+        capture: dict[str, Any] = {"source": self.profile.name, "topic": topic,
+                                   "retained": bool(retain), "received_at": received_at}
+        oversize = len(payload) > self._max_receive
+        if oversize:
+            # The receive bound: hash it and let the bytes go. Nothing of the payload is kept past here.
+            try:
+                digest = content_hash(topic, payload)
+            except UnicodeEncodeError:  # a topic with no UTF-8 encoding: the archive rejects it as malformed
+                digest = "0" * 64
+            capture["stub"] = {"size": len(payload), "content_hash": digest}
+        else:
+            capture["payload_b64"] = base64.b64encode(payload).decode("ascii")
+        self._buffer.put(capture, oversize)
 
     # ---- status (status.schema.json) ----
 
@@ -178,10 +196,10 @@ class Ingester:
                  clock: Clock = utc_now, log: Log | None = None) -> None:
         self.cfg, self.archive = cfg, archive
         self.log = log or Log(level=cfg.log_level)
-        self.buffer = CaptureBuffer(cfg.buffer_max, archive)
+        self.buffer = CaptureBuffer(cfg.buffer_max)
         self.sessions = [
             SourceSession(p, f"{cfg.client_id_prefix}-{p.name}-{cfg.instance_tag}", transport_factory(p),
-                          self.buffer, clock, self.log)
+                          self.buffer, clock, self.log, cfg.max_receive_bytes)
             for p in cfg.profiles
         ]
         self._stop = threading.Event()
@@ -223,7 +241,8 @@ class Ingester:
 
     def flush_once(self) -> bool:
         """Append up to batch_max buffered captures. True when the archive answered (even with rejections),
-        or there was nothing to append. The captures leave the buffer only after an `available` answer."""
+        or there was nothing to append. The captures leave the buffer, and count as handed on, only after an
+        `available` answer."""
         batch = self.buffer.peek(self.cfg.batch_max)
         if not batch:
             return True
@@ -238,7 +257,7 @@ class Ingester:
             self.log.warn("archive_unavailable", batch=batch_id, count=len(batch))
             return False
         self._retry = None
-        self.buffer.discard(len(batch))
+        self.buffer.hand_on(len(batch))
         if result["rejected"]:
             self.log.warn("captures_rejected", batch=batch_id, count=len(result["rejected"]))
         return True

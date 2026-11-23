@@ -1,13 +1,14 @@
-"""Replays contracts/observation-subscription/v1 fixture C against the ingester over a fake transport."""
+"""Replays every contracts/observation-subscription/v1 fixture against the real ingester."""
 
 import pytest
 
-from conftest import sub_fixture
+from conftest import SUB_FIXTURES, sub_fixture
 from helpers import Clock, make_ingester
+from mecon_capture.config import validate_profile
 
 
-def replay(tmp_path, schemas):
-    fx = sub_fixture("C")
+def replay(tmp_path, schemas, fx=None):
+    fx = fx or sub_fixture("C")
     clock = Clock()
     ig, _archive, transports, _log = make_ingester([fx["profile"]], tmp_path, clock=clock)
     session, tr = ig.sessions[0], transports[fx["profile"]["name"]]
@@ -30,7 +31,74 @@ def replay(tmp_path, schemas):
     return fx, tr, results
 
 
-def test_fixture_c(tmp_path, schemas):
+def check_profiles(tmp_path, schemas, name, fx):
+    assert fx["expect"] in ("valid", "invalid") and fx["cases"], name
+    for case in fx["cases"]:
+        ok = fx["expect"] == "valid"
+        assert schemas["profile"].is_valid(case["value"]) == ok, case["note"]
+        assert (validate_profile(case["value"]) == []) == ok, case["note"]
+
+
+def check_sequence(tmp_path, schemas, name, fx):
+    fx, tr, results = replay(tmp_path, schemas, fx)
+    for step, actions, status in results:
+        assert actions == step["actions"], step["event"]
+        assert status == step["status"], step["event"]
+        assert schemas["status"].is_valid(status)
+
+
+def check_ingester(tmp_path, schemas, name, fx):
+    """Replay a message or an append's answer against the real buffer and flusher, and compare the counters
+    after each event with the fixture's, key by key as far as it gives them."""
+    lim = fx["limits"]
+    prof = sub_fixture("A")["cases"][2]["value"]
+    clock = Clock()
+    ig, archive, _t, _l = make_ingester([prof], tmp_path, clock=clock, buffer_max=lim["buffer_bound"],
+                                        max_receive_bytes=lim["max_receive_bytes"])
+    answer = {"storage": None}
+
+    def fake_append(batch_id, captures):  # the archive's answer is the fixture's; no file is touched
+        if answer["storage"] == "unavailable":
+            return {"batch_id": batch_id, "storage": "unavailable", "committed": 0, "rejected": [], "stubbed": []}
+        return {"batch_id": batch_id, "storage": "available", "committed": len(captures), "rejected": [], "stubbed": []}
+
+    archive.append = fake_append
+    assert fx["events"], name
+    for i, ev in enumerate(fx["events"]):
+        if ev["event"] == "message":
+            ig.sessions[0].on_message("packets/obs-1", b"x" * ev["size"], False)
+        elif ev["event"] == "append":
+            answer["storage"] = ev["storage"]
+            assert ig.flush_once() == (ev["storage"] == "available"), (name, i)
+        else:
+            pytest.fail(f"{name}: unknown ingester event {ev['event']!r}; teach this test to replay it")
+        got = ig.buffer.counters(clock())
+        assert schemas["ingester"].is_valid(got), (name, i)
+        for key, want in ev["expect"].items():
+            assert got[key] == want, (name, i, key)
+        assert got["received"] == got["handed_on"] + got["buffered"] + got["shed"], (name, i)
+        assert (got["oldest_buffered_ms"] is None) == (got["buffered"] == 0), (name, i)
+
+
+@pytest.mark.parametrize("name,fx", SUB_FIXTURES, ids=[n for n, _ in SUB_FIXTURES])
+def test_every_subscription_fixture(tmp_path, schemas, name, fx):
+    """Every file in contracts/observation-subscription/v1/fixtures, dispatched on its kind. An unknown kind fails."""
+    kind = fx.get("kind")
+    if kind == "profiles":
+        check_profiles(tmp_path, schemas, name, fx)
+    elif kind == "sequence":
+        check_sequence(tmp_path, schemas, name, fx)
+    elif kind == "ingester":
+        check_ingester(tmp_path, schemas, name, fx)
+    else:
+        pytest.fail(f"{name}: unknown fixture kind {kind!r}; teach this test to replay it")
+
+
+def test_the_fixture_directory_has_the_known_kinds():
+    assert {fx["kind"] for _, fx in SUB_FIXTURES} >= {"profiles", "sequence", "ingester"}
+
+
+def test_fixture_c_rules(tmp_path, schemas):
     fx, tr, results = replay(tmp_path, schemas)
     assert len(results) == 6
     for step, actions, status in results:

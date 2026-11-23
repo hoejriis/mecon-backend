@@ -122,28 +122,79 @@ def test_failure_after_a_good_batch_keeps_the_good_batch(arch):
     assert len(rows(arch)) == 2
 
 
-def test_identity_holds_at_every_instant_during_an_append(arch):
+def test_nothing_is_counted_until_the_commit_and_then_all_four_at_once(arch):
+    """Acceptance is the commit (raw-capture section 4). Every statement of the append, the COMMIT included,
+    sees untouched counters; right after it all four have moved together."""
     seen = []
 
     class Spy(FaultyConnection):
         def execute(self, sql, *a):
-            seen.append(arch.counters())
+            seen.append((sql.split()[0].upper(), arch.counters()))
             return super().execute(sql, *a)
 
     arch._conn = Spy(arch._conn, lambda w, n: False)
     arch.append("b", [cap(0), {"bad": 1}, cap(2, b"123456789012")])
-    assert any(c["buffered"] == 3 for c in seen)  # in flight: accepted, not yet answered
-    assert all(identity(c) for c in seen)
-    assert all((c["oldest_buffered_ms"] is not None) == (c["buffered"] > 0) for c in seen)
+    assert [w for w, _ in seen] == ["BEGIN", "INSERT", "INSERT", "COMMIT"]
+    zero = (0, 0, 0, 0)
+    for _, c in seen:
+        assert (c["received"], c["committed"], c["rejected"], c["stubbed"]) == zero and identity(c)
+        assert c["buffered"] == 0 and c["oldest_buffered_ms"] is None
     end = arch.counters()
-    assert end["buffered"] == 0 and end["oldest_buffered_ms"] is None and identity(end)
     assert (end["received"], end["committed"], end["rejected"], end["stubbed"]) == (3, 2, 1, 1)
+    assert end["buffered"] == 0 and end["oldest_buffered_ms"] is None and end["dropped"] == 0 and identity(end)
 
 
-def test_dropped_counts_as_received_and_dropped(arch):
-    arch.record_dropped(2)
-    c = arch.counters()
-    assert (c["received"], c["dropped"]) == (2, 2) and identity(c) and c["stubbed"] <= c["committed"]
+def test_the_four_counters_are_updated_under_one_hold_of_the_counter_lock(arch):
+    """Deterministic form of the next test: after the commit the counters take one lock hold, not several."""
+    holds = []
+
+    class CountingLock:
+        def __init__(self, real):
+            self._real = real
+
+        def __enter__(self):
+            holds.append(1)
+            return self._real.__enter__()
+
+        def __exit__(self, *a):
+            return self._real.__exit__(*a)
+
+    arch._state = CountingLock(arch._state)
+    arch.append("b", [cap(0), {"bad": 1}, cap(2, b"123456789012")])
+    assert len(holds) == 1
+    arch._conn = FaultyConnection(arch._conn, lambda w, n: w == "BEGIN")
+    holds.clear()
+    arch.append("c", [cap(0)])
+    assert len(holds) == 1  # an unavailable answer: the one count is unavailable_batches
+
+
+def test_a_concurrent_reader_never_sees_a_half_counted_batch(arch):
+    """received, committed and rejected move in one step: any snapshot has received == committed + rejected."""
+    stop = threading.Event()
+    bad = []
+
+    def reader():
+        while not stop.is_set():
+            c = arch.counters()
+            if not identity(c) or c["received"] != c["committed"] + c["rejected"]:
+                bad.append(c)
+
+    t = threading.Thread(target=reader)
+    t.start()
+    try:
+        for j in range(40):
+            arch.append(f"b{j}", [cap(0), {"bad": 1}, cap(1, b"123456789"), cap(2)] * 20)
+    finally:
+        stop.set()
+        t.join()
+    assert not bad and arch.counters()["received"] == 40 * 80
+
+
+def test_the_archive_has_no_way_to_count_a_producers_shed_captures(arch):
+    """A producer's own shed captures are the producer's to count; the archive's dropped is its own and 0."""
+    assert not hasattr(arch, "record_dropped")
+    arch.append("b", [cap(0)])
+    assert arch.counters()["dropped"] == 0
 
 
 def test_stubbed_never_exceeds_committed(arch):
@@ -185,3 +236,46 @@ def test_concurrent_appends_are_serialised_and_identity_holds(arch):
     assert not errs and len(rows(arch)) == 160
     c = arch.counters()
     assert c["received"] == c["committed"] == 160 and identity(c)
+
+
+H = "ab" * 32
+
+
+def stub_cap(i, size=300000, h=H, topic="t/a"):
+    return {"source": "src", "topic": topic, "stub": {"size": size, "content_hash": h},
+            "retained": False, "received_at": f"2026-01-01T00:00:00.{i % 1000:03d}Z"}
+
+
+def test_an_arrived_stub_is_committed_as_a_stub_with_its_own_size_and_hash(arch):
+    r = arch.append("b", [cap(0), stub_cap(1, size=3, h=H), cap(2)])  # size 3 is under the archive's limit: still a stub
+    assert r == {"batch_id": "b", "storage": "available", "committed": 3, "rejected": [], "stubbed": [1]}
+    a, s, c = rows(arch)
+    assert s["stub"] and s["payload"] is None and s["payload_size"] == 3 and s["content_hash"] == H
+    assert not a["stub"] and a["payload"] == b"x" and not c["stub"]
+    k = arch.counters()
+    assert (k["received"], k["committed"], k["stubbed"]) == (3, 3, 1) and identity(k)
+
+
+def test_an_arrived_stub_is_not_checked_as_base64_or_against_its_hash(arch):
+    # the hash is not the hash of anything the archive could check; it is stored as given
+    r = arch.append("b", [stub_cap(0, h="0" * 64)])
+    assert r["committed"] == 1 and r["stubbed"] == [0] and rows(arch)[0]["content_hash"] == "0" * 64
+
+
+@pytest.mark.parametrize("edit", [
+    lambda c: dict(c, payload_b64="YQ=="),  # both a payload and a stub
+    lambda c: {k: v for k, v in c.items() if k != "stub"},  # neither
+    lambda c: dict(c, stub={"size": 0, "content_hash": H}),
+    lambda c: dict(c, stub={"size": True, "content_hash": H}),
+    lambda c: dict(c, stub={"size": 1.5, "content_hash": H}),
+    lambda c: dict(c, stub={"size": 5, "content_hash": H.upper()}),
+    lambda c: dict(c, stub={"size": 5, "content_hash": H[:-1]}),
+    lambda c: dict(c, stub={"size": 5, "content_hash": H + "\n"}),
+    lambda c: dict(c, stub={"size": 5}),
+    lambda c: dict(c, stub={"size": 5, "content_hash": H, "extra": 1}),
+    lambda c: dict(c, stub="x"),
+    lambda c: dict(c, topic="bad\ud800topic"),
+])
+def test_a_malformed_stub_capture_is_rejected_alone(arch, edit):
+    r = arch.append("b", [cap(0), edit(stub_cap(1))])
+    assert r["rejected"] == [{"index": 1, "reason": "malformed"}] and r["committed"] == 1 and r["stubbed"] == []

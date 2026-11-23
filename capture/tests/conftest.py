@@ -27,6 +27,7 @@ def schemas():
     return {
         "profile": schema_validator(SUB / "schemas" / "profile.schema.json"),
         "status": schema_validator(SUB / "schemas" / "status.schema.json"),
+        "ingester": schema_validator(SUB / "schemas" / "ingester.schema.json"),
         "capture": schema_validator(RAW / "schemas" / "capture.schema.json"),
         "append-request": schema_validator(RAW / "schemas" / "append-request.schema.json"),
         "append-result": schema_validator(RAW / "schemas" / "append-result.schema.json"),
@@ -40,3 +41,13 @@ def raw_fixture(name):
 
 def sub_fixture(name):
     return load_json(next(SUB.joinpath("fixtures").glob(name + "-*.json")))
+
+
+def all_fixtures(directory):
+    """Every fixture file of a contract directory, sorted by name: [(file name, document)]. Tests dispatch on
+    each document's `kind` and fail on one they do not know, so a new fixture is never skipped silently."""
+    return [(f.name, load_json(f)) for f in sorted(pathlib.Path(directory).glob("*.json"))]
+
+
+RAW_FIXTURES = all_fixtures(RAW / "fixtures")
+SUB_FIXTURES = all_fixtures(SUB / "fixtures")

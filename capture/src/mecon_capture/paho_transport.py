@@ -4,6 +4,10 @@ One client per profile, a clean session, TLS with certificate and host-name veri
 paho reconnects by itself with exponential backoff (1 s doubling to 120 s); every reconnect fires the
 connect callback again, which is where the ingester subscribes. Credentials are read from the named
 environment variables before every connection attempt and never logged.
+
+MQTT 5's CONNECT property Maximum Packet Size (a SHOULD in the subscription profile) is not set: it exists
+only in MQTT 5 and every profile here speaks 3.1.1. The receive bound is the ingester's own measure of each
+payload on receipt (max_receive_bytes).
 """
 
 from __future__ import annotations

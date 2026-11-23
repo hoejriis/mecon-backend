@@ -59,7 +59,7 @@ def test_profile_without_credential_has_no_refs():
 
 def test_parse_ok_and_defaults():
     cfg = C.parse(copy.deepcopy(GOOD))
-    assert cfg.max_payload_bytes == 65536 and cfg.buffer_max == 5000 and cfg.health.bind == "127.0.0.1"
+    assert cfg.max_payload_bytes == 65536 and cfg.buffer_max == 5000 and cfg.max_receive_bytes == 65536 and cfg.health.bind == "127.0.0.1"
     assert cfg.profiles[0].name == "own-broker"
 
 
@@ -68,6 +68,9 @@ def test_parse_ok_and_defaults():
     lambda r: r["ingester"].pop("instance_tag"),
     lambda r: r["archive"].update(max_payload_bytes=0),
     lambda r: r["ingester"].update(buffer_max=0),
+    lambda r: r["ingester"].update(max_receive_bytes=0),
+    lambda r: r["ingester"].update(max_receive_bytes=True),
+    lambda r: r["ingester"].update(max_receive_bytes="64k"),
     lambda r: r["ingester"].update(batch_max=501),
     lambda r: r.update(profile=[]),
     lambda r: r.update(profile=r["profile"] * 2),  # duplicate name
@@ -81,6 +84,12 @@ def test_parse_refuses(mut):
     with pytest.raises(C.ConfigError) as e:
         C.parse(raw)
     assert e.value.problems
+
+
+def test_max_receive_bytes_is_configurable_from_one_up():
+    raw = copy.deepcopy(GOOD)
+    raw["ingester"]["max_receive_bytes"] = 1
+    assert C.parse(raw).max_receive_bytes == 1
 
 
 def test_load_toml_and_example_config(tmp_path):

@@ -5,11 +5,12 @@ import urllib.request
 from conftest import sub_fixture
 from helpers import make_ingester
 from mecon_capture.health import make_server, serve_in_thread
+from mecon_capture.ingester import utc_now
 
 PROF = sub_fixture("A")["cases"][2]["value"]
 
 
-def test_healthz_reports_profiles_and_counters_that_match_the_schemas(tmp_path, schemas):
+def test_healthz_reports_profiles_and_both_counter_sets_that_match_the_schemas(tmp_path, schemas):
     ig, archive, _t, _l = make_ingester([PROF, dict(PROF, name="second")], tmp_path)
     ig.sessions[0].start()
     ig.sessions[0].on_connack(0)
@@ -17,7 +18,9 @@ def test_healthz_reports_profiles_and_counters_that_match_the_schemas(tmp_path, 
     ig.sessions[1].on_connack(5)
     ig.sessions[0].on_message("packets/a", b"1", False)
     ig.flush_once()
-    server = make_server("127.0.0.1", 0, lambda: {"profiles": ig.statuses(), "counters": archive.counters()})
+    ig.sessions[0].on_message("packets/b", b"2", False)  # still waiting in the buffer
+    server = make_server("127.0.0.1", 0, lambda: {"profiles": ig.statuses(), "counters": archive.counters(),
+                                                  "ingester": ig.buffer.counters(utc_now())})
     serve_in_thread(server)
     try:
         base = f"http://127.0.0.1:{server.server_address[1]}"
@@ -31,6 +34,10 @@ def test_healthz_reports_profiles_and_counters_that_match_the_schemas(tmp_path, 
         assert doc["profiles"][0]["state"] == "connected" and doc["profiles"][1]["last_error"] == "not authorised"
         assert schemas["counters"].is_valid(doc["counters"])
         assert doc["counters"]["committed"] == 1
+        assert schemas["ingester"].is_valid(doc["ingester"]), doc["ingester"]
+        assert {k: doc["ingester"][k] for k in ("received", "handed_on", "buffered", "shed", "oversize")} == {
+            "received": 2, "handed_on": 1, "buffered": 1, "shed": 0, "oversize": 0}
+        assert doc["ingester"]["oldest_buffered_ms"] is not None
         try:
             urllib.request.urlopen(base + "/other")
             assert False

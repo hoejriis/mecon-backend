@@ -8,7 +8,8 @@ max_payload_bytes = 65536     # a larger payload is stored as a stub (size and h
 [ingester]
 instance_tag = "a"            # 1-8 of [a-z0-9]; unique per ingester instance reading the same broker
 client_id_prefix = "mecon-capture"
-buffer_max = 5000             # captures held in memory; a full buffer counts a capture as dropped
+buffer_max = 5000             # captures held in memory; a full buffer counts a capture as shed
+max_receive_bytes = 65536     # a larger payload is handed on as a stub (size and hash, no bytes), counted oversize
 batch_max = 500               # at most 500 (the contract's bound)
 flush_interval_s = 1.0
 

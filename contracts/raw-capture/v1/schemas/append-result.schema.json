@@ -4,7 +4,7 @@
   "title": "The outcome of one append",
   "type": "object",
   "additionalProperties": false,
-  "required": ["batch_id", "storage", "committed", "rejected"],
+  "required": ["batch_id", "storage", "committed", "rejected", "stubbed"],
   "properties": {
     "batch_id": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,64}$" },
     "storage": { "enum": ["available", "unavailable"], "description": "unavailable: nothing of the batch was committed; the caller keeps it and may retry." },
@@ -15,13 +15,18 @@
         "type": "object", "additionalProperties": false, "required": ["index", "reason"],
         "properties": {
           "index": { "type": "integer", "minimum": 0 },
-          "reason": { "enum": ["malformed", "too_large"] }
+          "reason": { "enum": ["malformed"] }
         }
       }
+    },
+    "stubbed": {
+      "type": "array", "uniqueItems": true,
+      "items": { "type": "integer", "minimum": 0 },
+      "description": "Indexes of captures committed as a stub: a payload over max_payload_bytes keeps every field and its size and content hash, not its bytes. Each is also counted in committed."
     }
   },
   "allOf": [
     { "if": { "properties": { "storage": { "const": "unavailable" } } },
-      "then": { "properties": { "committed": { "const": 0 }, "rejected": { "maxItems": 0 } } } }
+      "then": { "properties": { "committed": { "const": 0 }, "rejected": { "maxItems": 0 }, "stubbed": { "maxItems": 0 } } } }
   ]
 }

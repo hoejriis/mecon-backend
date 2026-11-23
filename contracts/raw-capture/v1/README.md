@@ -2,7 +2,7 @@
 
 How a capture producer (the [observation ingester](../../observation-subscription/v1/README.md), or the device path for eligible reception reports) hands raw messages to the **archive**, and what the archive answers. A raw capture is the message as received: its bytes unchanged, where it came from, when it arrived. Parsing, normalization and deduplication happen downstream, from what the archive has committed.
 
-**Status: draft, version `1.0.0-draft.1`.** The text is derived from a Backend's raw-first capture. Statements marked **(observed)** describe that implementation today and are SHOULD here; section 7 lists where it falls short. The fixtures are synthetic.
+**Status: draft, version `1.0.0-draft.2`.** The text is derived from a Backend's raw-first capture. Statements marked **(observed)** describe that implementation today and are SHOULD here; section 7 lists where it falls short. The fixtures are synthetic.
 
 | File | What it is |
 | --- | --- |
@@ -13,7 +13,7 @@ How a capture producer (the [observation ingester](../../observation-subscriptio
 | `schemas/counters.schema.json` | JSON Schema for the archive's counters. |
 | `fixtures.schema.json` | JSON Schema for the fixtures. |
 | `fixtures/A-committed-batch.json` | Fixture A: a batch committed whole, a retained copy among it. |
-| `fixtures/B-one-malformed-one-too-large.json` | Fixture B: one malformed and one oversized capture rejected alone; the rest commit. |
+| `fixtures/B-one-malformed-one-oversized.json` | Fixture B: one malformed capture rejected alone, one oversized capture committed as a stub; the rest commit. |
 | `fixtures/C-storage-unavailable.json` | Fixture C: storage unavailable; nothing committed. |
 | `fixtures/D-counters-after-a-b-c.json` | Fixture D: the counters after A, B and C. |
 | `fixtures/E-invalid.json` | Fixture E: documents the schemas reject. |
@@ -40,16 +40,23 @@ How a capture producer (the [observation ingester](../../observation-subscriptio
 
 `schemas/append-request.schema.json`: a `batch_id` the caller chooses and 1 to 500 captures.
 
-- The archive checks each capture against `capture.schema.json` and against its payload size limit, `max_payload_bytes`.
-  - One that fails is **rejected alone**, with its index and a reason: `malformed`, or `too_large` for a payload past the limit.
+- The archive checks each capture against `capture.schema.json`.
+  - One that fails is **rejected alone**, with its index and the reason `malformed`.
   - It never fails the batch.
-- The rest are committed **together**: after the result says `committed`, they survive a crash.
+- A valid capture whose payload is larger than the archive's limit, `max_payload_bytes`, is **committed as a stub**: every field of the capture, the payload's size and a content hash of it, but not its bytes.
+  - The message is still recorded as received; only its body is not kept.
+  - Its index is listed in `stubbed`, and it counts in `committed`.
+  - Downstream never parses a stub.
+- The rest are committed **together**, stubs included: after the result says `committed`, they survive a crash.
 
 ## 3. The result
 
 `schemas/append-result.schema.json`:
-- `storage` is `available`: `committed` + the number of `rejected` entries equals the number of captures, and each rejected index appears once and is inside the batch.
-- `storage` is `unavailable`: nothing of the batch was committed (`committed` 0, no rejections). The caller still holds every capture and MAY retry the same batch. That is the backpressure signal: a producer that gets `unavailable` buffers, within its own bound, or counts what it cannot keep.
+- `storage` is `available`:
+  - `committed` + the number of `rejected` entries equals the number of captures;
+  - each rejected index appears once and is inside the batch;
+  - each `stubbed` index appears once, is inside the batch and is not rejected.
+- `storage` is `unavailable`: nothing of the batch was committed (`committed` 0, no rejections, no stubs). The caller still holds every capture and MAY retry the same batch. That is the backpressure signal: a producer that gets `unavailable` buffers, within its own bound, or counts what it cannot keep.
 
 A producer never learns "committed" for a capture that was not.
 
@@ -59,6 +66,7 @@ A producer never learns "committed" for a capture that was not.
 - `received`: counted when the archive **accepts** an append, before it answers, so every capture of every batch it accepts is counted.
   - An append the archive cannot take (storage unavailable) is answered `unavailable`, is never accepted, and stays with the caller: it counts in `unavailable_batches`, not in `received`.
 - `committed` and `rejected`: counted when the archive answers `available` for the batch.
+- `stubbed`: of `committed`, the captures stored as a stub. It is never more than `committed`.
 - `buffered`: **the number** of captures accepted and not yet answered, at this instant. It rises at acceptance and falls at the answer.
 - `dropped`: captures accepted and then lost while the archive kept running, for example by an archive that sheds its buffer under pressure. A conforming archive that never drops reports `dropped` 0.
 - `oldest_buffered_ms`: how long the oldest buffered capture has waited, which is the lag. It is null when nothing is buffered.
@@ -70,7 +78,7 @@ Counters start at zero with the archive, so a crash's loss is never counted in t
 ## 5. The fixtures' rules
 
 The validator checks:
-- **A to C:** each result is consistent with section 3, and with its own request: the right `batch_id`, and exactly the captures that fail the schema or the fixture's `max_payload_bytes` rejected, with the right reasons.
+- **A to C:** each result is consistent with section 3, and with its own request: the right `batch_id`, exactly the captures that fail the schema rejected as `malformed`, and exactly the valid captures past the fixture's `max_payload_bytes` listed in `stubbed`.
 - **D:** the counters after A to C have all been answered (nothing in flight, so `buffered` 0) equal what their results add up to under section 4, and the identity holds.
 
 ## 6. Budgets

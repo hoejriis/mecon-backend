@@ -1,5 +1,5 @@
 {
   "fixture": "D", "title": "The counters once A, B and C are all answered: nothing in flight, so buffered 0", "kind": "counters",
-  "after": ["A-committed-batch.json", "B-one-malformed-one-too-large.json", "C-storage-unavailable.json"],
-  "counters": { "received": 7, "committed": 5, "rejected": 2, "unavailable_batches": 1, "buffered": 0, "dropped": 0, "oldest_buffered_ms": null }
+  "after": ["A-committed-batch.json", "B-one-malformed-one-oversized.json", "C-storage-unavailable.json"],
+  "counters": { "received": 7, "committed": 6, "rejected": 1, "stubbed": 1, "unavailable_batches": 1, "buffered": 0, "dropped": 0, "oldest_buffered_ms": null }
 }

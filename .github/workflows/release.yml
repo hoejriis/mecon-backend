@@ -1,7 +1,7 @@
 name: release
 # Pushing a tag vX.Y.Z builds the Reader with the tagged commit stamped in,
 # and attaches mecon-reader-dist-vX.Y.Z.tar.gz plus its .sha256 to a GitHub
-# release. Static hosts (F2 included) deploy that tarball; the container
+# release. Static hosts (production included) deploy that tarball; the container
 # image is for other deployers and is built from reader/Dockerfile.
 on:
   push:

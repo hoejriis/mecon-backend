@@ -320,6 +320,59 @@ def test_a_revoked_session_gets_access_revoked_once_then_the_stream_closes_and_n
     run(go())
 
 
+def test_a_grant_withdrawn_mid_stream_sends_access_revoked_once_and_closes():
+    """The grant is read again during the stream (through the resolver), not only at connect: once it is
+    forbidden, the stream says access_revoked once and closes, and nothing observed after is sent."""
+    async def go():
+        rig = Rig()
+        async with rig.client("alice"):
+            pass
+
+        async def withdraw_soon():
+            await asyncio.sleep(0.3)
+            rig.world.users["alice"].observations = "forbidden"
+            rig.app.state.sessions.drop_cache()  # as the 5 s read cache ending would
+            await asyncio.sleep(0.3)  # several poll intervals: a read already in flight has finished
+            rig.world.add_reception("north_mast", "p3", -54)
+        t = asyncio.ensure_future(withdraw_soon())
+        status, _, raw, ended = await rig.stream(bound_s=3.0)
+        await t
+        assert status == 200 and ended, "the stream stayed open after the grant was withdrawn"
+        frames = parse_sse(raw)
+        assert [f["kind"] for f in frames] == ["access_revoked"]
+        assert b"-54" not in raw
+    run(go())
+
+
+def test_the_scope_answering_forbidden_mid_stream_sends_access_revoked_not_a_silent_close():
+    """A forbidden from the core's scope port mid-stream is a withdrawal, not an outage: access_revoked once."""
+    async def go():
+        rig = Rig()
+        async with rig.client("alice"):
+            pass
+        orig = rig.scope.visible_observers
+        rig.world.scope_forbidden = False
+
+        async def maybe_forbidden(caller):
+            if rig.world.scope_forbidden:
+                raise CoreError("forbidden")
+            return await orig(caller)
+        rig.scope.visible_observers = maybe_forbidden
+
+        async def act():
+            await asyncio.sleep(0.3)
+            rig.world.scope_forbidden = True
+            await asyncio.sleep(0.3)  # several poll intervals: a read already in flight has finished
+            rig.world.add_reception("north_mast", "p3", -53)
+        t = asyncio.ensure_future(act())
+        status, _, raw, ended = await rig.stream(bound_s=3.0)
+        await t
+        assert status == 200 and ended
+        assert [f["kind"] for f in parse_sse(raw)] == ["access_revoked"]
+        assert b"-53" not in raw
+    run(go())
+
+
 def test_another_sessions_revocation_leaves_the_stream_open():
     async def go():
         rig = Rig()

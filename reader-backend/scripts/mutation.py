@@ -189,8 +189,14 @@ MUTANTS = [
      [('hashlib.sha256(f"{caller.user_id}|{packet}".encode()).hexdigest()[:20]', 'hashlib.sha256(f"{packet}".encode()).hexdigest()[:20]')]),
     ("b13", "observations: a cursor shows the store position (no permutation; SQLite store)", "sqlite_receptions.py",
      [("        return (left << 32) | right\n", "        return x\n")]),
+    ("b14", "observations: the grant is not read again mid-stream", "observations.py",
+     [('            if state == "forbidden":\n                raise CoreError("forbidden")\n            if state != "available":\n                raise CoreError("unavailable")\n', "")]),
+    ("b15", "observations: the scope's forbidden mid-stream is taken as an outage", "observations.py",
+     [('                    raise CoreError("forbidden") from None  # the core withdrew', '                    raise CoreError("unavailable") from None  # the core withdrew')]),
+    ("b16", "the stream closes on a withdrawal without access_revoked", "sse.py",
+     [("                    yield forbidden_frame_for(cursor)  # rights withdrawn", "                    pass  # rights withdrawn")]),
     ("b12", "observations: the stream does not re-ask the scope", "observations.py",
-     [("                now_visible = await asyncio.wait_for(scope.visible_observers(c), core_timeout_s)\n",
+     [("                now_visible = await asyncio.wait_for(scope.visible_observers(now), core_timeout_s)\n",
        "                now_visible = visible\n")]),
 ]
 

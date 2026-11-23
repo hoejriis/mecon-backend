@@ -353,7 +353,8 @@ def create_app(lookup: SessionLookup, core: ReaderCore, config: FacadeConfig | N
 
         routes += obs.observation_routes(authenticate, sessions, observation_scope, reception_store,
                                          heartbeat_s=cfg.heartbeat_s, poll_s=cfg.observation_poll_s,
-                                         core_timeout_s=cfg.core_timeout_s, feed_down_close_s=cfg.feed_down_close_s)
+                                         core_timeout_s=cfg.core_timeout_s, feed_down_close_s=cfg.feed_down_close_s,
+                                         cookie_name=COOKIE)
 
     async def not_found(request: Request, exc: Exception) -> Response:
         status = getattr(exc, "status_code", 404)

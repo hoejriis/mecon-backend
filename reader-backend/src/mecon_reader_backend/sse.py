@@ -37,11 +37,14 @@ async def event_stream(core: ReaderCore | None, sessions: SessionResolver, calle
                        heartbeat_s: float, feed_down_close_s: float, tick_s: float = 0.25,
                        read: Callable[[Caller, str | None, float], Awaitable[EventBatch]] | None = None,
                        revoked_frame_for: Callable[[str], bytes] = revoked_frame,
-                       gone_frame_for: Callable[[str], bytes] | None = None) -> AsyncIterator[bytes]:
+                       gone_frame_for: Callable[[str], bytes] | None = None,
+                       forbidden_frame_for: Callable[[str], bytes] | None = None) -> AsyncIterator[bytes]:
     """Frame `first`, then follow the stream with `read` (default: the Reader core's read_events).
 
     `revoked_frame_for` builds the one frame sent when the session is revoked; `gone_frame_for`, when given,
     builds a frame sent before closing when a read finds the cursor gone (else the stream just closes).
+    `forbidden_frame_for`, when given, builds the one frame sent before closing when a read finds the caller's
+    rights withdrawn (a read raising CoreError `forbidden`); nothing more is sent after it.
     """
     if read is None:
         assert core is not None
@@ -72,6 +75,9 @@ async def event_stream(core: ReaderCore | None, sessions: SessionResolver, calle
             try:
                 batch = pending.result()
             except CoreError as e:
+                if e.kind == "forbidden" and forbidden_frame_for is not None:
+                    yield forbidden_frame_for(cursor)  # rights withdrawn mid-stream: said once, then closed
+                    return
                 if e.kind == "gone" and gone_frame_for is not None:
                     yield gone_frame_for(cursor)
                 return  # the cursor aged out mid-stream: the client reconnects and gets the 410

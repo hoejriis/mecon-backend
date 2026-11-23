@@ -21,7 +21,7 @@ from starlette.routing import Route
 
 from . import validation as v
 from .app import Refusal, error_response
-from .ports import Caller, CoreError, EventBatch, ObservationScope, ReceptionStore
+from .ports import Caller, CoreError, Denied, EventBatch, ObservationScope, ReceptionStore
 from .sessions import SessionResolver
 from .sse import event_stream, frame
 
@@ -94,7 +94,8 @@ def cursor_param(raw: str | None) -> str | None:
 
 def observation_routes(authenticate: Callable[[Request, str], Awaitable[Caller]], sessions: SessionResolver,
                        scope: ObservationScope, store: ReceptionStore, *, heartbeat_s: float, poll_s: float,
-                       core_timeout_s: float, feed_down_close_s: float) -> list[Route]:
+                       core_timeout_s: float, feed_down_close_s: float,
+                       cookie_name: str = "__Host-mecon_session") -> list[Route]:
     async def guard(aw: Awaitable[Any]) -> Any:
         try:
             return await asyncio.wait_for(aw, core_timeout_s)
@@ -160,19 +161,35 @@ def observation_routes(authenticate: Callable[[Request, str], Awaitable[Caller]]
         visible = await guard(scope.visible_observers(caller))
         first: EventBatch = await guard(store.events_after(caller, visible, cursor, 0.0))
 
+        credential = request.cookies.get(cookie_name)
+
         async def read(c: Caller, cur: str | None, wait_s: float) -> EventBatch:
-            # The scope is asked again on every read, so a rule that ends mid-stream stops what is sent.
+            # The session and the scope are asked again on every read, so rights withdrawn mid-stream end it with
+            # access_revoked, and a rule that narrows the scope stops what is sent. The session read goes through
+            # the resolver (purpose read: its short cache), never a stored Caller.
+            now = await sessions.resolve(credential, "read") if credential else Denied("unknown")
+            if isinstance(now, Denied):
+                # A session that ended is the revocation feed's to close (session_revoked path); a lookup that
+                # cannot answer closes the stream, and the reconnect answers 503 or 401.
+                raise CoreError("unavailable")
+            state = now.capabilities.get("observations")
+            if state == "forbidden":
+                raise CoreError("forbidden")
+            if state != "available":
+                raise CoreError("unavailable")
             try:
-                now_visible = await asyncio.wait_for(scope.visible_observers(c), core_timeout_s)
-                return await asyncio.wait_for(store.events_after(c, now_visible, cur, wait_s), core_timeout_s + wait_s)
+                now_visible = await asyncio.wait_for(scope.visible_observers(now), core_timeout_s)
+                return await asyncio.wait_for(store.events_after(now, now_visible, cur, wait_s), core_timeout_s + wait_s)
             except CoreError as e:
+                if e.kind == "forbidden":
+                    raise CoreError("forbidden") from None  # the core withdrew the caller's rights: access_revoked
                 raise CoreError("gone") if e.kind == "gone" else CoreError("unavailable") from None
             except Exception:  # noqa: BLE001
                 raise CoreError("unavailable") from None
 
         gen = event_stream(None, sessions, caller, first, heartbeat_s=heartbeat_s, feed_down_close_s=feed_down_close_s,
                            tick_s=poll_s, read=read, revoked_frame_for=access_revoked_frame,
-                           gone_frame_for=resync_required_frame)
+                           gone_frame_for=resync_required_frame, forbidden_frame_for=access_revoked_frame)
         return StreamingResponse(gen, media_type="text/event-stream", headers=NO_STORE | {"X-Accel-Buffering": "no"})
 
     table = [

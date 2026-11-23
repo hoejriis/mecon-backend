@@ -1,0 +1,277 @@
+{
+ "fixture": "B",
+ "title": "Repeated reports, separate receptions, TRACE identity and an hour boundary",
+ "kind": "process",
+ "sources": {
+  "own-broker": {
+   "adapter": "observer_envelope"
+  },
+  "open-feed": {
+   "adapter": "raw_hex"
+  }
+ },
+ "captures": [
+  {
+   "capture_id": 1,
+   "source": "own-broker",
+   "topic": "meshcore/AB12/obs-1/packets",
+   "payload_b64": "eyJkYXRhIjoiMTUwMGExYjJjM2Q0ZTVmNjA3MTgiLCJSU1NJIjotODgsIlNOUiI6NiwidHMiOjE3NjcyMjkxOTV9",
+   "retained": false,
+   "received_at": "2026-01-01T00:59:59.900Z"
+  },
+  {
+   "capture_id": 2,
+   "source": "own-broker",
+   "topic": "meshcore/AB12/obs-1/packets",
+   "payload_b64": "eyJkYXRhIjoiMTUwMGExYjJjM2Q0ZTVmNjA3MTgiLCJSU1NJIjotODgsIlNOUiI6NiwidHMiOjE3NjcyMjkxOTV9",
+   "retained": false,
+   "received_at": "2026-01-01T01:00:00.100Z"
+  },
+  {
+   "capture_id": 3,
+   "source": "own-broker",
+   "topic": "meshcore/AB12/obs-1/packets",
+   "payload_b64": "eyJkYXRhIjoiMTUwMjExMjJhMWIyYzNkNGU1ZjYwNzE4IiwiUlNTSSI6LTk1LCJTTlIiOjIuNSwidHMiOjE3NjcyMjkxOTV9",
+   "retained": false,
+   "received_at": "2026-01-01T01:00:00.200Z"
+  },
+  {
+   "capture_id": 4,
+   "source": "own-broker",
+   "topic": "meshcore/AB12/obs-2/packets",
+   "payload_b64": "eyJkYXRhIjoiMjYwMWJiYzBmZmVlMDAiLCJSU1NJIjotNzAsIlNOUiI6OX0=",
+   "retained": false,
+   "received_at": "2026-01-01T01:00:01.000Z"
+  },
+  {
+   "capture_id": 5,
+   "source": "own-broker",
+   "topic": "meshcore/AB12/obs-2/packets",
+   "payload_b64": "eyJkYXRhIjoiMjYwMWJiYzBmZmVlMDAiLCJSU1NJIjotNzAsIlNOUiI6OX0=",
+   "retained": false,
+   "received_at": "2026-01-01T01:00:01.100Z"
+  },
+  {
+   "capture_id": 6,
+   "source": "own-broker",
+   "topic": "meshcore/AB12/obs-2/packets",
+   "payload_b64": "eyJkYXRhIjoiMjYwMmJiY2NjMGZmZWUwMCIsIlJTU0kiOi03MSwiU05SIjo4LCJ0cyI6MTc2NzIyOTIwMX0=",
+   "retained": false,
+   "received_at": "2026-01-01T01:00:01.200Z"
+  },
+  {
+   "capture_id": 7,
+   "source": "open-feed",
+   "topic": "packets/obs-9",
+   "payload_b64": "MTUwMGExYjJjM2Q0ZTVmNjA3MTg=",
+   "retained": false,
+   "received_at": "2026-01-01T01:00:02.000Z"
+  },
+  {
+   "capture_id": 8,
+   "source": "own-broker",
+   "topic": "meshcore/AB12/obs-2/packets",
+   "payload_b64": "eyJkYXRhIjoiMjYwMmJiY2NjMGZmZWUwMCIsIlJTU0kiOi03MSwiU05SIjo4LCJ0cyI6MTc2NzIyOTIwMX0=",
+   "retained": false,
+   "received_at": "2026-01-01T01:00:03.000Z"
+  },
+  {
+   "capture_id": 9,
+   "source": "own-broker",
+   "topic": "meshcore/AB12/obs-1/packets",
+   "payload_b64": "eyJkYXRhIjoiMTUwMGExYjJjM2Q0ZTVmNjA3MTgiLCJSU1NJIjotODgsIlNOUiI6NSwidHMiOjE3NjcyMjkxOTV9",
+   "retained": false,
+   "received_at": "2026-01-01T01:00:04.000Z"
+  }
+ ],
+ "expect": {
+  "outcomes": [
+   {
+    "capture_id": 1,
+    "outcome": "reception"
+   },
+   {
+    "capture_id": 2,
+    "outcome": "skipped",
+    "reason": "duplicate_report"
+   },
+   {
+    "capture_id": 3,
+    "outcome": "reception"
+   },
+   {
+    "capture_id": 4,
+    "outcome": "reception"
+   },
+   {
+    "capture_id": 5,
+    "outcome": "reception"
+   },
+   {
+    "capture_id": 6,
+    "outcome": "reception"
+   },
+   {
+    "capture_id": 7,
+    "outcome": "reception"
+   },
+   {
+    "capture_id": 8,
+    "outcome": "skipped",
+    "reason": "duplicate_report"
+   },
+   {
+    "capture_id": 9,
+    "outcome": "reception"
+   }
+  ],
+  "packets": [
+   {
+    "packet_id": "048568FF2F24B172",
+    "packet_type": "TRACE",
+    "first_seen_at": "2026-01-01T01:00:01.200Z",
+    "last_seen_at": "2026-01-01T01:00:03.000Z"
+   },
+   {
+    "packet_id": "08375D818C951056",
+    "packet_type": "GROUP_TEXT",
+    "first_seen_at": "2026-01-01T00:59:59.900Z",
+    "last_seen_at": "2026-01-01T01:00:04.000Z"
+   },
+   {
+    "packet_id": "A86720D120F9737D",
+    "packet_type": "TRACE",
+    "first_seen_at": "2026-01-01T01:00:01.000Z",
+    "last_seen_at": "2026-01-01T01:00:01.100Z"
+   }
+  ],
+  "receptions": [
+   {
+    "capture_id": 1,
+    "packet_id": "08375D818C951056",
+    "source": "own-broker",
+    "observer_key": "obs-1",
+    "received_at": "2026-01-01T00:59:59.900Z",
+    "device_observed_at": 1767229195,
+    "rssi": -88,
+    "snr": 6,
+    "hop_count": 0,
+    "route_type": 1
+   },
+   {
+    "capture_id": 3,
+    "packet_id": "08375D818C951056",
+    "source": "own-broker",
+    "observer_key": "obs-1",
+    "received_at": "2026-01-01T01:00:00.200Z",
+    "device_observed_at": 1767229195,
+    "rssi": -95,
+    "snr": 2.5,
+    "hop_count": 2,
+    "route_type": 1
+   },
+   {
+    "capture_id": 4,
+    "packet_id": "A86720D120F9737D",
+    "source": "own-broker",
+    "observer_key": "obs-2",
+    "received_at": "2026-01-01T01:00:01.000Z",
+    "device_observed_at": null,
+    "rssi": -70,
+    "snr": 9,
+    "hop_count": 1,
+    "route_type": 2
+   },
+   {
+    "capture_id": 5,
+    "packet_id": "A86720D120F9737D",
+    "source": "own-broker",
+    "observer_key": "obs-2",
+    "received_at": "2026-01-01T01:00:01.100Z",
+    "device_observed_at": null,
+    "rssi": -70,
+    "snr": 9,
+    "hop_count": 1,
+    "route_type": 2
+   },
+   {
+    "capture_id": 6,
+    "packet_id": "048568FF2F24B172",
+    "source": "own-broker",
+    "observer_key": "obs-2",
+    "received_at": "2026-01-01T01:00:01.200Z",
+    "device_observed_at": 1767229201,
+    "rssi": -71,
+    "snr": 8,
+    "hop_count": 2,
+    "route_type": 2
+   },
+   {
+    "capture_id": 7,
+    "packet_id": "08375D818C951056",
+    "source": "open-feed",
+    "observer_key": "obs-9",
+    "received_at": "2026-01-01T01:00:02.000Z",
+    "device_observed_at": null,
+    "rssi": null,
+    "snr": null,
+    "hop_count": 0,
+    "route_type": 1
+   },
+   {
+    "capture_id": 9,
+    "packet_id": "08375D818C951056",
+    "source": "own-broker",
+    "observer_key": "obs-1",
+    "received_at": "2026-01-01T01:00:04.000Z",
+    "device_observed_at": 1767229195,
+    "rssi": -88,
+    "snr": 5,
+    "hop_count": 0,
+    "route_type": 1
+   }
+  ],
+  "hours": [
+   {
+    "source": "open-feed",
+    "observer_key": "obs-9",
+    "hour": "2026-01-01T01:00:00Z",
+    "receptions": 1,
+    "rssi_sum": 0,
+    "rssi_count": 0,
+    "snr_sum": 0,
+    "snr_count": 0
+   },
+   {
+    "source": "own-broker",
+    "observer_key": "obs-1",
+    "hour": "2026-01-01T00:00:00Z",
+    "receptions": 1,
+    "rssi_sum": -88,
+    "rssi_count": 1,
+    "snr_sum": 6,
+    "snr_count": 1
+   },
+   {
+    "source": "own-broker",
+    "observer_key": "obs-1",
+    "hour": "2026-01-01T01:00:00Z",
+    "receptions": 2,
+    "rssi_sum": -183,
+    "rssi_count": 2,
+    "snr_sum": 7.5,
+    "snr_count": 2
+   },
+   {
+    "source": "own-broker",
+    "observer_key": "obs-2",
+    "hour": "2026-01-01T01:00:00Z",
+    "receptions": 3,
+    "rssi_sum": -211,
+    "rssi_count": 3,
+    "snr_sum": 26,
+    "snr_count": 3
+   }
+  ]
+ }
+}

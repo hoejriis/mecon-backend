@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "observation-processing/v1/reception",
+  "title": "One reception",
+  "description": "One observer's reception of one packet, derived from exactly one capture.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["capture_id", "packet_id", "source", "observer_key", "received_at", "device_observed_at", "rssi", "snr", "hop_count", "route_type"],
+  "properties": {
+    "capture_id": { "type": "integer", "minimum": 1, "description": "The capture it came from. At most one reception per capture." },
+    "packet_id": { "type": "string", "pattern": "^[0-9A-F]{16}$" },
+    "source": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,62}$" },
+    "observer_key": { "type": ["string", "null"], "minLength": 1, "description": "The observer within the source, from the topic; null when the topic names none." },
+    "received_at": { "type": "string", "pattern": "^\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\d\\.\\d{3}Z$", "description": "The capture's received_at, unchanged." },
+    "device_observed_at": { "type": ["integer", "null"], "description": "The observer's own reception time, epoch seconds, only when trusted (README section 2)." },
+    "rssi": { "type": ["number", "null"] },
+    "snr": { "type": ["number", "null"] },
+    "hop_count": { "type": "integer", "minimum": 0, "maximum": 63, "description": "This reception's own hop count, from its path byte." },
+    "route_type": { "type": "integer", "minimum": 0, "maximum": 3, "description": "This reception's own route type, from its header." }
+  }
+}

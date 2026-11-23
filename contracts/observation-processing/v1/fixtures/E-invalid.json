@@ -1,0 +1,18 @@
+{
+ "fixture": "E",
+ "title": "Documents the schemas reject",
+ "kind": "invalid",
+ "cases": [
+  { "schema": "committed-capture", "note": "neither payload nor stub", "value": { "capture_id": 1, "source": "own-broker", "topic": "a/b/c/packets", "retained": false, "received_at": "2026-01-01T00:00:00.000Z" } },
+  { "schema": "committed-capture", "note": "both payload and stub", "value": { "capture_id": 1, "source": "own-broker", "topic": "a/b/c/packets", "payload_b64": "", "stub": { "size": 9, "content_hash": "0000000000000000000000000000000000000000000000000000000000000000" }, "retained": false, "received_at": "2026-01-01T00:00:00.000Z" } },
+  { "schema": "committed-capture", "note": "no capture_id", "value": { "source": "own-broker", "topic": "a/b/c/packets", "payload_b64": "", "retained": false, "received_at": "2026-01-01T00:00:00.000Z" } },
+  { "schema": "outcome", "note": "skipped with no reason", "value": { "capture_id": 1, "outcome": "skipped" } },
+  { "schema": "outcome", "note": "a reception with a reason", "value": { "capture_id": 1, "outcome": "reception", "reason": "retained" } },
+  { "schema": "outcome", "note": "a reason not in the list", "value": { "capture_id": 1, "outcome": "skipped", "reason": "too_old" } },
+  { "schema": "packet", "note": "a lowercase packet_id", "value": { "packet_id": "08375d818c951056", "packet_type": "GROUP_TEXT", "first_seen_at": "2026-01-01T00:00:00.000Z", "last_seen_at": "2026-01-01T00:00:00.000Z" } },
+  { "schema": "reception", "note": "no capture_id", "value": { "packet_id": "08375D818C951056", "source": "own-broker", "observer_key": "obs-1", "received_at": "2026-01-01T00:00:00.000Z", "device_observed_at": null, "rssi": null, "snr": null, "hop_count": 0, "route_type": 1 } },
+  { "schema": "reception", "note": "a route type past 3", "value": { "capture_id": 1, "packet_id": "08375D818C951056", "source": "own-broker", "observer_key": "obs-1", "received_at": "2026-01-01T00:00:00.000Z", "device_observed_at": null, "rssi": null, "snr": null, "hop_count": 0, "route_type": 4 } },
+  { "schema": "hour", "note": "an hour not on the hour", "value": { "source": "own-broker", "observer_key": "obs-1", "hour": "2026-01-01T00:30:00Z", "receptions": 1, "rssi_sum": 0, "rssi_count": 0, "snr_sum": 0, "snr_count": 0 } },
+  { "schema": "counters", "note": "a skip reason missing", "value": { "processed": 0, "receptions": 0, "skipped": { "retained": 0 }, "pending": 0, "oldest_pending_ms": null } }
+ ]
+}

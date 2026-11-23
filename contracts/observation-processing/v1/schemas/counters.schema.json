@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "observation-processing/v1/counters",
+  "title": "The processor's counters",
+  "description": "Totals since the processor started, except pending and oldest_pending_ms, which are levels.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["processed", "receptions", "skipped", "pending", "oldest_pending_ms"],
+  "properties": {
+    "processed": { "type": "integer", "minimum": 0 },
+    "receptions": { "type": "integer", "minimum": 0 },
+    "skipped": {
+      "type": "object", "additionalProperties": false,
+      "required": ["retained", "stub", "not_a_packet", "malformed", "origin_mismatch", "unparseable", "duplicate_report", "failed"],
+      "properties": {
+        "retained": { "type": "integer", "minimum": 0 }, "stub": { "type": "integer", "minimum": 0 },
+        "not_a_packet": { "type": "integer", "minimum": 0 }, "malformed": { "type": "integer", "minimum": 0 },
+        "origin_mismatch": { "type": "integer", "minimum": 0 }, "unparseable": { "type": "integer", "minimum": 0 },
+        "duplicate_report": { "type": "integer", "minimum": 0 }, "failed": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "pending": { "type": "integer", "minimum": 0, "description": "Committed captures not yet processed, at this instant." },
+    "oldest_pending_ms": { "type": ["integer", "null"], "minimum": 0, "description": "How long the oldest pending capture has waited since received_at; null when none is pending." }
+  }
+}

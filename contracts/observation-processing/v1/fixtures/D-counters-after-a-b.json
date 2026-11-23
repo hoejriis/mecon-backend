@@ -1,0 +1,25 @@
+{
+ "fixture": "D",
+ "title": "The counters after A and B, nothing pending",
+ "kind": "counters",
+ "after": [
+  "A",
+  "B"
+ ],
+ "counters": {
+  "processed": 25,
+  "receptions": 13,
+  "skipped": {
+   "retained": 1,
+   "stub": 2,
+   "not_a_packet": 2,
+   "malformed": 2,
+   "origin_mismatch": 1,
+   "unparseable": 2,
+   "duplicate_report": 2,
+   "failed": 0
+  },
+  "pending": 0,
+  "oldest_pending_ms": null
+ }
+}

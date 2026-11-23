@@ -333,6 +333,20 @@ describe('a login started while a logout is owed', () => {
     expect(backend.count('POST /logout')).toBe(logouts); // the new session is never logged out
     warn.mockRestore();
   });
+
+  it('while the login is pending, the background retry sends no logout traffic', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    backend.on('GET /session', json(fx.session));
+    backend.on('POST /logout', unavailable);
+    await startLogin(); // settles nothing: the logout keeps answering 503, so the marker stays
+    expect(owed()).toBe(true);
+    const sessions = backend.count('GET /session');
+    const logouts = backend.count('POST /logout');
+    await tick(60_000); // the login stays pending throughout; the background backoff would have fired several times
+    expect(backend.count('GET /session')).toBe(sessions);
+    expect(backend.count('POST /logout')).toBe(logouts);
+    warn.mockRestore();
+  });
 });
 
 describe('csrf_failed', () => {

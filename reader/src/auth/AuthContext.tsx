@@ -140,6 +140,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // One attempt at a server-side logout that could not complete: GET /session only for the CSRF
   // token, then POST /logout. The session is never adopted. Settled (marker cleared) on 204 or 401;
   // returns false on anything else. `stillOwed` is checked between the two requests.
+  //
+  // Race with a new login: the background loop below does not run while a login is pending, so its
+  // requests never overlap one. If a POST /logout were still to land just after approval, it would carry
+  // the new cookie with the old session's CSRF token and the Backend would refuse it (403). That is safe
+  // only while the token stays bound to its session: if that binding ever loosens, this becomes a race
+  // that logs the new session out.
   const settleOwedLogout = useCallback(
     async (stillOwed: () => boolean): Promise<boolean> => {
       try {
@@ -161,7 +167,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Settle an owed logout before any session is adopted, retrying with the session-load backoff so it
   // completes the next time the Backend answers.
   useEffect(() => {
-    if (!logoutPending) return;
+    if (!logoutPending || pending) return; // never while a login is pending (see settleOwedLogout)
     const ctl = new AbortController();
     const { signal } = ctl;
     (async () => {
@@ -174,7 +180,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     })();
     return () => ctl.abort();
-  }, [logoutPending, settleOwedLogout]);
+  }, [logoutPending, pending, settleOwedLogout]);
 
   // Poll the pending login until it is approved, delivered, expired or times out.
   useEffect(() => {

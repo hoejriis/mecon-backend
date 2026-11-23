@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "observation-processing/v1/hour",
+  "title": "One observer-hour aggregate",
+  "description": "A rebuildable fold over the receptions of one observer in one UTC hour of received_at.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["source", "observer_key", "hour", "receptions", "rssi_sum", "rssi_count", "snr_sum", "snr_count"],
+  "properties": {
+    "source": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,62}$" },
+    "observer_key": { "type": "string", "minLength": 1 },
+    "hour": { "type": "string", "pattern": "^\\d{4}-\\d\\d-\\d\\dT\\d\\d:00:00Z$" },
+    "receptions": { "type": "integer", "minimum": 1 },
+    "rssi_sum": { "type": "number" },
+    "rssi_count": { "type": "integer", "minimum": 0 },
+    "snr_sum": { "type": "number" },
+    "snr_count": { "type": "integer", "minimum": 0 }
+  }
+}

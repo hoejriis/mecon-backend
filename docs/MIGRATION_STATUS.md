@@ -9,7 +9,7 @@ MECON's Backend is moving into this repository one block at a time. Each block h
 
 Private code is removed only after stage 4. The core (accounts, identity, key custody, domain persistence and federation) moves last.
 
-*Status as of 2026-11-22. Each entry records only what has been checked.*
+*Status as of 2026-11-23. Each entry records only what has been checked.*
 
 | Block | Contract | 1. Published | 2. Private reference | 3. Public implementation | 4. Production |
 |---|---|---|---|---|---|
@@ -17,6 +17,7 @@ Private code is removed only after stage 4. The core (accounts, identity, key cu
 | USB Connector | [`connector/v1`](../contracts/connector/v1/README.md), [`connector-hold/v1`](../contracts/connector-hold/v1/README.md) | Yes: wire contracts and fixtures | Not applicable: there is no private Connector | [`connector/`](../connector/README.md): passes its unit, fake-device and broker integration tests | No |
 | Observation reads | [`observations/v1`](../contracts/observations/v1/openapi.yaml) | Schemas and fixtures; no replayable cases yet | Schemas and fixtures checked; no case replay yet | Not started | No |
 | Observation capture | [`observation-subscription/v1`](../contracts/observation-subscription/v1/README.md), [`raw-capture/v1`](../contracts/raw-capture/v1/README.md) | Drafts: schemas and fixtures | Not yet | Not started | No |
+| Observation processing | [`observation-processing/v1`](../contracts/observation-processing/v1/README.md) | Draft: schemas, replayable fixtures and a reference processor | Not yet | Not started | No |
 | Job lifecycle and device dispatch | — | Not yet | Not yet | Not started | No |
 
 ## Reader API, stage 2

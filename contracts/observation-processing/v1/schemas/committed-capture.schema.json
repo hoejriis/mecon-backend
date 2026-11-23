@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "observation-processing/v1/committed-capture",
+  "title": "One committed capture",
+  "description": "A raw capture as the archive committed it, with the archive's own capture_id. A stub carries its size and content hash instead of its payload.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["capture_id", "source", "topic", "retained", "received_at"],
+  "properties": {
+    "capture_id": { "type": "integer", "minimum": 1, "description": "The archive's commit sequence: unique, and increasing in commit order." },
+    "source": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,62}$" },
+    "topic": { "type": "string", "minLength": 1, "maxLength": 512 },
+    "payload_b64": { "type": "string", "contentEncoding": "base64", "pattern": "^[A-Za-z0-9+/]*={0,2}$" },
+    "stub": {
+      "type": "object", "additionalProperties": false, "required": ["size", "content_hash"],
+      "properties": { "size": { "type": "integer", "minimum": 1 }, "content_hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" } }
+    },
+    "retained": { "type": "boolean" },
+    "received_at": { "type": "string", "pattern": "^\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\d\\.\\d{3}Z$" }
+  },
+  "oneOf": [{ "required": ["payload_b64"] }, { "required": ["stub"] }]
+}

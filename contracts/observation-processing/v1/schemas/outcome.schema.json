@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "observation-processing/v1/outcome",
+  "title": "What processing made of one capture",
+  "description": "Every committed capture gets exactly one outcome: a reception, or skipped with one reason.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["capture_id", "outcome"],
+  "properties": {
+    "capture_id": { "type": "integer", "minimum": 1 },
+    "outcome": { "enum": ["reception", "skipped"] },
+    "reason": { "enum": ["retained", "stub", "not_a_packet", "malformed", "origin_mismatch", "unparseable", "duplicate_report", "failed"] }
+  },
+  "if": { "properties": { "outcome": { "const": "skipped" } } },
+  "then": { "required": ["reason"] },
+  "else": { "not": { "required": ["reason"] } }
+}

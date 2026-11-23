@@ -7,6 +7,7 @@ import { parse } from 'yaml';
 import Ajv2020 from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
 import { validateHold } from './validate-hold.mjs';
+import { validateObservationProcessing } from './validate-observation-processing.mjs';
 import { validateObservationSubscription } from './validate-observation-subscription.mjs';
 import { validateRawCapture } from './validate-raw-capture.mjs';
 import { validateReaderCases } from './validate-reader-cases.mjs';
@@ -110,8 +111,9 @@ failures += cases.failures;
 const hold = validateHold();
 checked += hold.checked;
 failures += hold.failures;
-// The receive-only observation subscription profile and the raw capture append: schemas, fixtures, their rules.
-for (const r of [validateObservationSubscription(), validateRawCapture()]) {
+// The receive-only observation subscription profile, the raw capture append and observation processing: schemas,
+// fixtures, their rules.
+for (const r of [validateObservationSubscription(), validateRawCapture(), validateObservationProcessing()]) {
   checked += r.checked;
   failures += r.failures;
 }

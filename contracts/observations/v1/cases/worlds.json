@@ -1,0 +1,49 @@
+{
+  "contract": "mecon-observations/1.0.0-draft.2",
+  "synthetic": true,
+  "worlds": {
+    "two-fleets-observed": {
+      "description": "Two fleets, each with its own observers, plus one observer of an approved public source. Every name, address and position is made up; positions are open ocean. Each case starts from a fresh copy of this world. `ago_s` is how many seconds before the case starts a reception was received; each reception's `rssi` is unique in the world, so a case can tell receptions apart without comparing opaque ids across callers.",
+      "fleets": ["north", "south"],
+      "users": {
+        "alice": { "email": "alice@example.test", "display_name": "Alice (synthetic)", "fleet": "north" },
+        "carol": { "email": "carol@example.test", "display_name": "Carol (synthetic)", "fleet": "south" }
+      },
+      "observers": {
+        "north_mast": { "label": "North mast (synthetic)", "fleet": "north", "location": { "lat": 10.5, "lon": -30.25 } },
+        "north_attic": { "label": "North attic (synthetic)", "fleet": "north", "location": null },
+        "south_hill": { "label": "South hill (synthetic)", "fleet": "south", "location": { "lat": -12.75, "lon": -20.5 } },
+        "public_buoy": { "label": "Public buoy (synthetic)", "approved_public_source": true, "location": { "lat": 0.5, "lon": -25.5 } }
+      },
+      "packets": {
+        "p1": { "kind": "channel_message" },
+        "p2": { "kind": "advert" },
+        "p3": { "kind": "advert" }
+      },
+      "receptions": [
+        { "observer": "north_mast", "packet": "p1", "ago_s": 60, "rssi": -90, "snr": 7.5 },
+        { "observer": "north_attic", "packet": "p1", "ago_s": 59, "rssi": -101, "snr": -3.25 },
+        { "observer": "south_hill", "packet": "p2", "ago_s": 30, "rssi": -80, "snr": 4 },
+        { "observer": "public_buoy", "packet": "p3", "ago_s": 20, "rssi": -70, "snr": 1.5 }
+      ]
+    }
+  },
+  "actions": {
+    "sign-in": {
+      "args": ["client", "user"],
+      "description": "Give `client` a valid session for `user`, by whatever means the implementation's tests use (the magic link is out of band)."
+    },
+    "end-session": {
+      "args": ["client"],
+      "description": "End `client`'s session on the server, as signing out elsewhere or an administrator's revocation would. The client keeps its cookie."
+    },
+    "add-reception": {
+      "args": ["observer", "packet", "rssi"],
+      "description": "Record a new reception, received now, of `packet` by `observer` with this `rssi` (and an `snr` of 0), as processing a fresh capture would."
+    },
+    "age-out-events": {
+      "args": [],
+      "description": "Move every cursor issued so far outside retention."
+    }
+  }
+}

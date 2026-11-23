@@ -128,3 +128,17 @@ def test_raw_hex_format():
 def test_unknown_adapter_is_refused_not_defaulted():
     with pytest.raises(ValueError):
         extract("made_up", TOPIC, b"{}", AT)
+
+
+def test_origin_id_ignores_surrounding_whitespace_and_a_blank_one_claims_nothing():
+    import json
+
+    from mecon_processing.adapters import extract
+
+    topic = "meshcore/AB12/obs-1/packets"
+    def outcome(origin):
+        x = extract("observer_envelope", topic, json.dumps({"data": "1500a1b2c3d4e5f60718", "origin_id": origin}).encode(), "2026-01-01T00:00:00.000Z")
+        return x.skip
+    assert outcome(" OBS-1 ") is None  # the same observer, with whitespace and another case
+    assert outcome("   ") is None  # blank: no claim, so no mismatch
+    assert outcome("obs-7") == "origin_mismatch"

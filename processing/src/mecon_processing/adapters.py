@@ -95,7 +95,9 @@ def _envelope(topic: str, payload: bytes, received_at: str) -> Extraction:
         return Extraction(skip="malformed")
     origin = env.get("origin_id")
     observer = observer_key("observer_envelope", topic)
-    if isinstance(origin, str) and origin and observer is not None and origin.lower() != observer.lower():
+    # Surrounding (ASCII) whitespace is ignored on both sides, and a blank origin_id is no claim (README section 2).
+    if isinstance(origin, str) and origin.strip(" \t\r\n") and observer is not None \
+            and origin.strip(" \t\r\n").lower() != observer.strip(" \t\r\n").lower():
         return Extraction(skip="origin_mismatch")
     rssi = number(env["RSSI"] if "RSSI" in env else env.get("rssi"))
     snr = number(env["SNR"] if "SNR" in env else env.get("snr"))

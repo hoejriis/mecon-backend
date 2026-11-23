@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mecon:connector-hold:v1:dfu_job",
+  "title": "dfu_job (Backend to agent)",
+  "description": "Arms the agent for one bootloader-dfu update job on this socket, only on a socket whose iface_relay declared serial_dfu. The Backend relays the offer only after the agent answers dfu_state ready for this job on this socket. sha256 and size are those of the package the package route serves for the job (the DFU zip, byte for byte). Extra members are ignored.",
+  "type": "object",
+  "required": [
+    "type",
+    "job",
+    "sha256",
+    "size"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "type": {
+      "const": "dfu_job"
+    },
+    "job": {
+      "type": "string",
+      "pattern": "^[0-9A-Za-z][0-9A-Za-z._:-]{0,63}$",
+      "description": "The update job id; one URL path segment."
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "SHA-256 of the package bytes, lower-case hex."
+    },
+    "size": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "The package's length in bytes."
+    }
+  }
+}

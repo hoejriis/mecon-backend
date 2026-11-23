@@ -151,14 +151,15 @@ MUTANTS = [
 
 # Mutants of the WebSocket hold transport (hold.py, hold_transport.py, the hold config and exit status). They can
 # only change what the hold tests cover, so each runs just those files.
-HOLD_TESTS = ["tests/test_hold.py", "tests/test_hold_main.py", "tests/test_hold_contract_fixtures.py", "tests/test_hold_tls.py"]
+HOLD_TESTS = ["tests/test_hold.py", "tests/test_hold_main.py", "tests/test_hold_contract_fixtures.py", "tests/test_hold_tls.py",
+              "tests/test_dfu.py", "tests/test_nordic_dfu.py"]
 HOLD_MUTANTS = [
     ("h1", "the wire is re-serialised before it reaches the device", "hold.py",
      [("if self._write_request(r.wire, now):", "if self._write_request(json.dumps(json.loads(r.wire)).encode(), now):")]),
     ("h1b", "the wire is stripped before it reaches the device", "hold.py",
      [("if self._write_request(r.wire, now):", "if self._write_request(r.wire.strip(), now):")]),
     ("h2", "no iface_relay after a reconnect", "hold.py",
-     [('        if self._send({"type": "iface_relay"}):\n', '        if self.m.get("hold_connect_attempts_total", "ok") <= 1 and self._send({"type": "iface_relay"}):\n')]),
+     [("this socket.\n        if self._send(self._relay_frame()):\n", 'this socket.\n        if self.m.get("hold_connect_attempts_total", "ok") <= 1 and self._send(self._relay_frame()):\n')]),
     ("h3", "the agent reconnects after refused", "hold.py",
      [('            self._stop_hold("refused", self._refused)  # never a takeover, never a retry', "            pass"),
       ("        if self._refused is not None:\n            self._end_session()", "        if False:\n            self._end_session()"),
@@ -195,7 +196,8 @@ HOLD_MUTANTS = [
     ("h14", "the socket opens without a device link, a hello or an open gate", "hold.py",
      [("        want = keep and self._gate_open", "        want = True")]),
     ("h15", "the hold is closed with a code other than 1000 on stop", "hold.py",
-     [('        self._stopped = True\n        self.transport.close(1000, "stopped")', '        self._stopped = True\n        self.transport.close(1001, "stopped")')]),
+     [('        self._dfu_gen += 1  # a fetch or transfer still running reports into nothing\n        self.transport.close(1000, "stopped")',
+       '        self._dfu_gen += 1  # a fetch or transfer still running reports into nothing\n        self.transport.close(1001, "stopped")')]),
     ("h16", "the console's bare CR is written before every request", "hold.py",
      [('if self.cfg.device.mode == "console" and not self._console_primed:', 'if self.cfg.device.mode == "console":')]),
     ("h16b", "the console's bare CR is never written", "hold.py",
@@ -223,7 +225,8 @@ HOLD_MUTANTS = [
     ("h27", "an uploaded text is re-serialised", "hold.py",
      [('            text = payload.decode("utf-8")', '            text = json.dumps(json.loads(payload.decode("utf-8")))')]),
     ("h28", "iface_hello is not sent after the relay", "hold.py",
-     [("        self._upload_hello()\n\n    def _on_failed", "\n    def _on_failed")]),
+     [("            self.m.inc(\"hold_relay_declared_total\")\n        self._upload_hello()\n        if self._dfu_phase in DFU_RECONNECT",
+       "            self.m.inc(\"hold_relay_declared_total\")\n        if self._dfu_phase in DFU_RECONNECT")]),
     ("h29", "an unknown frame type closes the socket", "hold.py",
      [('            self._ignored("unknown_type")  # a Backend may send other types; they are ignored, never a close', '            self._ignored("unknown_type")\n            self.transport.close(1000, "x")')]),
     ("h30", "the backoff is not 1, 2, 4, 8, 15", "hold.py",
@@ -236,14 +239,54 @@ HOLD_MUTANTS = [
      [('            self._refused = reason if isinstance(reason, str) else "refused"', '            self._refused = "refused"')]),
     ("h34", "a late answer to a request that was not asked is uploaded", "hold.py",
      [('            else:\n                self.m.inc("upstream_dropped_total", 1, "unmatched")', '            else:\n                self._upload_text(payload, "iface_result", "result", {})')]),
+    # bootloader serial DFU (contracts/connector-hold/v1 section 12)
+    ("x1", "the package's SHA-256 is not checked", "nordic_dfu.py",
+     [('    if hashlib.sha256(data).hexdigest() != sha256:\n', '    if False:\n')]),
+    ("x2", "the package's size is not checked", "nordic_dfu.py",
+     [("    if len(data) != size:\n", "    if False:\n")]),
+    ("x3", "the socket is kept on any link loss while DFU is configured (no arm check)", "hold.py",
+     [('        if why == "device_link_lost" and self._dfu_keeps_socket():', '        if why == "device_link_lost" and self._dfu_cfg is not None:')]),
+    ("x3b", "DFU is entered on a link loss without an armed job", "hold.py",
+     [('        if self._dfu_phase == "armed" and self._dfu_fetch_state == "ok" and not self._dfu_window_over(now):',
+       '        if self._dfu_cfg is not None and (self._dfu_phase != "armed" or not self._dfu_window_over(now)):')]),
+    ("x4", "the arming window is not checked", "hold.py",
+     [("        return now - self._dfu_armed_at > self._dfu_cfg.arm_window_s", "        return False")]),
+    ("x5", "the bootloader port is opened while no job is armed", "hold.py",
+     [('            if now >= self._next_open and self._dfu_phase not in ("waiting-bootloader", "transferring"):\n                self._try_open(now)\n',
+       '            if now >= self._next_open and self._dfu_phase not in ("waiting-bootloader", "transferring"):\n                self._try_open(now)\n'
+       '            if self._boot_opener is not None and self._dfu_phase == "none":\n                try:\n                    self._boot_opener().close()\n'
+       '                except Exception:  # noqa: BLE001\n                    pass\n')]),
+    ("x6", "serial_dfu is declared when DFU is off", "hold.py",
+     [("        if self._dfu_cfg is not None:\n            return {\"type\": \"iface_relay\", \"serial_dfu\": True}",
+       "        if True:\n            return {\"type\": \"iface_relay\", \"serial_dfu\": True}")]),
+    ("x7", "any acknowledgement is taken as the packet's own (ack number not checked)", "nordic_dfu.py",
+     [("                if ack == want:\n", "                if ack is not None:\n")]),
+    ("x8", "DFU is entered on a reset before ready (the window runs from the job)", "hold.py",
+     [('        if self._dfu_phase == "armed" and self._dfu_fetch_state == "ok" and not self._dfu_window_over(now):',
+       '        if self._dfu_phase == "armed" and not self._dfu_window_over(now):')]),
+    ("x9", "the current dfu_state is not sent again on a new socket", "hold.py",
+     [("            self._send(self._dfu_last)  # a new socket", "            pass  # a new socket")]),
+    ("x10", "a failed job holds the socket for ever (no cap)", "hold.py",
+     [("        return now - self._dfu_failed_at >= self._dfu_cfg.failed_hold_s", "        return False")]),
+    ("x11", "a bootloader port the device selector also takes is used", "hold.py",
+     [("            self._boot_opener.avoid = self.cfg.device.selector", "            self._boot_opener.avoid = None")]),
+    ("x12", "an application port the bootloader selector also takes is used while a DFU waits", "hold.py",
+     [("            self.opener.avoid = dc.bootloader if dc is not None and self._dfu_phase in DFU_RECONNECT else None",
+       "            self.opener.avoid = None")]),
 ]
+
+
+TIMEOUT_S = 900  # a mutant that hangs the tests is not a kill
 
 
 def run_tests(files=None):
     env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1")
     args = list(files) if files else ["--deselect", "tests/test_integration_mosquitto.py"]
-    p = subprocess.run([sys.executable, "-m", "pytest", "-q", "-x", "-p", "no:cacheprovider", *args],
-                       cwd=ROOT, capture_output=True, text=True, env=env)
+    try:
+        p = subprocess.run([sys.executable, "-m", "pytest", "-q", "-x", "-p", "no:cacheprovider", *args],
+                           cwd=ROOT, capture_output=True, text=True, env=env, timeout=TIMEOUT_S)
+    except subprocess.TimeoutExpired:
+        return -1, "timeout"
     return p.returncode, p.stdout + p.stderr
 
 
@@ -275,9 +318,12 @@ def main():
                 if rc == 0:
                     survivors.append(mid)
                     print(f"{mid}: SURVIVED  {desc}")
+                elif not failed:
+                    # A collection error, a crash of pytest or a timeout proves nothing about the rule.
+                    survivors.append(mid)
+                    print(f"{mid}: NO VERDICT (no named test failed: {'timeout' if rc == -1 else 'collection error or crash'})  {desc}")
                 else:
-                    first = failed[0].split(" - ")[0] if failed else "(collection or crash)"
-                    print(f"{mid}: killed    {desc}\n        by {first}")
+                    print(f"{mid}: killed    {desc}\n        by {failed[0].split(' - ')[0]}")
         finally:
             path.write_text(original)
     rc, _ = run_tests()

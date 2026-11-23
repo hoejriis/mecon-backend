@@ -34,3 +34,28 @@ def test_nothing_matches():
     with pytest.raises(SerialUnavailable):
         select_port([C], Selector(by_id="usb-TEST_*"))
     assert not matches(C, Selector(vid=1, pid=2))
+
+
+def test_port_opener_refuses_a_port_that_also_matches_the_avoided_selector_before_opening_it():
+    from mecon_connector.serial_link import PortOpener, SelectorOverlap
+
+    opened = []
+    o = PortOpener(Selector(by_id="usb-TEST_*"), 115200, lister=lambda: [A], link_factory=lambda d, b: opened.append(d) or d)
+    assert o() == "/dev/ttyACM0"
+    o.avoid = Selector(vid=0x303A, pid=0x1001)
+    with pytest.raises(SelectorOverlap):
+        o()
+    assert opened == ["/dev/ttyACM0"]  # the refused port was never opened
+    o.avoid = Selector(vid=0x303A, pid=0x9999)
+    assert o() == "/dev/ttyACM0"
+
+
+def test_a_path_selector_is_matched_by_its_real_node(tmp_path):
+    from mecon_connector.serial_link import matches
+
+    node = tmp_path / "ttyACM5"
+    node.write_text("")
+    link = tmp_path / "bench-radio"
+    link.symlink_to(node)
+    p = PortInfo(str(node), 1, 2, None, ())
+    assert matches(p, Selector(path=str(link))) and not matches(p, Selector(path=str(tmp_path / "other")))

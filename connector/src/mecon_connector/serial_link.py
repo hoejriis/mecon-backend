@@ -53,9 +53,21 @@ def open_path(sel: Selector) -> str:
     return sel.path
 
 
+class SelectorOverlap(SerialUnavailable):
+    """The port found also matches a selector it must not (the device's and the bootloader's port are one)."""
+
+
+def _real(path: str) -> str:
+    try:
+        return os.path.realpath(path)
+    except (OSError, ValueError):
+        return path
+
+
 def matches(port: PortInfo, sel: Selector) -> bool:
+    """Whether `port` is one `sel` selects. The one predicate for selection and for the overlap guard."""
     if sel.path is not None:
-        return port.device == sel.path
+        return port.device == sel.path or _real(port.device) == _real(sel.path)
     if sel.by_id is not None:
         return any(fnmatch.fnmatchcase(n, sel.by_id) for n in port.by_id_names)
     if port.vid != sel.vid or port.pid != sel.pid:
@@ -105,11 +117,36 @@ class PySerialLink:
             pass
 
 
-def make_opener(sel: Selector, baud: int):  # type: ignore[no-untyped-def]
-    def opener() -> SerialLink:
-        if sel.path is not None:
-            return PySerialLink(open_path(sel), baud)
-        port = select_port(list_ports(), sel)
-        return PySerialLink(port.device, baud)
+def resolve_port(sel: Selector, lister=list_ports) -> PortInfo:  # type: ignore[no-untyped-def]
+    """The one port `sel` names now, with what is known about it (for a path, found among the listed ports by
+    its real node, so another selector can be checked against it)."""
+    if sel.path is not None:
+        path = open_path(sel)
+        real = _real(path)
+        for p in lister():
+            if _real(p.device) == real:
+                return PortInfo(path, p.vid, p.pid, p.usb_serial, p.by_id_names)
+        return PortInfo(path)
+    return select_port(lister(), sel)
 
-    return opener
+
+class PortOpener:
+    """Opens the port a selector names. `avoid`, when set, is a selector the port must not also match: such a
+    port is refused with SelectorOverlap before it is opened, so nothing is ever written to it."""
+
+    def __init__(self, sel: Selector, baud: int, lister=list_ports, link_factory=None) -> None:  # type: ignore[no-untyped-def]
+        self.sel = sel
+        self.baud = baud
+        self.lister = lister
+        self.link_factory = link_factory or PySerialLink
+        self.avoid: Selector | None = None
+
+    def __call__(self) -> SerialLink:
+        port = resolve_port(self.sel, self.lister)
+        if self.avoid is not None and matches(port, self.avoid):
+            raise SelectorOverlap("the port also matches the other selector")
+        return self.link_factory(port.device, self.baud)
+
+
+def make_opener(sel: Selector, baud: int) -> PortOpener:
+    return PortOpener(sel, baud)

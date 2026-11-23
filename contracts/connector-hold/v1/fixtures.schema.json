@@ -13,13 +13,14 @@
       "properties": {
         "contract": { "$ref": "#/$defs/contract" },
         "synthetic": { "const": true },
-        "id": { "enum": ["A", "B", "C", "D", "E"] },
+        "id": { "enum": ["A", "B", "C", "D", "E", "F"] },
         "title": { "type": "string" },
         "description": { "type": "string" },
         "link": { "enum": ["companion", "console", "none"] },
         "steps": { "type": "array", "minItems": 1, "items": { "oneOf": [
           { "$ref": "#/$defs/handshake" }, { "$ref": "#/$defs/send" }, { "$ref": "#/$defs/recv" },
-          { "$ref": "#/$defs/deviceWrite" }, { "$ref": "#/$defs/deviceRead" }, { "$ref": "#/$defs/deviceLine" }, { "$ref": "#/$defs/close" }
+          { "$ref": "#/$defs/deviceWrite" }, { "$ref": "#/$defs/deviceRead" }, { "$ref": "#/$defs/deviceLine" }, { "$ref": "#/$defs/close" },
+          { "$ref": "#/$defs/packageGet" }, { "$ref": "#/$defs/deviceLink" }, { "$ref": "#/$defs/bootloaderWrite" }
         ] } }
       }
     },
@@ -63,6 +64,36 @@
     "close": {
       "type": "object", "required": ["step", "by", "code"], "additionalProperties": false,
       "properties": { "step": { "const": "close" }, "by": { "enum": ["agent", "backend"] }, "code": { "type": "integer" }, "reason": { "type": "string" } }
+    },
+    "packageGet": {
+      "type": "object", "required": ["step", "path", "authorization", "status", "size", "sha256", "body_base64"], "additionalProperties": false,
+      "properties": {
+        "step": { "const": "package_get" },
+        "path": { "type": "string", "pattern": "^/gateway/dfu-package/[0-9A-Za-z][0-9A-Za-z._:-]{0,63}$" },
+        "authorization": { "const": "Bearer <token>" },
+        "status": { "const": 200 },
+        "size": { "type": "integer", "minimum": 1 },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "body_base64": { "type": "string", "contentEncoding": "base64" }
+      }
+    },
+    "deviceLink": {
+      "type": "object", "required": ["step", "port", "event"], "additionalProperties": false,
+      "properties": {
+        "step": { "const": "device_link" },
+        "port": { "enum": ["application", "bootloader"] },
+        "event": { "enum": ["lost", "opened", "closed"] }
+      }
+    },
+    "bootloaderWrite": {
+      "type": "object", "required": ["step", "packet", "seq", "hex", "ack_hex"], "additionalProperties": false,
+      "properties": {
+        "step": { "const": "bootloader_write" },
+        "packet": { "enum": ["start", "init", "data", "stop"] },
+        "seq": { "type": "integer", "minimum": 0, "maximum": 7 },
+        "hex": { "$ref": "#/$defs/hex" },
+        "ack_hex": { "$ref": "#/$defs/hex" }
+      }
     },
     "invalidSet": {
       "type": "object", "required": ["contract", "synthetic", "id", "title", "description", "cases"], "additionalProperties": false,

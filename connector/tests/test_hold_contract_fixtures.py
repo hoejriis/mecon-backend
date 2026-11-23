@@ -117,6 +117,71 @@ def test_scenario_replays(mk, name):
     assert r.bridge._state == "connected"  # unknown frames and refusals of uploads close nothing
 
 
+def test_scenario_f_serial_dfu_replays(tmp_path):
+    """Fixture F through the real bridge: the package from the fixture served on the package route, the exact
+    bytes written to a fake bootloader, the dfu_state order and the resume on the same socket."""
+    import base64
+
+    from fakes.fake_bootloader import FakeBootloader, FakeBootOpener
+
+    doc = json.loads((V1 / "fixtures" / "F-serial-dfu.json").read_text())
+    steps = doc["steps"]
+    boot_opener = FakeBootOpener()
+    r = HoldRig(tmp_path, dfu={"enabled": True, "bootloader": {"by_id": "usb-TEST_bootloader-*"}},
+                bridge_kw={"boot_opener": boot_opener, "runner": lambda fn: fn()})
+    try:
+        r.bridge._sleep = r.clock.advance
+        hellos = [s["frame"]["hello"] for s in steps if s["step"] == "send" and s["frame"]["type"] == "iface_hello"]
+        r.dev.hello_result = hellos[0]
+        for s in steps:
+            if s["step"] == "package_get":  # the Backend's route serves the fixture's package
+                r.server.packages[s["path"].rsplit("/", 1)[1]] = base64.b64decode(s["body_base64"])
+        conn = r.up()
+        seen, boot = 0, None
+        for i, s in enumerate(steps):
+            k = s["step"]
+            if k == "send":
+                r.wait(lambda: len(conn.frames) > seen)
+                assert json.loads(conn.frames[seen]) == s["frame"], f"step {i + 1}"
+                seen += 1
+            elif k == "recv":
+                conn.send(s["frame"])
+                r.settle(15)
+            elif k == "package_get":
+                r.wait(lambda: len(r.server.package_requests) >= 1)  # asked for when the job arrived
+                path, headers = r.server.package_requests[-1]
+                assert path == s["path"] and headers["authorization"] == s["authorization"].replace("<token>", TOKEN)
+            elif k == "device_write":
+                r.wait(lambda: r.dev.messages)
+                assert r.dev.messages[-1] == s["wire"].encode()
+            elif k == "device_read":
+                r.dev.say(s["text"].encode())
+            elif k == "device_link" and s["port"] == "application" and s["event"] == "lost":
+                r.opener.unplug()
+            elif k == "device_link" and s["port"] == "bootloader" and s["event"] == "opened":
+                boot = FakeBootloader()
+                boot_opener.appear(boot)
+                r.jump(0.6)
+            elif k == "bootloader_write":
+                assert boot is not None
+                r.wait(lambda: boot.stopped)
+                n = sum(1 for x in steps[:i] if x["step"] == "bootloader_write")
+                assert boot.raw_frames[n].hex() == s["hex"], f"step {i + 1}"
+                assert boot.acks_sent[n].hex() == s["ack_hex"], f"step {i + 1}"
+            elif k == "device_link" and s["port"] == "bootloader" and s["event"] == "closed":
+                assert boot is not None and boot.closed and boot.complete, boot.errors
+            elif k == "device_link" and s["port"] == "application" and s["event"] == "opened":
+                r.dev = r.opener.plug()
+                r.dev.answers_hello = True
+                r.dev.hello_result = hellos[1]
+        r.settle(60)
+        assert len(conn.frames) == seen, "the agent sent a frame the scenario does not show"
+        assert boot is not None and len(boot.raw_frames) == sum(1 for x in steps if x["step"] == "bootloader_write")
+        assert not conn.closed.is_set() and r.server.handshakes == 1
+    finally:
+        r.close()
+
+
 def test_generator_reproduces_the_fixture_files():
     root = pathlib.Path(__file__).resolve().parents[2]
     gen = root / "connector" / "scripts" / "gen_hold_fixtures.py"
@@ -127,12 +192,12 @@ def test_generator_reproduces_the_fixture_files():
 
 
 def test_every_checklist_item_has_a_test():
-    """contracts/connector-hold/v1/README.md section 9 numbers 18 items; tests/test_hold.py names its tests
-    test_conf_NN for each, so a new item cannot ship without one."""
+    """contracts/connector-hold/v1/README.md section 9 numbers 26 items; tests/test_hold.py and tests/test_dfu.py
+    name their tests test_conf_NN for each, so a new item cannot ship without one."""
     text = (V1 / "README.md").read_text()
     items = re.findall(r"(?m)^(\d+)\. ", text.split("## 9. Conformance checklist")[1].split("## 10.")[0])
-    assert items == [str(n) for n in range(1, 19)]
-    covered = set(re.findall(r"def test_conf_(\d\d)", (pathlib.Path(__file__).parent / "test_hold.py").read_text()))
-    covered |= {n for grp in re.findall(r"def test_conf_((?:\d\d_)+)", (pathlib.Path(__file__).parent / "test_hold.py").read_text())
-                for n in re.findall(r"\d\d", grp)}
-    assert {f"{n:02d}" for n in range(1, 19)} <= covered
+    assert items == [str(n) for n in range(1, 26 + 1)]
+    src = "".join((pathlib.Path(__file__).parent / f).read_text() for f in ("test_hold.py", "test_dfu.py"))
+    covered = set(re.findall(r"def test_conf_(\d\d)", src))
+    covered |= {n for grp in re.findall(r"def test_conf_((?:\d\d_)+)", src) for n in re.findall(r"\d\d", grp)}
+    assert {f"{n:02d}" for n in range(1, 26 + 1)} <= covered

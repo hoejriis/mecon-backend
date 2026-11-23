@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:mecon:connector-hold:v1:iface_relay",
   "title": "iface_relay (agent to Backend)",
-  "description": "Declares that the agent carries the Backend's v1 requests. Sent after every connect.",
+  "description": "Declares that the agent carries the Backend's v1 requests. Sent after every connect. serial_dfu (only true, only from an agent configured to run a bootloader serial DFU) declares that this socket can take a bootloader-dfu job (section 12); like the declaration itself it ends with the socket and is never stored.",
   "type": "object",
   "required": [
     "type"
@@ -11,6 +11,10 @@
   "properties": {
     "type": {
       "const": "iface_relay"
+    },
+    "serial_dfu": {
+      "const": true,
+      "description": "Present only when the agent runs bootloader serial DFU. Absent means it does not."
     }
   }
 }

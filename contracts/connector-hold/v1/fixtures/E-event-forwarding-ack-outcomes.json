@@ -1,5 +1,5 @@
 {
-  "contract": "mecon-connector-hold/1.0.0-draft.1",
+  "contract": "mecon-connector-hold/1.0.0-draft.2",
   "synthetic": true,
   "id": "E",
   "title": "Event forwarding, duplicate, refusal and a stream that is not forwarded",

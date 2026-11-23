@@ -1,0 +1,226 @@
+{
+  "contract": "mecon-connector-hold/1.0.0-draft.2",
+  "synthetic": true,
+  "id": "F",
+  "title": "Bootloader serial DFU on a held device",
+  "description": "The agent declared serial_dfu. The Backend arms it with dfu_job; the agent fetches, checks and reads the package and says ready, and only then does the Backend relay the bootloader-dfu offer; the application port drops within the arming window, so the socket is kept and nothing is relayed. The agent opens the bootloader's own port and sends the package as HCI packets in SLIP frames (start, init, data, stop; every byte shown), then the application port returns and the agent declares and says hello again on the same socket. The offer's arguments are illustrative; the firmware's update contract is authoritative. The package is synthetic.",
+  "link": "companion",
+  "steps": [
+    {
+      "step": "handshake",
+      "presentation": "header",
+      "offered": [
+        "Authorization: Bearer <token>"
+      ],
+      "selected": null
+    },
+    {
+      "step": "send",
+      "frame": {
+        "type": "iface_relay",
+        "serial_dfu": true
+      }
+    },
+    {
+      "step": "send",
+      "frame": {
+        "type": "iface_hello",
+        "ref": 1,
+        "hello": {
+          "epoch": 1,
+          "node_public_key_hex": "<pubkey>"
+        }
+      }
+    },
+    {
+      "step": "recv",
+      "frame": {
+        "type": "iface_ack",
+        "of": "iface_hello",
+        "ref": 1,
+        "outcome": "recorded"
+      }
+    },
+    {
+      "step": "recv",
+      "frame": {
+        "type": "dfu_job",
+        "job": "fw-7",
+        "sha256": "a19dfa04f875c9fe3ab84dd02458e2e483d093c36ea69fe899d8082a1ad7dc24",
+        "size": 1390
+      }
+    },
+    {
+      "step": "send",
+      "frame": {
+        "type": "dfu_state",
+        "job": "fw-7",
+        "state": "fetching"
+      }
+    },
+    {
+      "step": "package_get",
+      "path": "/gateway/dfu-package/fw-7",
+      "authorization": "Bearer <token>",
+      "status": 200,
+      "size": 1390,
+      "sha256": "a19dfa04f875c9fe3ab84dd02458e2e483d093c36ea69fe899d8082a1ad7dc24",
+      "body_base64": "UEsDBBQAAAAAAAAAIVxwZ/LRSAAAAEgAAAANAAAAbWFuaWZlc3QuanNvbnsibWFuaWZlc3QiOnsiYXBwbGljYXRpb24iOnsiYmluX2ZpbGUiOiJhcHAuYmluIiwiZGF0X2ZpbGUiOiJhcHAuZGF0In19fVBLAwQUAAAAAAAAACFcRiq8F+gDAADoAwAABwAAAGFwcC5iaW4DChEYHyYtNDtCSVBXXmVsc3qBiI+WnaSrsrnAx87V3OPq8fj/Bg0UGyIpMDc+RUxTWmFob3Z9hIuSmaCnrrW8w8rR2N/m7fT7AgkQFx4lLDM6QUhPVl1ka3J5gIeOlZyjqrG4v8bN1Nvi6fD3/gUMExohKC82PURLUllgZ251fIOKkZifpq20u8LJ0Nfe5ezz+gEIDxYdJCsyOUBHTlVcY2pxeH+GjZSboqmwt77FzNPa4ejv9v0ECxIZICcuNTxDSlFYX2ZtdHuCiZCXnqWss7rByM/W3eTr8vkABw4VHCMqMTg/Rk1UW2JpcHd+hYyTmqGor7a9xMvS2eDn7vX8AwoRGB8mLTQ7QklQV15lbHN6gYiPlp2kq7K5wMfO1dzj6vH4/wYNFBsiKTA3PkVMU1phaG92fYSLkpmgp661vMPK0djf5u30+wIJEBceJSwzOkFIT1ZdZGtyeYCHjpWco6qxuL/GzdTb4unw9/4FDBMaISgvNj1ES1JZYGdudXyDipGYn6attLvCydDX3uXs8/oBCA8WHSQrMjlAR05VXGNqcXh/ho2Um6KpsLe+xczT2uHo7/b9BAsSGSAnLjU8Q0pRWF9mbXR7gomQl56lrLO6wcjP1t3k6/L5AAcOFRwjKjE4P0ZNVFtiaXB3foWMk5qhqK+2vcTL0tng5+71/AMKERgfJi00O0JJUFdeZWxzeoGIj5adpKuyucDHztXc4+rx+P8GDRQbIikwNz5FTFNaYWhvdn2Ei5KZoKeutbzDytHY3+bt9PsCCRAXHiUsMzpBSE9WXWRrcnmAh46VnKOqsbi/xs3U2+Lp8Pf+BQwTGiEoLzY9REtSWWBnbnV8g4qRmJ+mrbS7wsnQ197l7PP6AQgPFh0kKzI5QEdOVVxjanF4f4aNlJuiqbC3vsXM09rh6O/2/QQLEhkgJy41PENKUVhfZm10e4KJkJeepayzusHIz9bd5Ovy+QAHDhUcIyoxOD9GTVRbYmlwd36FjJOaoaivtr3Ey9LZ4Ofu9fwDChEYHyYtNDtCSVBXXmVsc3qBiI+WnaSrsrnAx87V3OPq8fj/Bg0UGyIpMDc+RUxTWmFob3Z9hIuSmaCnrrW8w8rR2N/m7fT7AgkQFx4lLDM6QUhPVl1ka3J5gIeOlZyjqrG4v8bN1Nvi6fD3/gUMExohKC82PURLUllgZ251fIOKkZifpq20u8LJ0Nfe5ezz+gEIDxYdJCsyOUBHTlVcY2pxeH+GjZSboqmwt77FzNPa4ejv9v0ECxIZICcuNTxDSlFYX2ZtdHuCiZCXnqWss7rByM/W3eTr8vkABw4VHCMqMTg/Rk1UUEsDBBQAAAAAAAAAIVyFQI1+DgAAAA4AAAAHAAAAYXBwLmRhdMDBwsPExcbHyMnKy8zNUEsBAhQDFAAAAAAAAAAhXHBn8tFIAAAASAAAAA0AAAAAAAAAAAAAAKQBAAAAAG1hbmlmZXN0Lmpzb25QSwECFAMUAAAAAAAAACFcRiq8F+gDAADoAwAABwAAAAAAAAAAAAAApAFzAAAAYXBwLmJpblBLAQIUAxQAAAAAAAAAIVyFQI1+DgAAAA4AAAAHAAAAAAAAAAAAAACkAYAEAABhcHAuZGF0UEsFBgAAAAADAAMApQAAALMEAAAAAA=="
+    },
+    {
+      "step": "send",
+      "frame": {
+        "type": "dfu_state",
+        "job": "fw-7",
+        "state": "ready"
+      }
+    },
+    {
+      "step": "recv",
+      "frame": {
+        "type": "iface_req",
+        "id": "j11",
+        "wire": "{\"mecon_auth\":1,\"issuer\":\"<issuer>\",\"sig\":\"<sig>\",\"body\":\"{\\\"v\\\":1,\\\"id\\\":\\\"j11\\\",\\\"op\\\":\\\"update.offer\\\"}\"}"
+      }
+    },
+    {
+      "step": "device_write",
+      "wire": "{\"mecon_auth\":1,\"issuer\":\"<issuer>\",\"sig\":\"<sig>\",\"body\":\"{\\\"v\\\":1,\\\"id\\\":\\\"j11\\\",\\\"op\\\":\\\"update.offer\\\"}\"}"
+    },
+    {
+      "step": "device_read",
+      "text": "{\"v\":1,\"id\":\"j11\",\"op\":\"update.offer\",\"status\":\"ok\",\"usig_boot\":1,\"usig_seq\":20,\"result\":{\"job\":\"fw-7\",\"state\":\"awaiting-confirm\",\"dfu\":\"serial\"},\"usig\":\"<sig>\"}"
+    },
+    {
+      "step": "send",
+      "frame": {
+        "type": "iface_result",
+        "ref": 2,
+        "message": "{\"v\":1,\"id\":\"j11\",\"op\":\"update.offer\",\"status\":\"ok\",\"usig_boot\":1,\"usig_seq\":20,\"result\":{\"job\":\"fw-7\",\"state\":\"awaiting-confirm\",\"dfu\":\"serial\"},\"usig\":\"<sig>\"}"
+      }
+    },
+    {
+      "step": "recv",
+      "frame": {
+        "type": "iface_ack",
+        "of": "iface_result",
+        "ref": 2,
+        "outcome": "update.offer: ok"
+      }
+    },
+    {
+      "step": "device_link",
+      "port": "application",
+      "event": "lost"
+    },
+    {
+      "step": "send",
+      "frame": {
+        "type": "dfu_state",
+        "job": "fw-7",
+        "state": "waiting-bootloader"
+      }
+    },
+    {
+      "step": "device_link",
+      "port": "bootloader",
+      "event": "opened"
+    },
+    {
+      "step": "send",
+      "frame": {
+        "type": "dfu_state",
+        "job": "fw-7",
+        "state": "transferring"
+      }
+    },
+    {
+      "step": "bootloader_write",
+      "packet": "start",
+      "seq": 1,
+      "hex": "c0d14e01e003000000040000000000000000000000e803000012f7c0",
+      "ack_hex": "c0100000f0c0"
+    },
+    {
+      "step": "bootloader_write",
+      "packet": "init",
+      "seq": 2,
+      "hex": "c0da4e01d701000000dbdcc1c2c3c4c5c6c7c8c9cacbcccd00007f7cc0",
+      "ack_hex": "c0180000e8c0"
+    },
+    {
+      "step": "bootloader_write",
+      "packet": "data",
+      "seq": 3,
+      "hex": "c0e34e20af04000000030a11181f262d343b424950575e656c737a81888f969da4abb2b9dbdcc7ced5dce3eaf1f8ff060d141b222930373e454c535a61686f767d848b9299a0a7aeb5bcc3cad1d8dfe6edf4fb020910171e252c333a41484f565d646b727980878e959ca3aab1b8bfc6cdd4dbdde2e9f0f7fe050c131a21282f363d444b525960676e757c838a91989fa6adb4bbc2c9d0d7dee5ecf3fa01080f161d242b323940474e555c636a71787f868d949ba2a9b0b7bec5ccd3dae1e8eff6fd040b121920272e353c434a51585f666d747b828990979ea5acb3bac1c8cfd6dde4ebf2f900070e151c232a31383f464d545b626970777e858c939aa1a8afb6bdc4cbd2d9e0e7eef5fc030a11181f262d343b424950575e656c737a81888f969da4abb2b9dbdcc7ced5dce3eaf1f8ff060d141b222930373e454c535a61686f767d848b9299a0a7aeb5bcc3cad1d8dfe6edf4fb020910171e252c333a41484f565d646b727980878e959ca3aab1b8bfc6cdd4dbdde2e9f0f7fe050c131a21282f363d444b525960676e757c838a91989fa6adb4bbc2c9d0d7dee5ecf3fa01080f161d242b323940474e555c636a71787f868d949ba2a9b0b7bec5ccd3dae1e8eff6fd040b121920272e353c434a51585f666d747b828990979ea5acb3bac1c8cfd6dde4ebf2f900070e151c232a31383f464d545b626970777e858c939aa1a8afb6bdc4cbd2d9e0e7eef5fc8ed5c0",
+      "ack_hex": "c0200000e0c0"
+    },
+    {
+      "step": "bootloader_write",
+      "packet": "data",
+      "seq": 4,
+      "hex": "c0ecce1e2804000000030a11181f262d343b424950575e656c737a81888f969da4abb2b9dbdcc7ced5dce3eaf1f8ff060d141b222930373e454c535a61686f767d848b9299a0a7aeb5bcc3cad1d8dfe6edf4fb020910171e252c333a41484f565d646b727980878e959ca3aab1b8bfc6cdd4dbdde2e9f0f7fe050c131a21282f363d444b525960676e757c838a91989fa6adb4bbc2c9d0d7dee5ecf3fa01080f161d242b323940474e555c636a71787f868d949ba2a9b0b7bec5ccd3dae1e8eff6fd040b121920272e353c434a51585f666d747b828990979ea5acb3bac1c8cfd6dde4ebf2f900070e151c232a31383f464d545b626970777e858c939aa1a8afb6bdc4cbd2d9e0e7eef5fc030a11181f262d343b424950575e656c737a81888f969da4abb2b9dbdcc7ced5dce3eaf1f8ff060d141b222930373e454c535a61686f767d848b9299a0a7aeb5bcc3cad1d8dfe6edf4fb020910171e252c333a41484f565d646b727980878e959ca3aab1b8bfc6cdd4dbdde2e9f0f7fe050c131a21282f363d444b525960676e757c838a91989fa6adb4bbc2c9d0d7dee5ecf3fa01080f161d242b323940474e555c636a71787f868d949ba2a9b0b7bec5ccd3dae1e8eff6fd040b121920272e353c434a51585f666d747b828990979ea5acb3bac1c8cfd6dde4ebf2f900070e151c232a31383f464d54cc62c0",
+      "ack_hex": "c0280000d8c0"
+    },
+    {
+      "step": "bootloader_write",
+      "packet": "stop",
+      "seq": 5,
+      "hex": "c0f54e00bd050000006868c0",
+      "ack_hex": "c0300000d0c0"
+    },
+    {
+      "step": "device_link",
+      "port": "bootloader",
+      "event": "closed"
+    },
+    {
+      "step": "send",
+      "frame": {
+        "type": "dfu_state",
+        "job": "fw-7",
+        "state": "rebooting"
+      }
+    },
+    {
+      "step": "device_link",
+      "port": "application",
+      "event": "opened"
+    },
+    {
+      "step": "send",
+      "frame": {
+        "type": "dfu_state",
+        "job": "fw-7",
+        "state": "installed-pending-hello"
+      }
+    },
+    {
+      "step": "send",
+      "frame": {
+        "type": "iface_relay",
+        "serial_dfu": true
+      }
+    },
+    {
+      "step": "send",
+      "frame": {
+        "type": "iface_hello",
+        "ref": 3,
+        "hello": {
+          "epoch": 2,
+          "node_public_key_hex": "<pubkey>"
+        }
+      }
+    },
+    {
+      "step": "recv",
+      "frame": {
+        "type": "iface_ack",
+        "of": "iface_hello",
+        "ref": 3,
+        "outcome": "recorded"
+      }
+    }
+  ]
+}

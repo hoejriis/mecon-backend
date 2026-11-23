@@ -19,7 +19,7 @@ from mecon_connector.logutil import Log
 from mecon_connector.metrics import Metrics
 
 
-def hold_cfg(server_url, token_file, mode="companion", presentation="header", **hold):
+def hold_cfg(server_url, token_file, mode="companion", presentation="header", dfu=None, **hold):
     raw = {
         "transport": "hold",
         "device": {"mode": mode, "select": {"by_id": "usb-TEST_synthetic-*"}},
@@ -33,27 +33,30 @@ def hold_cfg(server_url, token_file, mode="companion", presentation="header", **
             **hold,
         },
     }
+    if dfu is not None:
+        raw["dfu"] = dfu
     return parse(raw)
 
 
 class HoldRig:
     def __init__(self, tmp_path, server=None, mode="companion", presentation="header", enrolment="provisioned",
-                 plugged=True, token=TOKEN, **hold):
+                 plugged=True, token=TOKEN, dfu=None, bridge_kw=None, opener=None, **hold):
         self.server = server or FakeHoldServer()
         self.own_server = server is None
         self.token_file = tmp_path / "hold-token"
         self.token_file.write_text(token + "\n")
         self.token_file.chmod(0o600)
-        self.cfg = hold_cfg(self.server.url, self.token_file, mode, presentation, **hold)
-        self.opener = FakeOpener(mode=mode, enrolment=enrolment)
-        self.dev = self.opener.plug() if plugged else None
+        self.cfg = hold_cfg(self.server.url, self.token_file, mode, presentation, dfu, **hold)
+        self.opener = opener or FakeOpener(mode=mode, enrolment=enrolment)
+        self.dev = self.opener.plug() if plugged and opener is None else None
         if self.dev is not None:
             self.dev.answers_hello = True
         self.clock = Clock()
         self.metrics = Metrics(hold=True)
         self.logbuf = io.StringIO()
         self.transport = WebsocketsTransport(self.cfg.hold)
-        self.bridge = HoldBridge(self.cfg, self.transport, self.opener, self.metrics, Log(self.logbuf), self.clock)
+        self.bridge = HoldBridge(self.cfg, self.transport, self.opener, self.metrics, Log(self.logbuf), self.clock,
+                                 **(bridge_kw or {}))
         self.mode = mode
 
     # -- driving ---------------------------------------------------------------------------

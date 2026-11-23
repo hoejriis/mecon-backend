@@ -1,5 +1,5 @@
 {
-  "contract": "mecon-connector-hold/1.0.0-draft.1",
+  "contract": "mecon-connector-hold/1.0.0-draft.2",
   "synthetic": true,
   "id": "invalid",
   "title": "Frames the schemas must reject",
@@ -164,6 +164,104 @@
       "why": "refused without a reason",
       "frame": {
         "type": "refused"
+      }
+    },
+    {
+      "direction": "agent_to_backend",
+      "why": "iface_relay with serial_dfu false (absent means no)",
+      "frame": {
+        "type": "iface_relay",
+        "serial_dfu": false
+      }
+    },
+    {
+      "direction": "backend_to_agent",
+      "why": "dfu_job with an upper-case sha256",
+      "frame": {
+        "type": "dfu_job",
+        "job": "fw-1",
+        "sha256": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "size": 10
+      }
+    },
+    {
+      "direction": "backend_to_agent",
+      "why": "dfu_job with a size of 0",
+      "frame": {
+        "type": "dfu_job",
+        "job": "fw-1",
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "size": 0
+      }
+    },
+    {
+      "direction": "backend_to_agent",
+      "why": "dfu_job whose job is not one path segment",
+      "frame": {
+        "type": "dfu_job",
+        "job": "../fw",
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "size": 10
+      }
+    },
+    {
+      "direction": "backend_to_agent",
+      "why": "dfu_job without a sha256",
+      "frame": {
+        "type": "dfu_job",
+        "job": "fw-1",
+        "size": 10
+      }
+    },
+    {
+      "direction": "agent_to_backend",
+      "why": "dfu_state with an unknown state",
+      "frame": {
+        "type": "dfu_state",
+        "job": "fw-1",
+        "state": "done"
+      }
+    },
+    {
+      "direction": "agent_to_backend",
+      "why": "dfu_state failed without a stage",
+      "frame": {
+        "type": "dfu_state",
+        "job": "fw-1",
+        "state": "failed",
+        "error": "no-ack"
+      }
+    },
+    {
+      "direction": "agent_to_backend",
+      "why": "dfu_state with a stage on a state that is not failed",
+      "frame": {
+        "type": "dfu_state",
+        "job": "fw-1",
+        "state": "transferring",
+        "stage": "transfer",
+        "error": "x"
+      }
+    },
+    {
+      "direction": "agent_to_backend",
+      "why": "dfu_state ready with a stage",
+      "frame": {
+        "type": "dfu_state",
+        "job": "fw-1",
+        "state": "ready",
+        "stage": "fetch",
+        "error": "x"
+      }
+    },
+    {
+      "direction": "agent_to_backend",
+      "why": "dfu_state with an extra member",
+      "frame": {
+        "type": "dfu_state",
+        "job": "fw-1",
+        "state": "rebooting",
+        "progress": 50
       }
     }
   ]

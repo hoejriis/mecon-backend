@@ -51,6 +51,8 @@ upstream_ttl_s = 60
 downlink_max_messages = 8
 downlink_ttl_s = 5
 
+# [dfu] (bootloader serial DFU) needs transport = "hold"; see deploy/config.hold.example.toml.
+
 [health]
 enabled = true
 bind = "127.0.0.1"

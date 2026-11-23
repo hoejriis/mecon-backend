@@ -93,6 +93,9 @@ HOLD_REGISTRY: dict[str, tuple[str, str, tuple[str, ...]]] = {
     "hold_frames_ignored_total": ("counter", "Backend frames ignored, by reason", ("reason",)),
     "hold_hello_total": ("counter", "The Connector's own hello requests by outcome", ("result",)),
     "hold_hello_pages_total": ("counter", "Extra hello pages the Connector asked for after the first (cursor requests)", ()),
+    "hold_dfu_active": ("gauge", "1 while a bootloader DFU keeps the hold without a device link (section 12 of the hold contract)", ()),
+    "hold_dfu_states_total": ("counter", "dfu_state values the Connector reached, by state", ("state",)),
+    "hold_dfu_transfer_attempts_total": ("counter", "Bootloader transfer attempts by outcome", ("result",)),
 }
 HOLD_REASONS = {
     **{k: set(v) for k, v in REASONS.items()},
@@ -101,11 +104,16 @@ HOLD_REASONS = {
     "hold_connect_attempts_total": {"ok", "network", "tls", "http", "bad_token", "credential", "timeout"},
     "hold_uploads_total": {"hello", "result", "event"},
     "hold_acks_total": {"accepted", "duplicate", "refused", "unmatched", "malformed"},
-    "hold_frames_ignored_total": {"invalid_json", "not_object", "no_type", "unknown_type", "binary", "malformed_req"},
+    "hold_frames_ignored_total": {"invalid_json", "not_object", "no_type", "unknown_type", "binary", "malformed_req",
+                                  "malformed_dfu_job", "dfu_disabled", "dfu_busy", "dfu_no_device"},
     "hold_hello_total": {"ok", "refused", "malformed", "timeout"},
+    "hold_dfu_states_total": {"fetching", "ready", "waiting-bootloader", "transferring", "rebooting", "installed-pending-hello",
+                              "failed"},
+    "hold_dfu_transfer_attempts_total": {"ok", "failed"},
 }
 _HOLD_LABEL_KEY = {"hold_connect_attempts_total": "result", "hold_uploads_total": "kind", "hold_acks_total": "outcome",
-                   "hold_frames_ignored_total": "reason", "hold_hello_total": "result"}
+                   "hold_frames_ignored_total": "reason", "hold_hello_total": "result", "hold_dfu_states_total": "state",
+                   "hold_dfu_transfer_attempts_total": "result"}
 
 
 class Metrics:

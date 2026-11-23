@@ -239,7 +239,7 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description Authenticated but not permitted to observe (code `forbidden`) */
+        /** @description Authenticated, but `capabilities.observations` is `forbidden` for this caller, who lacks the grant (code `forbidden`). Never answered because the caller sees no observer, nor because observations are unavailable (that is 503). */
         Forbidden: {
             headers: {
                 [name: string]: unknown;

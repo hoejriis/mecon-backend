@@ -10,6 +10,7 @@ export const PAYLOAD_TYPES = {
 };
 const TRACE = 0x09;
 const MAX_PATH_BYTES = 64;
+const MAX_PAYLOAD_BYTES = 184;
 const DEVICE_TIME_FLOOR = 1735689600; // 2025-01-01T00:00:00Z
 const DEVICE_TIME_AHEAD_S = 60;
 export const REASONS = ['retained', 'stub', 'not_a_packet', 'malformed', 'origin_mismatch', 'unparseable', 'duplicate_report', 'failed'];
@@ -36,7 +37,7 @@ export function parsePacket(bytes) {
   const pathLen = hopCount * (hashMode + 1);
   if (pathLen > MAX_PATH_BYTES || bytes.length < offset + pathLen) return null;
   offset += pathLen;
-  if (offset >= bytes.length) return null;
+  if (offset >= bytes.length || bytes.length - offset > MAX_PAYLOAD_BYTES) return null;
   return { routeType, payloadType, pathByte, hopCount, payload: bytes.subarray(offset) };
 }
 

@@ -42,6 +42,10 @@ const A = [
   { capture_id: 15, source: 'own-broker', topic: 'meshcore/AB12/obs-1/packets', stub: { size: 70000, content_hash: 'cd'.repeat(32) }, retained: true, received_at: '2026-01-01T00:00:02.600Z' },
   // A topic too short to name an observer: a reception with none, not folded into the hours.
   cap(16, 'own-broker', 'obs/packets', env({ data: ADVERT_TRANSPORT, RSSI: -77 }), '2026-01-01T00:00:02.700Z'),
+  // The payload bound: 184 bytes frame, 185 do not. An empty hex field is zero packet bytes.
+  cap(17, 'own-broker', 'meshcore/AB12/obs-2/packets', env({ data: '1500' + '5a'.repeat(184) }), '2026-01-01T00:00:02.800Z'),
+  cap(18, 'own-broker', 'meshcore/AB12/obs-2/packets', env({ data: '1500' + '5b'.repeat(185) }), '2026-01-01T00:00:02.900Z'),
+  cap(19, 'own-broker', 'meshcore/AB12/obs-2/packets', env({ data: '' }), '2026-01-01T00:00:03.000Z'),
 ];
 
 const B = [

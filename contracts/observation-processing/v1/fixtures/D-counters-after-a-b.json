@@ -7,15 +7,15 @@
   "B"
  ],
  "counters": {
-  "processed": 25,
-  "receptions": 13,
+  "processed": 28,
+  "receptions": 14,
   "skipped": {
    "retained": 1,
    "stub": 2,
    "not_a_packet": 2,
    "malformed": 2,
    "origin_mismatch": 1,
-   "unparseable": 2,
+   "unparseable": 4,
    "duplicate_report": 2,
    "failed": 0
   },

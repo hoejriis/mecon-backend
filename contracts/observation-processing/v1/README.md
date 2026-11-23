@@ -39,16 +39,16 @@ The adapter decides the observer and extracts the packet bytes and signal readin
 - **Packet traffic only:** a topic not ending in `/packets` or `/raw` is `not_a_packet`. This covers status and neighbour messages.
 - **The envelope:** the payload must be a JSON object; otherwise `malformed`.
 - **Own transmissions:** an envelope with `direction` `"tx"` is the observer's own transmission, so `not_a_packet`.
-- **Packet bytes:** the first present of `data`, `raw_data` and `raw` must be a string of hex digits in pairs; otherwise `malformed`. A present but unusable field is not passed over for a later one.
+- **Packet bytes:** the first present of `data`, `raw_data` and `raw` must be a string of hex digits in pairs; otherwise `malformed`. A present but unusable field is not passed over for a later one. An empty string is a well-formed envelope carrying zero packet bytes, so the capture is `unparseable` (section 3), not `malformed`.
 - **Origin check:** when `origin_id` is a non-empty string and the topic names an observer, the two must match, ignoring case. Otherwise the capture is `origin_mismatch`: it claims another observer's reception.
 - **Signal readings:** `rssi` is `RSSI` if present, else `rssi`; `snr` is `SNR` if present, else `snr`.
-  - Each is a JSON number or a string holding a decimal number. Anything else reads as null.
+  - Each is a JSON number, or a string holding one: an optional sign, digits with an optional fraction (or a fraction alone), an optional exponent, surrounding whitespace ignored. Anything else reads as null.
   - An RSSI of exactly 0 means "not measured" and reads as null. SNR 0 is a reading.
 - **Device time:** `device_observed_at` is `ts`, epoch seconds (a number or a numeric string, truncated to whole seconds; never a boolean). It is kept only when trusted: no earlier than 2025-01-01T00:00:00Z, and no later than the capture's `received_at` plus 60 seconds. Otherwise it is null, because an unsynchronised or forward-skewed clock is not corrected, only not trusted.
 
 **`raw_hex`:**
 - **Observer:** the topic's last segment, when the topic has at least 2 segments and that segment is not empty.
-- **Packet bytes:** the payload is ASCII hex text, surrounding whitespace removed. Empty, non-ASCII or non-hex text is `malformed`.
+- **Packet bytes:** the payload is ASCII hex text, surrounding whitespace removed. Empty, non-ASCII or non-hex text is `malformed`: with no envelope, an empty payload is not a packet format at all.
 - **No readings:** `rssi`, `snr` and `device_observed_at` are null.
 
 A reception's `received_at` is always the capture's own, never the device time.
@@ -60,9 +60,9 @@ The packet bytes follow the MeshCore wire framing:
 - for route types 0 and 3 (transport routes), four bytes of transport codes;
 - a path byte: hop count in bits 0–5, hash mode in bits 6–7 (hash size = mode + 1; mode 3 is reserved);
 - the path itself, hop count × hash size bytes, at most 64;
-- the payload, at least one byte.
+- the payload, 1 to 184 bytes (the firmware's own payload limit).
 
-Bytes that are truncated anywhere, use hash mode 3 or carry a path over 64 bytes are `unparseable`.
+Bytes that are truncated anywhere, use hash mode 3, carry a path over 64 bytes or a payload over 184 bytes are `unparseable`: MeshCore firmware refuses each of them.
 
 **Packet identity**, `packet_id`, is the first 16 hex digits, uppercase, of SHA-256 over:
 - the payload type, as one byte;
@@ -151,6 +151,6 @@ Processing must not delay capture, device control or user requests. A processor 
 - **No `capture_id` on a reception.** Re-running already processed captures, which no tool offers but clearing the marks by hand would do, duplicates every reception without a device time.
 - **Failures and skips are not counted.** A failed capture is marked processed and logged. Skips are logged, some not at all, and there are no counters or lag figure.
 - **No rebuild.** The hourly aggregate cannot be rebuilt: it is only folded forward from its watermark.
-- **Looser inputs.** Hex with whitespace between bytes, and number strings beyond plain decimals, are accepted.
+- **Looser inputs.** Hex with whitespace between bytes, and number strings beyond the grammar in section 2 (digit separators, infinities), are accepted. A payload over 184 bytes is taken as a reception.
 - **Unknown adapters.** A source naming an unknown adapter is processed as `observer_envelope` with a warning, not refused.
 - **Two aggregates.** There is a second hourly aggregate keyed by source alone.

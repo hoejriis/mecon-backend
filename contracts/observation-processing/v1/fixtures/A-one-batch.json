@@ -144,6 +144,30 @@
    "payload_b64": "eyJkYXRhIjoiMTAzNDEyMDAwMDAxYWEwMTAyMDMwNDA1MDYwNzA4MDkwYSIsIlJTU0kiOi03N30=",
    "retained": false,
    "received_at": "2026-01-01T00:00:02.700Z"
+  },
+  {
+   "capture_id": 17,
+   "source": "own-broker",
+   "topic": "meshcore/AB12/obs-2/packets",
+   "payload_b64": "eyJkYXRhIjoiMTUwMDVhNWE1YTVhNWE1YTVhNWE1YTVhNWE1YTVhNWE1YTVhNWE1YTVhNWE1YTVhNWE1YTVhNWE1YTVhNWE1YTVhNWE1YTVhNWE1YTVhNWE1YTVhNWE1YTVhNWE1YTVhNWE1YTVhNWE1YTVhNWE1YTVhNWE1YTVhNWE1YTVhNWE1YTVhNWE1YTVhNWE1YTVhNWE1YTVhNWE1YTVhNWE1YTVhNWE1YTVhNWE1YTVhNWE1YTVhNWE1YTVhNWE1YTVhNWE1YTVhNWE1YTVhNWE1YTVhNWE1YTVhNWE1YTVhNWE1YTVhNWE1YTVhNWE1YTVhNWE1YTVhNWE1YTVhNWE1YTVhNWE1YTVhNWE1YTVhNWE1YTVhNWE1YTVhNWE1YTVhNWE1YTVhNWE1YTVhNWE1YTVhNWE1YTVhNWE1YTVhNWE1YTVhNWE1YTVhNWE1YTVhNWE1YTVhNWE1YTVhNWE1YTVhNWE1YTVhNWE1YTVhNWE1YTVhIn0=",
+   "retained": false,
+   "received_at": "2026-01-01T00:00:02.800Z"
+  },
+  {
+   "capture_id": 18,
+   "source": "own-broker",
+   "topic": "meshcore/AB12/obs-2/packets",
+   "payload_b64": "eyJkYXRhIjoiMTUwMDViNWI1YjViNWI1YjViNWI1YjViNWI1YjViNWI1YjViNWI1YjViNWI1YjViNWI1YjViNWI1YjViNWI1YjViNWI1YjViNWI1YjViNWI1YjViNWI1YjViNWI1YjViNWI1YjViNWI1YjViNWI1YjViNWI1YjViNWI1YjViNWI1YjViNWI1YjViNWI1YjViNWI1YjViNWI1YjViNWI1YjViNWI1YjViNWI1YjViNWI1YjViNWI1YjViNWI1YjViNWI1YjViNWI1YjViNWI1YjViNWI1YjViNWI1YjViNWI1YjViNWI1YjViNWI1YjViNWI1YjViNWI1YjViNWI1YjViNWI1YjViNWI1YjViNWI1YjViNWI1YjViNWI1YjViNWI1YjViNWI1YjViNWI1YjViNWI1YjViNWI1YjViNWI1YjViNWI1YjViNWI1YjViNWI1YjViNWI1YjViNWI1YjViNWI1YjViNWI1YjViNWI1YjViNWIifQ==",
+   "retained": false,
+   "received_at": "2026-01-01T00:00:02.900Z"
+  },
+  {
+   "capture_id": 19,
+   "source": "own-broker",
+   "topic": "meshcore/AB12/obs-2/packets",
+   "payload_b64": "eyJkYXRhIjoiIn0=",
+   "retained": false,
+   "received_at": "2026-01-01T00:00:03.000Z"
   }
  ],
  "expect": {
@@ -221,6 +245,20 @@
    {
     "capture_id": 16,
     "outcome": "reception"
+   },
+   {
+    "capture_id": 17,
+    "outcome": "reception"
+   },
+   {
+    "capture_id": 18,
+    "outcome": "skipped",
+    "reason": "unparseable"
+   },
+   {
+    "capture_id": 19,
+    "outcome": "skipped",
+    "reason": "unparseable"
    }
   ],
   "packets": [
@@ -229,6 +267,12 @@
     "packet_type": "GROUP_TEXT",
     "first_seen_at": "2026-01-01T00:00:00.120Z",
     "last_seen_at": "2026-01-01T00:00:02.500Z"
+   },
+   {
+    "packet_id": "C005E5AEE2F8C20F",
+    "packet_type": "GROUP_TEXT",
+    "first_seen_at": "2026-01-01T00:00:02.800Z",
+    "last_seen_at": "2026-01-01T00:00:02.800Z"
    },
    {
     "packet_id": "CCA725B296957CD8",
@@ -309,6 +353,18 @@
     "snr": null,
     "hop_count": 1,
     "route_type": 0
+   },
+   {
+    "capture_id": 17,
+    "packet_id": "C005E5AEE2F8C20F",
+    "source": "own-broker",
+    "observer_key": "obs-2",
+    "received_at": "2026-01-01T00:00:02.800Z",
+    "device_observed_at": null,
+    "rssi": null,
+    "snr": null,
+    "hop_count": 0,
+    "route_type": 1
    }
   ],
   "hours": [
@@ -336,7 +392,7 @@
     "source": "own-broker",
     "observer_key": "obs-2",
     "hour": "2026-01-01T00:00:00Z",
-    "receptions": 1,
+    "receptions": 2,
     "rssi_sum": -101,
     "rssi_count": 1,
     "snr_sum": -3.25,

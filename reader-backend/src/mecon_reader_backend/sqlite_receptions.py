@@ -9,10 +9,12 @@ Nothing is carried past what the API allows: no packet hash (the correlation id 
 and the caller), no hop count or route type, no transmitter position, no payload. Each response is built field by
 field from the reception row, never from the row as it is.
 
-Cursors are `obc_<position>_<tag>`: the position is a capture id, the tag a keyed MAC over caller and position,
-so a cursor works for the caller it was issued to and for nobody else. It is a position in the store as a whole,
-not in the caller's own receptions, so a cursor's number moves with other fleets' traffic too; the tag is no
-secrecy for that number.
+Cursors (and the event ids, which are cursors) are `obc_<sealed>_<tag>`. The position is a capture id: a place in
+the store as a whole, which moves with every fleet's traffic. So it is never shown. `<sealed>` is the position
+put through a keyed permutation of 64-bit numbers (a 4-round Feistel network on HMAC-SHA256), keyed per caller:
+stable for one caller, so an event id dedups across snapshot and stream, but its order and gaps say nothing
+about how much was stored between two of the caller's receptions. The tag, a keyed MAC over caller and sealed
+value, makes a cursor work for the caller it was issued to and for nobody else.
 
 Every query runs on its own read-only connection, off the event loop.
 """
@@ -106,17 +108,33 @@ class SqliteReceptionStore:
     def _reception_id(self, caller: Caller, capture_id: int) -> str:
         return "rcp_" + _b64(self._mac("reception", caller.user_id, str(capture_id)), 22)
 
+    def _permute(self, caller: Caller, x: int, forward: bool) -> int:
+        """A keyed permutation of 64-bit numbers, per caller: 4 Feistel rounds with HMAC-SHA256 as the round
+        function. forward=False inverts it."""
+        key = self._mac("cursor-permutation", caller.user_id)
+        left, right = x >> 32, x & 0xFFFFFFFF
+        rounds = range(4) if forward else range(3, -1, -1)
+        for i in rounds:
+            if forward:
+                f = int.from_bytes(hmac.new(key, bytes([i]) + right.to_bytes(4, "big"), hashlib.sha256).digest()[:4], "big")
+                left, right = right, left ^ f
+            else:
+                f = int.from_bytes(hmac.new(key, bytes([i]) + left.to_bytes(4, "big"), hashlib.sha256).digest()[:4], "big")
+                left, right = right ^ f, left
+        return (left << 32) | right
+
     def cursor(self, caller: Caller, position: int) -> str:
-        return f"obc_{position}_" + _tag(self._mac("cursor", caller.user_id, str(position)))
+        sealed = format(self._permute(caller, position, True), "016x")
+        return f"obc_{sealed}_" + _tag(self._mac("cursor", caller.user_id, sealed))
 
     def _position(self, caller: Caller, cursor: str) -> int:
         parts = cursor.split("_")
-        if len(parts) != 3 or parts[0] != "obc" or not (parts[1].isascii() and parts[1].isdigit()) or len(parts[1]) > 18:
+        if (len(parts) != 3 or parts[0] != "obc" or len(parts[1]) != 16
+                or any(ch not in "0123456789abcdef" for ch in parts[1])):
             raise CoreError("gone", "cursor_expired")
-        pos = int(parts[1])
-        if not hmac.compare_digest(parts[2], _tag(self._mac("cursor", caller.user_id, str(pos)))):
+        if not hmac.compare_digest(parts[2], _tag(self._mac("cursor", caller.user_id, parts[1]))):
             raise CoreError("gone", "cursor_expired")
-        return pos
+        return self._permute(caller, int(parts[1], 16), False)
 
     # ---- reading ----
 

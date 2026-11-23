@@ -412,3 +412,28 @@ def test_every_response_over_the_sqlite_store_is_clean_and_scoped(rig):
     assert len(frames) == 1 and frames[0]["reception"]["observer_id"] == rig.ids["a"]
     assert_clean(frames[0], "BEEF000000000003", "BEEF000000000004", "KEYA")
     assert f"id: {frames[0]['event_id']}\n".encode() in raw
+
+
+def test_a_cursor_never_shows_the_store_position_and_round_trips_per_caller():
+    """The position is a place in the whole store, which moves with other fleets' traffic: it must not be readable
+    from a cursor or an event id, nor its gaps; the cursor still decodes for its own caller and nobody else."""
+    import random
+
+    from mecon_reader_backend.sqlite_receptions import SqliteReceptionStore
+
+    store = SqliteReceptionStore.__new__(SqliteReceptionStore)
+    store._key = b"k" * 32
+    alice = type("C", (), {"user_id": "u-alice"})()
+    carol = type("C", (), {"user_id": "u-carol"})()
+    rng = random.Random(7)
+    for pos in [0, 1, 2, 3, 1000, 1001, 2**40 + 5] + [rng.randrange(2**63) for _ in range(200)]:
+        c = store.cursor(alice, pos)
+        assert c.split("_")[1] != format(pos, "016x")
+        assert store._position(alice, c) == pos
+        try:
+            store._position(carol, c)
+            raise AssertionError("another caller decoded the cursor")
+        except Exception as e:  # noqa: BLE001
+            assert "cursor_expired" in str(e) or e.__class__.__name__ == "CoreError"
+    seq = [int(store.cursor(alice, p).split("_")[1], 16) for p in range(100, 110)]
+    assert seq != sorted(seq) and len(set(seq)) == 10, "consecutive positions must not stay ordered or adjacent"

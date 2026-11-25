@@ -4,16 +4,157 @@
   "title": "A signed job.get or job.cancel about an attempt",
   "type": "object",
   "additionalProperties": false,
-  "required": ["id", "op", "request_id", "job_number", "attempt", "bytes", "deliveries", "transport_accepted", "device_answered"],
+  "required": [
+    "id",
+    "op",
+    "request_id",
+    "job_number",
+    "target_job_number",
+    "attempt",
+    "bytes",
+    "deliveries",
+    "transport_accepted",
+    "device_answered"
+  ],
   "properties": {
-    "id": { "type": "string", "pattern": "^ctl_[1-9][0-9]*$" },
-    "op": { "enum": ["job.get", "job.cancel"] },
-    "request_id": { "type": "string", "pattern": "^rq_[1-9][0-9]*$" },
-    "job_number": { "type": "integer", "minimum": 1, "maximum": 4294967295 },
-    "attempt": { "type": "string", "pattern": "^att_[1-9][0-9]*$" },
-    "bytes": { "type": "string", "minLength": 1 },
-    "deliveries": { "type": "integer", "minimum": 1 },
-    "transport_accepted": { "oneOf": [{ "type": "null" }, { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$" }] },
-    "device_answered": { "oneOf": [{ "type": "null" }, { "type": "object", "additionalProperties": false, "required": ["status", "at"], "properties": { "status": { "$ref": "https://example.test/mecon/device-dispatch/v1/result#/properties/status" }, "at": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$" } } }] }
-  }
+    "id": {
+      "type": "string",
+      "pattern": "^ctl_[1-9][0-9]*$"
+    },
+    "op": {
+      "enum": [
+        "job.get",
+        "job.cancel"
+      ]
+    },
+    "request_id": {
+      "type": "string",
+      "pattern": "^rq_[1-9][0-9]*$"
+    },
+    "job_number": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 1,
+      "maximum": 4294967295
+    },
+    "attempt": {
+      "type": "string",
+      "pattern": "^att_[1-9][0-9]*$"
+    },
+    "bytes": {
+      "type": "string",
+      "minLength": 1
+    },
+    "deliveries": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "transport_accepted": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+        }
+      ]
+    },
+    "device_answered": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "error",
+            "state",
+            "at"
+          ],
+          "properties": {
+            "status": {
+              "enum": [
+                "ok",
+                "refused",
+                "invalid",
+                "unknown-op",
+                "unsupported-version",
+                "busy",
+                "failed"
+              ]
+            },
+            "at": {
+              "type": "string",
+              "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+            },
+            "error": {
+              "enum": [
+                "replay",
+                "duplicate",
+                "job-open",
+                "unknown-job",
+                null
+              ]
+            },
+            "state": {
+              "enum": [
+                "accepted",
+                "progress",
+                "applied",
+                "awaiting-confirm",
+                "queued",
+                "duty-held",
+                "transmitted",
+                "confirmed",
+                "applied-final",
+                "acked",
+                "done",
+                "reverted",
+                "timed-out",
+                "cancelled",
+                "unknown",
+                null
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "target_job_number": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 4294967295
+    }
+  },
+  "description": "A job.get is a plain read with no job number of its own (job_number is null); a job.cancel is a signed request with its own job number. target_job_number is the job they are about.",
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "op": {
+            "const": "job.cancel"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "job_number": {
+            "type": "integer"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "job_number": {
+            "type": "null"
+          }
+        }
+      }
+    }
+  ]
 }

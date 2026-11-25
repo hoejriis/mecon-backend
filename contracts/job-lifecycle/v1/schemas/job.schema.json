@@ -4,28 +4,199 @@
   "title": "A job as its creator reads it",
   "type": "object",
   "additionalProperties": false,
-  "required": ["id", "caller", "device", "command", "idempotency_key", "state", "created_at", "updated_at", "expires_at", "claimed_by", "lease_until", "cancel_requested_at", "redelivery_halted", "attempts", "controls", "events", "outcome"],
+  "required": [
+    "id",
+    "caller",
+    "device",
+    "command",
+    "idempotency_key",
+    "state",
+    "created_at",
+    "updated_at",
+    "expires_at",
+    "cancel_requested_at",
+    "redelivery_halted",
+    "attempts",
+    "controls",
+    "events",
+    "outcome"
+  ],
   "properties": {
-    "id": { "type": "string", "pattern": "^job_[1-9][0-9]*$" },
-    "caller": { "type": "string", "pattern": "^[a-z0-9_-]{1,64}$" },
-    "device": { "type": "string", "pattern": "^[a-z0-9_-]{1,64}$" },
-    "command": { "$ref": "https://example.test/mecon/device-dispatch/v1/command" },
-    "idempotency_key": { "type": ["string", "null"], "minLength": 1, "maxLength": 128 },
-    "state": { "enum": ["accepted", "dispatched", "running", "succeeded", "failed", "refused", "cancelled", "expired", "unknown"] },
-    "created_at": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$" },
-    "updated_at": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$" },
-    "expires_at": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$" },
-    "claimed_by": { "type": ["string", "null"], "pattern": "^[a-z0-9_-]{1,64}$" },
-    "lease_until": { "oneOf": [{ "type": "null" }, { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$" }] },
-    "cancel_requested_at": { "oneOf": [{ "type": "null" }, { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$" }] },
-    "redelivery_halted": { "type": "boolean" },
-    "attempts": { "type": "array", "items": { "$ref": "https://example.test/mecon/job-lifecycle/v1/attempt" } },
-    "controls": { "type": "array", "items": { "$ref": "https://example.test/mecon/job-lifecycle/v1/control" } },
-    "events": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["at", "status", "data"],
-      "properties": { "at": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$" }, "status": { "$ref": "https://example.test/mecon/device-dispatch/v1/result#/properties/status" }, "data": { "type": ["string", "null"], "maxLength": 200 } } } },
-    "outcome": { "oneOf": [{ "type": "null" }, { "$ref": "https://example.test/mecon/job-lifecycle/v1/outcome" }] }
+    "id": {
+      "type": "string",
+      "pattern": "^job_[1-9][0-9]*$"
+    },
+    "caller": {
+      "type": "string",
+      "pattern": "^[a-z0-9_-]{1,64}$"
+    },
+    "device": {
+      "type": "string",
+      "pattern": "^[a-z0-9_-]{1,64}$"
+    },
+    "command": {
+      "$ref": "https://example.test/mecon/device-dispatch/v1/command"
+    },
+    "idempotency_key": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "state": {
+      "enum": [
+        "accepted",
+        "dispatched",
+        "running",
+        "succeeded",
+        "failed",
+        "refused",
+        "cancelled",
+        "expired",
+        "unknown"
+      ]
+    },
+    "created_at": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "updated_at": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "expires_at": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "cancel_requested_at": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+        }
+      ]
+    },
+    "redelivery_halted": {
+      "type": "boolean"
+    },
+    "attempts": {
+      "type": "array",
+      "items": {
+        "$ref": "https://example.test/mecon/job-lifecycle/v1/attempt"
+      }
+    },
+    "controls": {
+      "type": "array",
+      "items": {
+        "$ref": "https://example.test/mecon/job-lifecycle/v1/control"
+      }
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "at",
+          "status",
+          "state",
+          "data"
+        ],
+        "properties": {
+          "at": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "refused",
+              "invalid",
+              "unknown-op",
+              "unsupported-version",
+              "busy",
+              "failed"
+            ]
+          },
+          "data": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 200
+          },
+          "state": {
+            "enum": [
+              "accepted",
+              "progress",
+              "applied",
+              "awaiting-confirm",
+              "queued",
+              "duty-held",
+              "transmitted",
+              "confirmed",
+              "applied-final",
+              "acked",
+              "done",
+              "reverted",
+              "timed-out",
+              "cancelled",
+              "unknown",
+              null
+            ]
+          }
+        }
+      }
+    },
+    "outcome": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "https://example.test/mecon/job-lifecycle/v1/outcome"
+        }
+      ]
+    }
   },
   "allOf": [
-    { "if": { "properties": { "state": { "enum": ["succeeded", "failed", "refused", "cancelled", "expired", "unknown"] } } }, "then": { "not": { "properties": { "outcome": { "type": "null" } } } }, "else": { "properties": { "outcome": { "type": "null" } } } }
-  ]
+    {
+      "if": {
+        "properties": {
+          "state": {
+            "enum": [
+              "succeeded",
+              "failed",
+              "refused",
+              "cancelled",
+              "expired",
+              "unknown"
+            ]
+          }
+        }
+      },
+      "then": {
+        "not": {
+          "properties": {
+            "outcome": {
+              "type": "null"
+            }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "outcome": {
+            "type": "null"
+          }
+        }
+      }
+    }
+  ],
+  "description": "The creator's view. The claim lease is internal and is not in it."
 }

@@ -1,6 +1,6 @@
 {
  "fixture": "I",
- "title": "Dispositions kept distinct: broker acceptance, duty hold, transmission, a native ACK on a direct message and never on a channel",
+ "title": "Dispositions kept distinct: broker acceptance, duty hold, transmission, a native ACK on a direct message and never on a channel message",
  "kind": "dispatch",
  "contract_version": "1.0.0-draft.1",
  "setup": {
@@ -63,21 +63,21 @@
       "transport_accepted": null,
       "device_answered": null,
       "rf_transmitted": null,
-      "native_ack": null
+      "acked": null
      },
      "rq_2": {
       "signed": null,
       "transport_accepted": null,
       "device_answered": null,
       "rf_transmitted": null,
-      "native_ack": null
+      "acked": null
      },
      "rq_3": {
       "signed": null,
       "transport_accepted": null,
       "device_answered": null,
       "rf_transmitted": null,
-      "native_ack": null
+      "acked": null
      }
     }
    }
@@ -95,21 +95,21 @@
       "transport_accepted": null,
       "device_answered": null,
       "rf_transmitted": null,
-      "native_ack": null
+      "acked": null
      },
      "rq_2": {
       "signed": "2026-01-01T00:00:00Z",
       "transport_accepted": null,
       "device_answered": null,
       "rf_transmitted": null,
-      "native_ack": null
+      "acked": null
      },
      "rq_3": {
       "signed": null,
       "transport_accepted": null,
       "device_answered": null,
       "rf_transmitted": null,
-      "native_ack": null
+      "acked": null
      }
     }
    }
@@ -127,21 +127,21 @@
       "transport_accepted": "2026-01-01T00:00:01Z",
       "device_answered": null,
       "rf_transmitted": null,
-      "native_ack": null
+      "acked": null
      },
      "rq_2": {
       "signed": "2026-01-01T00:00:00Z",
       "transport_accepted": null,
       "device_answered": null,
       "rf_transmitted": null,
-      "native_ack": null
+      "acked": null
      },
      "rq_3": {
       "signed": null,
       "transport_accepted": null,
       "device_answered": null,
       "rf_transmitted": null,
-      "native_ack": null
+      "acked": null
      }
     }
    }
@@ -159,21 +159,21 @@
       "transport_accepted": "2026-01-01T00:00:01Z",
       "device_answered": null,
       "rf_transmitted": null,
-      "native_ack": null
+      "acked": null
      },
      "rq_2": {
       "signed": "2026-01-01T00:00:00Z",
       "transport_accepted": "2026-01-01T00:00:01Z",
       "device_answered": null,
       "rf_transmitted": null,
-      "native_ack": null
+      "acked": null
      },
      "rq_3": {
       "signed": null,
       "transport_accepted": null,
       "device_answered": null,
       "rf_transmitted": null,
-      "native_ack": null
+      "acked": null
      }
     }
    }
@@ -191,21 +191,21 @@
       "transport_accepted": "2026-01-01T00:00:01Z",
       "device_answered": null,
       "rf_transmitted": null,
-      "native_ack": null
+      "acked": null
      },
      "rq_2": {
       "signed": "2026-01-01T00:00:00Z",
       "transport_accepted": "2026-01-01T00:00:01Z",
       "device_answered": null,
       "rf_transmitted": null,
-      "native_ack": null
+      "acked": null
      },
      "rq_3": {
       "signed": null,
       "transport_accepted": null,
       "device_answered": null,
       "rf_transmitted": null,
-      "native_ack": null
+      "acked": null
      }
     }
    }
@@ -217,7 +217,8 @@
     "signed_by": "dev_1",
     "request_id": "rq_1",
     "job_number": 1,
-    "status": "queued"
+    "status": "ok",
+    "state": "queued"
    },
    "expect": {
     "applied": true,
@@ -227,25 +228,27 @@
       "signed": "2026-01-01T00:00:00Z",
       "transport_accepted": "2026-01-01T00:00:01Z",
       "device_answered": {
-       "status": "queued",
+       "status": "ok",
+       "error": null,
+       "state": "queued",
        "at": "2026-01-01T00:00:02Z"
       },
       "rf_transmitted": null,
-      "native_ack": null
+      "acked": null
      },
      "rq_2": {
       "signed": "2026-01-01T00:00:00Z",
       "transport_accepted": "2026-01-01T00:00:01Z",
       "device_answered": null,
       "rf_transmitted": null,
-      "native_ack": null
+      "acked": null
      },
      "rq_3": {
       "signed": null,
       "transport_accepted": null,
       "device_answered": null,
       "rf_transmitted": null,
-      "native_ack": null
+      "acked": null
      }
     }
    }
@@ -257,7 +260,8 @@
     "signed_by": "dev_1",
     "request_id": "rq_3",
     "job_number": 3,
-    "status": "ok"
+    "status": "ok",
+    "state": "done"
    },
    "expect": {
     "applied": false,
@@ -267,25 +271,27 @@
       "signed": "2026-01-01T00:00:00Z",
       "transport_accepted": "2026-01-01T00:00:01Z",
       "device_answered": {
-       "status": "queued",
+       "status": "ok",
+       "error": null,
+       "state": "queued",
        "at": "2026-01-01T00:00:02Z"
       },
       "rf_transmitted": null,
-      "native_ack": null
+      "acked": null
      },
      "rq_2": {
       "signed": "2026-01-01T00:00:00Z",
       "transport_accepted": "2026-01-01T00:00:01Z",
       "device_answered": null,
       "rf_transmitted": null,
-      "native_ack": null
+      "acked": null
      },
      "rq_3": {
       "signed": null,
       "transport_accepted": null,
       "device_answered": null,
       "rf_transmitted": null,
-      "native_ack": null
+      "acked": null
      }
     }
    }
@@ -297,7 +303,8 @@
     "signed_by": "dev_1",
     "request_id": "rq_1",
     "job_number": 1,
-    "status": "duty_held"
+    "status": "ok",
+    "state": "duty-held"
    },
    "expect": {
     "applied": true,
@@ -307,25 +314,27 @@
       "signed": "2026-01-01T00:00:00Z",
       "transport_accepted": "2026-01-01T00:00:01Z",
       "device_answered": {
-       "status": "duty_held",
+       "status": "ok",
+       "error": null,
+       "state": "duty-held",
        "at": "2026-01-01T00:00:05Z"
       },
       "rf_transmitted": null,
-      "native_ack": null
+      "acked": null
      },
      "rq_2": {
       "signed": "2026-01-01T00:00:00Z",
       "transport_accepted": "2026-01-01T00:00:01Z",
       "device_answered": null,
       "rf_transmitted": null,
-      "native_ack": null
+      "acked": null
      },
      "rq_3": {
       "signed": null,
       "transport_accepted": null,
       "device_answered": null,
       "rf_transmitted": null,
-      "native_ack": null
+      "acked": null
      }
     }
    }
@@ -337,7 +346,8 @@
     "signed_by": "dev_1",
     "request_id": "rq_1",
     "job_number": 1,
-    "status": "transmitted",
+    "status": "ok",
+    "state": "transmitted",
     "rf_count": 1
    },
    "expect": {
@@ -348,7 +358,9 @@
       "signed": "2026-01-01T00:00:00Z",
       "transport_accepted": "2026-01-01T00:00:01Z",
       "device_answered": {
-       "status": "transmitted",
+       "status": "ok",
+       "error": null,
+       "state": "transmitted",
        "at": "2026-01-01T00:00:10Z"
       },
       "rf_transmitted": {
@@ -356,21 +368,21 @@
        "first_at": "2026-01-01T00:00:10Z",
        "last_at": "2026-01-01T00:00:10Z"
       },
-      "native_ack": null
+      "acked": null
      },
      "rq_2": {
       "signed": "2026-01-01T00:00:00Z",
       "transport_accepted": "2026-01-01T00:00:01Z",
       "device_answered": null,
       "rf_transmitted": null,
-      "native_ack": null
+      "acked": null
      },
      "rq_3": {
       "signed": null,
       "transport_accepted": null,
       "device_answered": null,
       "rf_transmitted": null,
-      "native_ack": null
+      "acked": null
      }
     }
    }
@@ -382,7 +394,8 @@
     "signed_by": "dev_1",
     "request_id": "rq_2",
     "job_number": 2,
-    "status": "transmitted"
+    "status": "ok",
+    "state": "transmitted"
    },
    "expect": {
     "applied": true,
@@ -392,7 +405,9 @@
       "signed": "2026-01-01T00:00:00Z",
       "transport_accepted": "2026-01-01T00:00:01Z",
       "device_answered": {
-       "status": "transmitted",
+       "status": "ok",
+       "error": null,
+       "state": "transmitted",
        "at": "2026-01-01T00:00:10Z"
       },
       "rf_transmitted": {
@@ -400,13 +415,15 @@
        "first_at": "2026-01-01T00:00:10Z",
        "last_at": "2026-01-01T00:00:10Z"
       },
-      "native_ack": null
+      "acked": null
      },
      "rq_2": {
       "signed": "2026-01-01T00:00:00Z",
       "transport_accepted": "2026-01-01T00:00:01Z",
       "device_answered": {
-       "status": "transmitted",
+       "status": "ok",
+       "error": null,
+       "state": "transmitted",
        "at": "2026-01-01T00:00:11Z"
       },
       "rf_transmitted": {
@@ -414,14 +431,14 @@
        "first_at": "2026-01-01T00:00:11Z",
        "last_at": "2026-01-01T00:00:11Z"
       },
-      "native_ack": null
+      "acked": null
      },
      "rq_3": {
       "signed": null,
       "transport_accepted": null,
       "device_answered": null,
       "rf_transmitted": null,
-      "native_ack": null
+      "acked": null
      }
     }
    }
@@ -433,7 +450,8 @@
     "signed_by": "dev_1",
     "request_id": "rq_1",
     "job_number": 1,
-    "status": "transmitted",
+    "status": "ok",
+    "state": "transmitted",
     "rf_count": 1
    },
    "expect": {
@@ -444,7 +462,9 @@
       "signed": "2026-01-01T00:00:00Z",
       "transport_accepted": "2026-01-01T00:00:01Z",
       "device_answered": {
-       "status": "transmitted",
+       "status": "ok",
+       "error": null,
+       "state": "transmitted",
        "at": "2026-01-01T00:00:12Z"
       },
       "rf_transmitted": {
@@ -452,13 +472,15 @@
        "first_at": "2026-01-01T00:00:10Z",
        "last_at": "2026-01-01T00:00:12Z"
       },
-      "native_ack": null
+      "acked": null
      },
      "rq_2": {
       "signed": "2026-01-01T00:00:00Z",
       "transport_accepted": "2026-01-01T00:00:01Z",
       "device_answered": {
-       "status": "transmitted",
+       "status": "ok",
+       "error": null,
+       "state": "transmitted",
        "at": "2026-01-01T00:00:11Z"
       },
       "rf_transmitted": {
@@ -466,14 +488,14 @@
        "first_at": "2026-01-01T00:00:11Z",
        "last_at": "2026-01-01T00:00:11Z"
       },
-      "native_ack": null
+      "acked": null
      },
      "rq_3": {
       "signed": null,
       "transport_accepted": null,
       "device_answered": null,
       "rf_transmitted": null,
-      "native_ack": null
+      "acked": null
      }
     }
    }
@@ -485,7 +507,8 @@
     "signed_by": "dev_1",
     "request_id": "rq_2",
     "job_number": 2,
-    "status": "native_ack"
+    "status": "ok",
+    "state": "acked"
    },
    "expect": {
     "applied": false,
@@ -495,7 +518,9 @@
       "signed": "2026-01-01T00:00:00Z",
       "transport_accepted": "2026-01-01T00:00:01Z",
       "device_answered": {
-       "status": "transmitted",
+       "status": "ok",
+       "error": null,
+       "state": "transmitted",
        "at": "2026-01-01T00:00:12Z"
       },
       "rf_transmitted": {
@@ -503,13 +528,15 @@
        "first_at": "2026-01-01T00:00:10Z",
        "last_at": "2026-01-01T00:00:12Z"
       },
-      "native_ack": null
+      "acked": null
      },
      "rq_2": {
       "signed": "2026-01-01T00:00:00Z",
       "transport_accepted": "2026-01-01T00:00:01Z",
       "device_answered": {
-       "status": "transmitted",
+       "status": "ok",
+       "error": null,
+       "state": "transmitted",
        "at": "2026-01-01T00:00:11Z"
       },
       "rf_transmitted": {
@@ -517,14 +544,14 @@
        "first_at": "2026-01-01T00:00:11Z",
        "last_at": "2026-01-01T00:00:11Z"
       },
-      "native_ack": null
+      "acked": null
      },
      "rq_3": {
       "signed": null,
       "transport_accepted": null,
       "device_answered": null,
       "rf_transmitted": null,
-      "native_ack": null
+      "acked": null
      }
     }
    }
@@ -536,7 +563,8 @@
     "signed_by": "dev_1",
     "request_id": "rq_1",
     "job_number": 1,
-    "status": "native_ack"
+    "status": "ok",
+    "state": "acked"
    },
    "expect": {
     "applied": true,
@@ -546,7 +574,9 @@
       "signed": "2026-01-01T00:00:00Z",
       "transport_accepted": "2026-01-01T00:00:01Z",
       "device_answered": {
-       "status": "native_ack",
+       "status": "ok",
+       "error": null,
+       "state": "acked",
        "at": "2026-01-01T00:00:14Z"
       },
       "rf_transmitted": {
@@ -554,64 +584,15 @@
        "first_at": "2026-01-01T00:00:10Z",
        "last_at": "2026-01-01T00:00:12Z"
       },
-      "native_ack": "2026-01-01T00:00:14Z"
+      "acked": "2026-01-01T00:00:14Z"
      },
      "rq_2": {
-      "signed": "2026-01-01T00:00:00Z",
-      "transport_accepted": "2026-01-01T00:00:01Z",
-      "device_answered": {
-       "status": "transmitted",
-       "at": "2026-01-01T00:00:11Z"
-      },
-      "rf_transmitted": {
-       "count": 1,
-       "first_at": "2026-01-01T00:00:11Z",
-       "last_at": "2026-01-01T00:00:11Z"
-      },
-      "native_ack": null
-     },
-     "rq_3": {
-      "signed": null,
-      "transport_accepted": null,
-      "device_answered": null,
-      "rf_transmitted": null,
-      "native_ack": null
-     }
-    }
-   }
-  },
-  {
-   "step": "result",
-   "t": 20,
-   "result": {
-    "signed_by": "dev_1",
-    "request_id": "rq_1",
-    "job_number": 1,
-    "status": "ok"
-   },
-   "expect": {
-    "applied": true,
-    "ignored_results": 2,
-    "attempts": {
-     "rq_1": {
       "signed": "2026-01-01T00:00:00Z",
       "transport_accepted": "2026-01-01T00:00:01Z",
       "device_answered": {
        "status": "ok",
-       "at": "2026-01-01T00:00:20Z"
-      },
-      "rf_transmitted": {
-       "count": 2,
-       "first_at": "2026-01-01T00:00:10Z",
-       "last_at": "2026-01-01T00:00:12Z"
-      },
-      "native_ack": "2026-01-01T00:00:14Z"
-     },
-     "rq_2": {
-      "signed": "2026-01-01T00:00:00Z",
-      "transport_accepted": "2026-01-01T00:00:01Z",
-      "device_answered": {
-       "status": "transmitted",
+       "error": null,
+       "state": "transmitted",
        "at": "2026-01-01T00:00:11Z"
       },
       "rf_transmitted": {
@@ -619,26 +600,27 @@
        "first_at": "2026-01-01T00:00:11Z",
        "last_at": "2026-01-01T00:00:11Z"
       },
-      "native_ack": null
+      "acked": null
      },
      "rq_3": {
       "signed": null,
       "transport_accepted": null,
       "device_answered": null,
       "rf_transmitted": null,
-      "native_ack": null
+      "acked": null
      }
     }
    }
   },
   {
    "step": "result",
-   "t": 21,
+   "t": 15,
    "result": {
     "signed_by": "dev_1",
     "request_id": "rq_2",
     "job_number": 2,
-    "status": "ok"
+    "status": "ok",
+    "state": "done"
    },
    "expect": {
     "applied": true,
@@ -649,35 +631,39 @@
       "transport_accepted": "2026-01-01T00:00:01Z",
       "device_answered": {
        "status": "ok",
-       "at": "2026-01-01T00:00:20Z"
+       "error": null,
+       "state": "acked",
+       "at": "2026-01-01T00:00:14Z"
       },
       "rf_transmitted": {
        "count": 2,
        "first_at": "2026-01-01T00:00:10Z",
        "last_at": "2026-01-01T00:00:12Z"
       },
-      "native_ack": "2026-01-01T00:00:14Z"
+      "acked": "2026-01-01T00:00:14Z"
      },
      "rq_2": {
       "signed": "2026-01-01T00:00:00Z",
       "transport_accepted": "2026-01-01T00:00:01Z",
       "device_answered": {
        "status": "ok",
-       "at": "2026-01-01T00:00:21Z"
+       "error": null,
+       "state": "done",
+       "at": "2026-01-01T00:00:15Z"
       },
       "rf_transmitted": {
        "count": 1,
        "first_at": "2026-01-01T00:00:11Z",
        "last_at": "2026-01-01T00:00:11Z"
       },
-      "native_ack": null
+      "acked": null
      },
      "rq_3": {
       "signed": null,
       "transport_accepted": null,
       "device_answered": null,
       "rf_transmitted": null,
-      "native_ack": null
+      "acked": null
      }
     }
    }

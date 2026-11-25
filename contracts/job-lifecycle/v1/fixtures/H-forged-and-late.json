@@ -62,8 +62,6 @@
       "created_at": "2026-01-01T00:00:00Z",
       "updated_at": "2026-01-01T00:00:00Z",
       "expires_at": "2026-01-01T00:10:00Z",
-      "claimed_by": null,
-      "lease_until": null,
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [],
@@ -101,8 +99,6 @@
       "created_at": "2026-01-01T00:00:00Z",
       "updated_at": "2026-01-01T00:00:00Z",
       "expires_at": "2026-01-01T00:10:00Z",
-      "claimed_by": "worker_1",
-      "lease_until": "2026-01-01T00:00:30Z",
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [],
@@ -153,8 +149,6 @@
       "created_at": "2026-01-01T00:00:00Z",
       "updated_at": "2026-01-01T00:00:00Z",
       "expires_at": "2026-01-01T00:10:00Z",
-      "claimed_by": "worker_1",
-      "lease_until": "2026-01-01T00:00:30Z",
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [
@@ -170,7 +164,7 @@
          "transport_accepted": null,
          "device_answered": null,
          "rf_transmitted": null,
-         "native_ack": null
+         "acked": null
         }
        }
       ],
@@ -187,7 +181,8 @@
     "signed_by": null,
     "request_id": "rq_1",
     "job_number": 1,
-    "status": "ok"
+    "status": "ok",
+    "state": "done"
    },
    "expect": {
     "response": {
@@ -212,8 +207,6 @@
       "created_at": "2026-01-01T00:00:00Z",
       "updated_at": "2026-01-01T00:00:00Z",
       "expires_at": "2026-01-01T00:10:00Z",
-      "claimed_by": "worker_1",
-      "lease_until": "2026-01-01T00:00:30Z",
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [
@@ -229,7 +222,7 @@
          "transport_accepted": null,
          "device_answered": null,
          "rf_transmitted": null,
-         "native_ack": null
+         "acked": null
         }
        }
       ],
@@ -246,7 +239,8 @@
     "signed_by": "dev_2",
     "request_id": "rq_1",
     "job_number": 1,
-    "status": "ok"
+    "status": "ok",
+    "state": "done"
    },
    "expect": {
     "response": {
@@ -271,8 +265,6 @@
       "created_at": "2026-01-01T00:00:00Z",
       "updated_at": "2026-01-01T00:00:00Z",
       "expires_at": "2026-01-01T00:10:00Z",
-      "claimed_by": "worker_1",
-      "lease_until": "2026-01-01T00:00:30Z",
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [
@@ -288,7 +280,7 @@
          "transport_accepted": null,
          "device_answered": null,
          "rf_transmitted": null,
-         "native_ack": null
+         "acked": null
         }
        }
       ],
@@ -305,7 +297,8 @@
     "signed_by": "dev_1",
     "request_id": "rq_1",
     "job_number": 99,
-    "status": "ok"
+    "status": "ok",
+    "state": "done"
    },
    "expect": {
     "response": {
@@ -330,8 +323,6 @@
       "created_at": "2026-01-01T00:00:00Z",
       "updated_at": "2026-01-01T00:00:00Z",
       "expires_at": "2026-01-01T00:10:00Z",
-      "claimed_by": "worker_1",
-      "lease_until": "2026-01-01T00:00:30Z",
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [
@@ -347,7 +338,7 @@
          "transport_accepted": null,
          "device_answered": null,
          "rf_transmitted": null,
-         "native_ack": null
+         "acked": null
         }
        }
       ],
@@ -364,7 +355,8 @@
     "signed_by": "dev_1",
     "request_id": "rq_9",
     "job_number": 1,
-    "status": "ok"
+    "status": "ok",
+    "state": "done"
    },
    "expect": {
     "response": {
@@ -389,8 +381,6 @@
       "created_at": "2026-01-01T00:00:00Z",
       "updated_at": "2026-01-01T00:00:00Z",
       "expires_at": "2026-01-01T00:10:00Z",
-      "claimed_by": "worker_1",
-      "lease_until": "2026-01-01T00:00:30Z",
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [
@@ -406,7 +396,7 @@
          "transport_accepted": null,
          "device_answered": null,
          "rf_transmitted": null,
-         "native_ack": null
+         "acked": null
         }
        }
       ],
@@ -423,7 +413,8 @@
     "signed_by": "dev_1",
     "request_id": "rq_1",
     "job_number": 1,
-    "status": "native_ack"
+    "status": "ok",
+    "state": "acked"
    },
    "expect": {
     "response": {
@@ -448,8 +439,6 @@
       "created_at": "2026-01-01T00:00:00Z",
       "updated_at": "2026-01-01T00:00:00Z",
       "expires_at": "2026-01-01T00:10:00Z",
-      "claimed_by": "worker_1",
-      "lease_until": "2026-01-01T00:00:30Z",
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [
@@ -465,7 +454,7 @@
          "transport_accepted": null,
          "device_answered": null,
          "rf_transmitted": null,
-         "native_ack": null
+         "acked": null
         }
        }
       ],
@@ -482,7 +471,8 @@
     "signed_by": "dev_1",
     "request_id": "rq_1",
     "job_number": 1,
-    "status": "progress"
+    "status": "ok",
+    "state": "progress"
    },
    "expect": {
     "response": {
@@ -507,8 +497,6 @@
       "created_at": "2026-01-01T00:00:00Z",
       "updated_at": "2026-01-01T00:00:00Z",
       "expires_at": "2026-01-01T00:10:00Z",
-      "claimed_by": "worker_1",
-      "lease_until": "2026-01-01T00:00:30Z",
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [
@@ -523,11 +511,13 @@
          "signed": "2026-01-01T00:00:00Z",
          "transport_accepted": null,
          "device_answered": {
-          "status": "progress",
+          "status": "ok",
+          "error": null,
+          "state": "progress",
           "at": "2026-01-01T00:00:00Z"
          },
          "rf_transmitted": null,
-         "native_ack": null
+         "acked": null
         }
        }
       ],
@@ -544,7 +534,8 @@
     "signed_by": "dev_1",
     "request_id": "rq_1",
     "job_number": 1,
-    "status": "ok"
+    "status": "ok",
+    "state": "confirmed"
    },
    "expect": {
     "response": {
@@ -569,8 +560,6 @@
       "created_at": "2026-01-01T00:00:00Z",
       "updated_at": "2026-01-01T00:00:00Z",
       "expires_at": "2026-01-01T00:10:00Z",
-      "claimed_by": null,
-      "lease_until": null,
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [
@@ -586,10 +575,12 @@
          "transport_accepted": null,
          "device_answered": {
           "status": "ok",
+          "error": null,
+          "state": "confirmed",
           "at": "2026-01-01T00:00:00Z"
          },
          "rf_transmitted": null,
-         "native_ack": null
+         "acked": null
         }
        }
       ],
@@ -597,7 +588,7 @@
       "events": [],
       "outcome": {
        "reason": "device_final",
-       "device_status": "ok",
+       "device_status": "confirmed",
        "at": "2026-01-01T00:00:00Z"
       }
      }
@@ -610,7 +601,8 @@
     "signed_by": "dev_1",
     "request_id": "rq_1",
     "job_number": 1,
-    "status": "progress"
+    "status": "ok",
+    "state": "progress"
    },
    "expect": {
     "response": {
@@ -635,8 +627,6 @@
       "created_at": "2026-01-01T00:00:00Z",
       "updated_at": "2026-01-01T00:00:00Z",
       "expires_at": "2026-01-01T00:10:00Z",
-      "claimed_by": null,
-      "lease_until": null,
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [
@@ -652,10 +642,12 @@
          "transport_accepted": null,
          "device_answered": {
           "status": "ok",
+          "error": null,
+          "state": "confirmed",
           "at": "2026-01-01T00:00:00Z"
          },
          "rf_transmitted": null,
-         "native_ack": null
+         "acked": null
         }
        }
       ],
@@ -663,7 +655,7 @@
       "events": [],
       "outcome": {
        "reason": "device_final",
-       "device_status": "ok",
+       "device_status": "confirmed",
        "at": "2026-01-01T00:00:00Z"
       }
      }
@@ -676,7 +668,8 @@
     "signed_by": "dev_1",
     "request_id": "rq_1",
     "job_number": 1,
-    "status": "ok"
+    "status": "ok",
+    "state": "confirmed"
    },
    "expect": {
     "response": {
@@ -701,8 +694,6 @@
       "created_at": "2026-01-01T00:00:00Z",
       "updated_at": "2026-01-01T00:00:00Z",
       "expires_at": "2026-01-01T00:10:00Z",
-      "claimed_by": null,
-      "lease_until": null,
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [
@@ -718,10 +709,12 @@
          "transport_accepted": null,
          "device_answered": {
           "status": "ok",
+          "error": null,
+          "state": "confirmed",
           "at": "2026-01-01T00:00:00Z"
          },
          "rf_transmitted": null,
-         "native_ack": null
+         "acked": null
         }
        }
       ],
@@ -729,7 +722,7 @@
       "events": [],
       "outcome": {
        "reason": "device_final",
-       "device_status": "ok",
+       "device_status": "confirmed",
        "at": "2026-01-01T00:00:00Z"
       }
      }

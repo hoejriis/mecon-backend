@@ -5,10 +5,35 @@
   "description": "Which reason fits which terminal state is in README section 3; the validator checks it.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["reason", "device_status", "at"],
+  "required": [
+    "reason",
+    "device_status",
+    "at"
+  ],
   "properties": {
-    "reason": { "enum": ["device_final", "authority", "nothing_ran", "caller_before_dispatch", "device_confirmed", "expiry", "abandon_deadline"] },
-    "device_status": { "oneOf": [{ "type": "null" }, { "$ref": "https://example.test/mecon/device-dispatch/v1/result#/properties/status" }] },
-    "at": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$" }
+    "reason": {
+      "enum": [
+        "device_final",
+        "authority",
+        "nothing_ran",
+        "caller_before_dispatch",
+        "device_confirmed",
+        "expiry",
+        "abandon_deadline",
+        "device_lost_job",
+        "device_reported_unknown"
+      ]
+    },
+    "device_status": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[a-z-]{2,32}$"
+    },
+    "at": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    }
   }
 }

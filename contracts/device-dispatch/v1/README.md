@@ -13,10 +13,10 @@ How the Backend turns a request into a **typed command** for one device, which s
 | `schemas/dispositions.schema.json` | JSON Schema for the dispositions of one attempt. |
 | `schemas/origin-state.schema.json` | JSON Schema for the origin scheduling state after one step. |
 | `fixtures.schema.json` | JSON Schema for the fixtures. |
-| `fixtures/I-dispositions.json` | Fixture I: dispositions kept distinct: broker acceptance, duty hold, transmission, a native ACK on a direct message and never on a channel message. |
+| `fixtures/I-dispositions.json` | Fixture I: dispositions kept distinct: broker acceptance, duty hold, transmission, a native ACK (`acked`) on a direct message and never on a channel message. |
 | `fixtures/J-typed-commands.json` | Fixture J: every catalogue op accepted, and invalid commands refused before anything is signed. |
 | `fixtures/K-invalid.json` | Fixture K: documents the schemas reject. |
-| `fixtures/L-origins.json` | Fixture L: the origin rules for a multi-gateway send. |
+| `fixtures/L-origins.json` | Fixture L: the origin rules for a multi-gateway send of a packet whose bytes are fixed. |
 
 `npm test` in `contracts/` validates the catalogue, every schema and every fixture. It replays I, J and L through `device-dispatch-reference.mjs`, a reference model written from this README, and compares each step's expected output exactly. It fails when a fixture file or schema is not referenced here, when a fixture names another version than this one, and when no fixture covers a catalogue op, a step kind, a command refusal reason or an origin result. `scripts/gen-job-dispatch-fixtures.mjs` regenerates the expected outputs of the scripted fixtures; a changed expectation is reviewed by hand, and a second implementation replaying the same fixtures is what checks the reference.
 
@@ -30,9 +30,10 @@ There is no door for "send any op". A command is `{ "op": ..., "args": {...} }` 
 - `roles`: the device roles the op applies to (`companion`, `repeater`);
 - `changes_state`: whether running it changes the device;
 - `internal`: whether only the Backend may request it;
+- `cancellable_states`: the device job states in which a `job.cancel` still has something to cancel (section 3);
 - `args`: a closed JSON Schema (`additionalProperties` is false, required args are listed).
 
-The synthetic catalogue holds `contact.put`, `contact.remove`, `message.send`, `packet.transmit`, `config.apply`, `job.cancel` and `job.get`. The last two are internal: the Backend signs them to manage a job it already has, and a caller cannot request them.
+The synthetic catalogue holds `contact.put`, `contact.remove`, `message.send`, `packet.transmit`, `config.apply`, `job.cancel` and `job.get`. The last two are internal: the Backend signs them to manage a job it already has, and a caller cannot request them. A `job.cancel` is a signed request and takes a job number of its own. **A `job.get` is a plain read:** it carries no job number of its own and no signature-bound job id, it takes no place in the job number sequence, and `target_job_number` only names the job it reads.
 
 A command is checked **before anything is signed**, against the device's role. The first failing check names the reason, and the reasons are checked in this order:
 
@@ -53,35 +54,52 @@ A refused command is `invalid` at the job lifecycle's create, and nothing is cre
 | --- | --- |
 | `signed` | The attempt's bytes were signed and stored. |
 | `transport_accepted` | A transport took a delivery: the broker accepted the publish, or a hold relay took it. Never set before `signed`. |
-| `device_answered` | The device answered. It holds the device's status string and when it arrived, and is replaced by each later answer. |
-| `rf_transmitted` | The device reported transmitting: a count, and the first and last time. Each `transmitted` answer adds its `rf_count`, 1 when absent. |
-| `native_ack` | A direct message was acknowledged natively by its recipient: only ever for `message.send` with `kind` `direct`, and never for a channel message. Set once. |
+| `device_answered` | The device answered. It holds the device's `status`, `error` code and job `state` (each may be null) and when it arrived, and is replaced by each later answer. |
+| `rf_transmitted` | The device reported the state `transmitted`: a count, and the first and last time. Each `transmitted` answer adds its `rf_count`, 1 when absent. |
+| `acked` | A direct message was acknowledged natively by its recipient: the device reported the state `acked`. Only ever for `message.send` with `kind` `direct`, never for a channel message. Set once. |
 
 **Broker acceptance is never a device result.** `transport_accepted` says a message was handed over, and nothing about the device. A device that never answers has a null `device_answered` however many publishes the broker accepted.
 
-A set `signed`, `transport_accepted` or `native_ack` never changes, and `rf_transmitted` only grows.
+A set `signed`, `transport_accepted` or `acked` never changes, and `rf_transmitted` only grows.
 
 ## 3. Results and correlation
 
-`schemas/result.schema.json`. A device result carries `signed_by` (the device whose signature verified, or null when none does), the `request_id` and `job_number` it answers, and a `status`.
+`schemas/result.schema.json`. A device answer carries `signed_by` (the device whose signature verified, or null when none does), the `request_id` and `job_number` it answers, and the answer as the device sends it: a `status` and, depending on it, an `error` code or a job `state`. For a `job.get` the job number is the one of the job it reads, since the read has none of its own.
 
-**A result is applied to an attempt only when** it is signed by the attempt's own device, and names that attempt's request id and the job number the attempt carries for that device. Anything else is **ignored and counted** (`ignored_results`), never applied: an unsigned result, one signed by another device, one naming another request id, one naming another job number, a status the contract does not list, and a status the attempt's op cannot have (section 4). An attempt that was never signed has no request id to answer.
+**A result is applied to an attempt only when** it is signed by the attempt's own device, and names that attempt's request id and the job number the attempt carries for that device. Anything else is **ignored and counted** (`ignored_results`), never applied: an unsigned result, one signed by another device, one naming another request id, one naming another job number, an answer that is not well formed (below), and a state the attempt's op cannot have (section 4). An attempt that was never signed has no request id to answer.
 
-The statuses, by class:
+**Statuses:** `ok`, `refused`, `invalid`, `unknown-op`, `unsupported-version`, `busy` and `failed`. Their meaning, with the error codes:
 
-| Class | Statuses | Meaning |
-| --- | --- | --- |
-| open | `progress`, `applied`, `awaiting-confirm`, `queued`, `duty_held`, `transmitted`, `native_ack` | The job is open on the device. |
-| final success | `ok`, `confirmed`, `applied-final` | It finished. |
-| final failure | `failed`, `reverted` | It ran and failed or was undone. |
-| cancelled | `cancelled` | The device cancelled it. |
-| nothing ran | `refused`, `invalid`, `unknown-op`, `unsupported-version`, `busy`, `replay` | The device did not run it, or says it has seen the job number before. What each proves is in the job lifecycle contract, section 4. |
+| Answer | Means |
+| --- | --- |
+| `ok` with a `state` | The device has the job, and `state` is where it stands (below). |
+| `refused`, `invalid`, `unknown-op`, `unsupported-version` | The device did not run it. |
+| `busy` | The device is occupied and did not run it. The attempt stands and is delivered again later. |
+| `busy` with error `job-open` | The device is occupied by another open job and did not run it. |
+| `refused` with error `replay` and a `mark` | The device has seen this job number. `mark` is the highest job number the device has seen. |
+| `failed` with error `duplicate` | The job number already ran, or a power cut lost its answer. What happened is not known. |
+| `failed` with error `unknown-job` | The device has no job with that number. |
+| `failed` | The device ran it and it failed. |
 
-A job's `job.cancel` is useful only while the device's latest status for it is none yet, `progress`, `awaiting-confirm`, `queued` or `duty_held`. After any other status the device has nothing left to cancel.
+**Replay and duplicate are error codes, not statuses.** An error code goes only with its status (`replay` with `refused`, `duplicate` and `unknown-job` with `failed`, `job-open` with `busy`), `replay` always carries a `mark` and nothing else does, and a `state` goes only with `ok`. Any other combination is not well formed.
 
-## 4. Which results an op can have
+**Job states** (the device's wire names), by class:
 
-`queued`, `duty_held`, `transmitted` and `native_ack` describe a radio, so only `message.send` and `packet.transmit` can have them. A result with one of them for another op is ignored and counted. `native_ack` also needs a direct message: for a channel message it is ignored and counted, because a channel has no recipient to acknowledge.
+| Class | States |
+| --- | --- |
+| open | `accepted`, `progress`, `applied`, `awaiting-confirm`, `queued`, `duty-held`, `transmitted` |
+| final success | `confirmed`, `applied-final`, `acked`, `done` |
+| final failure | `reverted`, `timed-out` |
+| cancelled | `cancelled` |
+| unknown | `unknown` |
+
+A device state of `unknown` is the device saying it does not know how the job ended. It ends the job `unknown`, never `failed`.
+
+**What can be cancelled.** A `job.cancel` is useful only while the job's latest state is in its op's `cancellable_states`: `accepted`, `applied` (cancelling an applied job reverts it) and `awaiting-confirm` for the data ops; also `progress` for `config.apply`, standing in here for an update that can be abandoned part way; and `accepted`, `queued` and `duty-held` for the radio ops, which have nothing to cancel once transmitted.
+
+## 4. Which states an op can have
+
+`queued`, `duty-held`, `transmitted`, `acked` and `timed-out` describe a radio, so only `message.send` and `packet.transmit` can have them. A result with one of them for another op is ignored and counted. `acked` also needs a direct message: for a channel message it is ignored and counted, because a channel has no recipient to acknowledge.
 
 ## 5. No automatic resend
 
@@ -92,26 +110,31 @@ The only repetition of an attempt is **a re-delivery of the identical stored byt
 
 A user's retry is a new job, with a new job number and a new signature. A Backend never turns an uncertain outcome into a certain one by sending again.
 
+**This is about one job's attempt.** In a multi-gateway send (section 6) each origin is its own job with its own single attempt, which is never sent again. Choosing another origin sends the same packet bytes, already public once any gateway has transmitted them, from a different gateway, and the mesh deduplicates a packet by its hash. That is the design of the profile and not a retry of the uncertain job: the earlier origin's job is left to settle on its own.
+
 ## 6. Origin rules for a multi-gateway send (a profile)
 
-A message may be sent from more than one gateway: the user's own Companion, or a Repeater that can reach the destination. These rules decide the **origin**, the gateway whose transmission starts the packet. A fixture of kind `origin` states the gateways (each `eligible`, `reachable`, `authorized`, and for a Companion `connected` and `capable`) and a window of 10 to 15 seconds.
+A message may be sent from more than one gateway: the user's own Companion, or Repeaters that can reach the destination. These rules decide the **origin**, the gateway whose transmission starts the packet. **The profile applies only to packet sends whose bytes are fixed before the first origin is chosen:** every origin sends the same packet, so a second origin can add nothing the first did not, and the mesh drops a repeat by its hash. Each origin is its own job (section 5). A fixture of kind `origin` states the gateways, a seeded order, the window (10 to 15 seconds), the Companion's timeout (120 seconds) and the send's lifetime (600 seconds).
 
-- **One origin first.** The user's Companion, if it is connected and capable; otherwise the first eligible, reachable, authorized Repeater. No gateway qualifies: `no_origin`, and nothing is sent.
-- **The window starts only on `rf_transmitted`.** It is the time from the first origin's first `transmitted` result until the window's end. Queued, accepted and duty-held start no window.
-- **After the window,** and only if scheduling is still open, **one further gateway** is chosen: the first eligible, reachable gateway that has neither heard nor transmitted the packet and is **authorized again at that moment**. A gateway that heard the packet, or lost authorization, is skipped. If none is left, the scheduling closes as `no_second_origin`. There are never more than two origins.
-- **A native DM ACK stops scheduling.** A native ACK for a direct message closes the scheduling as `native_ack`. For a channel message the ACK is ignored and counted.
-- **An ambiguous origin is never resent.** An origin result of `refused`, `expired`, `failed` or `unknown` before any transmission starts no window, so nothing else is tried: the scheduling closes as `no_automatic_retry` and a retry is the user's, a new job.
+- **The first origin is the user's Companion** when it is connected, capable, eligible and authorized. Otherwise the first round picks a Repeater.
+- **The Companion's 120 seconds.** If it shows no transmission within 120 seconds of the start, the next round picks a Repeater.
+- **Rounds continue** until every eligible gateway has heard or transmitted the packet. A gateway is an origin at most once, and there is no other limit on the number of rounds. After an origin's first `transmitted` result the next round begins when the window (10 to 15 s) has run out.
+- **The next origin is chosen at random** among the eligible gateways that are **authorized again at that moment** and have neither heard nor transmitted the packet and have not been an origin. The fixtures make the choice deterministic with a seeded `order` in the setup: the first gateway of the order that qualifies.
+- **After an origin ends `refused`, `expired`, `failed` or `unknown`,** the next round begins at once and picks another origin. The ended origin is never sent again.
+- **Nothing left:** when no gateway qualifies the scheduling closes as `no_candidates`, or as `no_origin` when no first origin could be found.
+- **A native DM ACK stops scheduling.** It closes the scheduling as `native_ack` and sends `job.cancel` to the origins whose jobs are still cancellable (no transmission yet). For a channel message the ACK is ignored and counted.
+- **The send's lifetime is 600 seconds,** after which the scheduling closes as `lifetime`.
 
-Results per origin: `queued`, `duty_held`, `transmitted`, `refused`, `expired`, `failed`, `unknown`; null before the first report. A result for a gateway that is not an origin, or a second result after a final one, is ignored and counted. `queued` and `duty_held` may be followed by a later result.
+Results per origin: `queued`, `duty-held`, `transmitted`, `refused`, `expired`, `failed`, `unknown`; null before the first report. A result for a gateway that is not an origin, a second result after the first transmission or final result, and any result after the scheduling closed are ignored and counted. `queued` and `duty-held` may be followed by a later result.
 
 ## 7. The fixtures' rules
 
 The validator checks:
 - **Catalogue:** every op once, with a valid closed args schema, roles, `changes_state` and `internal`, and named in this README.
-- **I:** the replay equals `expect` at every step; every `dispositions` document fits its schema; broker acceptance never changes the device answer; a set disposition never changes; a native ACK exists only for a direct message; a radio disposition exists only for a radio op; nothing is accepted by a transport before it is signed.
+- **I:** the replay equals `expect` at every step; every `dispositions` document fits its schema; broker acceptance never changes the device answer; a set disposition never changes; `acked` exists only for a direct message; a radio disposition exists only for a radio op; nothing is accepted by a transport before it is signed.
 - **J:** every case's verdict equals the replay, and every catalogue op is accepted by at least one case and every refusal reason is shown by one.
 - **K:** each case fails its schema.
-- **L:** each run's replay equals `expect`; origins never repeat; there are at most two; a second origin is never scheduled before the window ends; a native ACK closes only a direct message; every origin result appears.
+- **L:** each run's replay equals `expect`; origins never repeat and one round adds at most one; a further origin comes only after the previous one ended without transmitting, or when the window or the Companion's 120 seconds had run out; nothing is scheduled after the scheduling closed; a native ACK closes only a direct message and cancels only origins that had not transmitted; every origin result appears.
 - **Coverage:** every fixture file is referenced here and valid; every catalogue op, every step kind of kinds `dispatch` and `origin`, every refusal reason and every origin result is covered by at least one fixture.
 
 A Backend replaying these fixtures drives its own transport and clock. Output is compared exactly, in the order the fixtures use.

@@ -10,21 +10,22 @@ export const CATALOGUE = JSON.parse(readFileSync(new URL('./device-dispatch/v1/s
 const ajv = new Ajv2020({ strict: false, allErrors: true });
 const argValidators = Object.fromEntries(CATALOGUE.ops.map((o) => [o.op, ajv.compile(o.args)]));
 
-// Section 3: what a device may answer. Each status belongs to one class.
-export const STATUS_CLASSES = {
-  running: ['progress', 'applied', 'awaiting-confirm', 'queued', 'duty_held', 'transmitted', 'native_ack'],
-  final_ok: ['ok', 'confirmed', 'applied-final'],
-  final_failed: ['failed', 'reverted'],
+// Section 3: a device answers with a status and, for some refusals, an error code. An `ok` answer carries the
+// device's job state.
+export const ANSWER_STATUSES = ['ok', 'refused', 'invalid', 'unknown-op', 'unsupported-version', 'busy', 'failed'];
+export const ERROR_CODES = { replay: 'refused', duplicate: 'failed', 'job-open': 'busy', 'unknown-job': 'failed' };
+export const JOB_STATES = {
+  open: ['accepted', 'progress', 'applied', 'awaiting-confirm', 'queued', 'duty-held', 'transmitted'],
+  final_success: ['confirmed', 'applied-final', 'acked', 'done'],
+  final_failure: ['reverted', 'timed-out'],
   cancelled: ['cancelled'],
-  nothing_ran: ['refused', 'invalid', 'unknown-op', 'unsupported-version', 'busy', 'replay'],
+  unknown: ['unknown'],
 };
-export const ALL_STATUSES = Object.values(STATUS_CLASSES).flat();
-export const RADIO_STATUSES = ['queued', 'duty_held', 'transmitted', 'native_ack'];
+export const ALL_STATES = Object.values(JOB_STATES).flat();
+export const RADIO_STATES = ['queued', 'duty-held', 'transmitted', 'acked', 'timed-out'];
 export const RADIO_OPS = ['message.send', 'packet.transmit'];
-// The device's last status for a job, when a `job.cancel` still has something to cancel. null: not answered yet.
-export const CANCELLABLE = [null, 'progress', 'awaiting-confirm', 'queued', 'duty_held'];
 export const COMMAND_REASONS = ['unknown_op', 'internal_op', 'wrong_role', 'invalid_args'];
-export const ORIGIN_RESULTS = ['queued', 'duty_held', 'transmitted', 'refused', 'expired', 'failed', 'unknown'];
+export const ORIGIN_RESULTS = ['queued', 'duty-held', 'transmitted', 'refused', 'expired', 'failed', 'unknown'];
 
 export const iso = (start, seconds) => new Date(Date.parse(start) + seconds * 1000).toISOString().replace('.000Z', 'Z');
 
@@ -41,8 +42,11 @@ export function validateCommand(command, role, by = 'caller') {
   return { valid: true };
 }
 
+// Section 3: a job.cancel has something to cancel only in the states its op lists.
+export const cancellable = (op, state) => !!CATALOGUE.ops.find((o) => o.op === op)?.cancellable_states.includes(state);
+
 // Section 2: the dispositions of one attempt, each with its own timestamp or null.
-export const newDispositions = () => ({ signed: null, transport_accepted: null, device_answered: null, rf_transmitted: null, native_ack: null });
+export const newDispositions = () => ({ signed: null, transport_accepted: null, device_answered: null, rf_transmitted: null, acked: null });
 
 // Section 3: a result belongs to an attempt only when signed by that attempt's device and naming its request id
 // and its job number.
@@ -50,21 +54,41 @@ export const correlates = (target, result) =>
   typeof result.signed_by === 'string' && result.signed_by === target.device
   && result.request_id === target.request_id && result.job_number === target.job_number;
 
-// Section 3: apply a device result to an attempt `{ device, request_id, job_number, command, dispositions }` at
-// time `at` (an ISO string). Returns { applied }. A result that does not correlate, names an unknown status or
+// Section 3: what a well-formed answer means. Null for an answer the contract does not allow: an unknown status,
+// an error code under the wrong status, a state without `ok` or missing with it, a mark without `replay`.
+export function classify(r) {
+  if (!ANSWER_STATUSES.includes(r.status)) return null;
+  const error = r.error ?? null;
+  if (error !== null) {
+    if (ERROR_CODES[error] !== r.status || r.state !== undefined || (error === 'replay') !== (r.mark !== undefined)) return null;
+    return { kind: { replay: 'replay', duplicate: 'duplicate', 'job-open': 'job_open', 'unknown-job': 'unknown_job' }[error] };
+  }
+  if (r.mark !== undefined) return null;
+  if (r.status === 'ok') {
+    const cls = Object.keys(JOB_STATES).find((k) => JOB_STATES[k].includes(r.state));
+    return cls ? { kind: cls === 'unknown' ? 'unknown_state' : cls } : null;
+  }
+  if (r.state !== undefined) return null;
+  if (r.status === 'busy') return { kind: 'busy' };
+  if (r.status === 'failed') return { kind: 'failed' };
+  return { kind: 'nothing_ran' };
+}
+
+// Section 3 and 4: apply a device result to an attempt `{ device, request_id, job_number, command, dispositions }`
+// at time `at` (an ISO string). Returns { applied }. A result that does not correlate, is not well formed or
 // claims what the op cannot have is not applied, and the attempt is unchanged.
 export function applyResult(att, result, at) {
-  if (!correlates(att, result) || !ALL_STATUSES.includes(result.status)) return { applied: false };
+  if (!correlates(att, result) || !classify(result)) return { applied: false };
   const { op, args } = att.command;
-  if (RADIO_STATUSES.includes(result.status) && !RADIO_OPS.includes(op)) return { applied: false };
-  if (result.status === 'native_ack' && !(op === 'message.send' && args.kind === 'direct')) return { applied: false };
+  if (RADIO_STATES.includes(result.state) && !RADIO_OPS.includes(op)) return { applied: false };
+  if (result.state === 'acked' && !(op === 'message.send' && args.kind === 'direct')) return { applied: false };
   const d = att.dispositions;
-  if (result.status === 'transmitted') {
+  if (result.state === 'transmitted') {
     const n = result.rf_count ?? 1;
     d.rf_transmitted = d.rf_transmitted ? { count: d.rf_transmitted.count + n, first_at: d.rf_transmitted.first_at, last_at: at } : { count: n, first_at: at, last_at: at };
   }
-  if (result.status === 'native_ack' && d.native_ack === null) d.native_ack = at;
-  d.device_answered = { status: result.status, at };
+  if (result.state === 'acked' && d.acked === null) d.acked = at;
+  d.device_answered = { status: result.status, error: result.error ?? null, state: result.state ?? null, at };
   return { applied: true };
 }
 
@@ -77,8 +101,7 @@ export function replayDispatch(setup, steps) {
     const at = iso(setup.start, s.t);
     let applied = null;
     if (s.step === 'sign') {
-      const a = atts[s.request_id];
-      a.dispositions.signed ??= at;
+      atts[s.request_id].dispositions.signed ??= at;
     } else if (s.step === 'transport_accept') {
       const a = atts[s.request_id];
       applied = a.dispositions.signed !== null; // nothing can be accepted that was never signed
@@ -95,57 +118,75 @@ export function replayDispatch(setup, steps) {
 // Section 1's reasons, one case at a time: a fixture of kind `commands`.
 export const replayCommands = (cases) => cases.map((c) => validateCommand(c.command, c.role, c.by));
 
-// Section 6: the origin rules for a multi-gateway send. A fixture of kind `origin`.
+// Section 6: the origin rules for a multi-gateway send of a packet whose bytes are fixed. A fixture of kind
+// `origin`. Each origin is its own job with its own single attempt; choosing another origin sends the same public
+// packet bytes from a different gateway and never repeats an origin's attempt.
 export const ORIGIN_STEPS = ['start', 'result', 'heard', 'authority', 'native_ack', 'tick'];
-export const CLOSED_REASONS = ['native_ack', 'second_origin', 'no_second_origin', 'no_origin', 'no_automatic_retry'];
+export const CLOSED_REASONS = ['native_ack', 'no_candidates', 'lifetime', 'no_origin'];
+const FAILED_ORIGIN = ['refused', 'expired', 'failed', 'unknown'];
+const PENDING_ORIGIN = [null, 'queued', 'duty-held'];
 export function replayOrigins(setup, steps) {
-  const gws = structuredClone(setup.gateways); // in order: the companion first where there is one, then repeaters
-  const names = Object.keys(gws);
+  const gws = structuredClone(setup.gateways);
   const origins = [];
-  let windowEnds = null;
+  let nextRound = null;
   let closed = null;
   let ignored = 0;
+  let begun = null;
   const eligible = (g) => g.eligible && g.reachable && g.authorized && (g.kind !== 'companion' || (g.connected && g.capable));
-  const state = (scheduled) => ({
-    origins: origins.map((o) => ({ ...o })), window_ends_at: windowEnds === null ? null : iso(setup.start, windowEnds), scheduled, closed, ignored_results: ignored,
+  const view = (scheduled, cancelSent) => ({
+    origins: origins.map((o) => ({ ...o })), next_round_at: nextRound === null ? null : iso(setup.start, nextRound), scheduled, cancel_sent: cancelSent, closed, ignored_results: ignored,
   });
   return steps.map((s) => {
     const scheduled = [];
+    const cancelSent = [];
     const at = iso(setup.start, s.t);
-    const choose = (candidates) => {
-      const g = candidates[0];
-      if (g) { origins.push({ gateway: g, result: null, transmitted_at: null }); scheduled.push(g); }
-      return g;
+    // One round: the next origin is the first, in the setup's seeded order, of the eligible gateways that are
+    // authorised again now, have neither heard nor transmitted the packet and have not been an origin.
+    const round = () => {
+      const pick = setup.order.find((n) => !origins.some((o) => o.gateway === n) && !gws[n].heard && eligible(gws[n]));
+      nextRound = null;
+      if (pick === undefined) { closed = origins.length ? 'no_candidates' : 'no_origin'; return; }
+      origins.push({ gateway: pick, result: null, transmitted_at: null });
+      scheduled.push(pick);
     };
+    const live = () => closed === null && begun !== null;
     if (s.step === 'start') {
-      const companion = names.filter((n) => gws[n].kind === 'companion' && gws[n].connected && gws[n].capable && eligible(gws[n]));
-      const repeaters = names.filter((n) => gws[n].kind === 'repeater' && eligible(gws[n]));
-      if (!choose([...companion, ...repeaters])) closed = 'no_origin';
+      begun = s.t;
+      const first = setup.order.find((n) => gws[n].kind === 'companion' && eligible(gws[n]));
+      if (first !== undefined) {
+        origins.push({ gateway: first, result: null, transmitted_at: null });
+        scheduled.push(first);
+        nextRound = s.t + setup.companion_timeout_s; // no transmission by then: fall back to Repeaters
+      } else round();
     } else if (s.step === 'result') {
       const o = origins.find((x) => x.gateway === s.gateway);
-      if (!o || closed === 'native_ack' || (o.result !== null && o.result !== 'queued' && o.result !== 'duty_held')) ignored++;
+      if (!live() || !o || !PENDING_ORIGIN.includes(o.result)) ignored++;
       else {
         o.result = s.status;
+        const latest = o === origins[origins.length - 1];
         if (s.status === 'transmitted') {
           o.transmitted_at = at;
           gws[o.gateway].heard = true;
-          if (o === origins[0]) windowEnds = s.t + setup.window_s; // the window starts only on a transmission
-        } else if (o === origins[0] && ['refused', 'expired', 'failed', 'unknown'].includes(s.status) && closed === null) closed = 'no_automatic_retry';
+          if (latest) nextRound = s.t + setup.window_s;
+        } else if (FAILED_ORIGIN.includes(s.status) && latest) round();
       }
     } else if (s.step === 'heard') {
       gws[s.gateway].heard = true;
     } else if (s.step === 'authority') {
       gws[s.gateway].authorized = s.authorized;
     } else if (s.step === 'native_ack') {
-      if (setup.message_kind !== 'direct' || origins.length === 0) ignored++;
-      else if (closed === null) closed = 'native_ack';
+      if (setup.message_kind !== 'direct' || !live()) ignored++;
+      else {
+        closed = 'native_ack';
+        nextRound = null;
+        for (const o of origins) if (PENDING_ORIGIN.includes(o.result)) cancelSent.push(o.gateway);
+      }
     } else if (s.step === 'tick') {
-      if (closed === null && origins.length === 1 && windowEnds !== null && s.t >= windowEnds) {
-        // One further gateway that has neither heard nor transmitted the packet, authorised again just now.
-        const rest = names.filter((n) => !origins.some((o) => o.gateway === n) && !gws[n].heard && eligible(gws[n]));
-        closed = choose(rest) ? 'second_origin' : 'no_second_origin';
+      if (live()) {
+        if (s.t >= begun + setup.lifetime_s) { closed = 'lifetime'; nextRound = null; }
+        else if (nextRound !== null && s.t >= nextRound) round();
       }
     } else throw new Error(`unknown step ${s.step}`);
-    return state(scheduled);
+    return view(scheduled, cancelSent);
   });
 }

@@ -1,17 +1,182 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://example.test/mecon/device-dispatch/v1/result",
-  "title": "A device result as the Backend receives it",
-  "description": "signed_by is the device whose signature verified, or null when the result carries none that verifies.",
+  "title": "A device answer as the Backend receives it",
+  "description": "signed_by is the device whose signature verified, or null when the result carries none that verifies. status is the device's answer to the request; state is the device's job state and goes with status ok only; error is an error code under a status (replay under refused, with the device's mark; duplicate and unknown-job under failed; job-open under busy).",
   "type": "object",
   "additionalProperties": false,
-  "required": ["signed_by", "request_id", "job_number", "status"],
+  "required": [
+    "signed_by",
+    "request_id",
+    "job_number",
+    "status"
+  ],
   "properties": {
-    "signed_by": { "type": ["string", "null"], "pattern": "^[a-z0-9_-]{1,64}$" },
-    "request_id": { "type": "string", "pattern": "^rq_[1-9][0-9]*$" },
-    "job_number": { "type": "integer", "minimum": 1, "maximum": 4294967295 },
-    "status": { "enum": ["progress", "applied", "awaiting-confirm", "queued", "duty_held", "transmitted", "native_ack", "ok", "confirmed", "applied-final", "failed", "reverted", "cancelled", "refused", "invalid", "unknown-op", "unsupported-version", "busy", "replay"] },
-    "rf_count": { "type": "integer", "minimum": 1 },
-    "data": { "type": "string", "maxLength": 200 }
-  }
+    "signed_by": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[a-z0-9_-]{1,64}$"
+    },
+    "request_id": {
+      "type": "string",
+      "pattern": "^rq_[1-9][0-9]*$"
+    },
+    "job_number": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 4294967295
+    },
+    "status": {
+      "enum": [
+        "ok",
+        "refused",
+        "invalid",
+        "unknown-op",
+        "unsupported-version",
+        "busy",
+        "failed"
+      ]
+    },
+    "rf_count": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "data": {
+      "type": "string",
+      "maxLength": 200
+    },
+    "state": {
+      "enum": [
+        "accepted",
+        "progress",
+        "applied",
+        "awaiting-confirm",
+        "queued",
+        "duty-held",
+        "transmitted",
+        "confirmed",
+        "applied-final",
+        "acked",
+        "done",
+        "reverted",
+        "timed-out",
+        "cancelled",
+        "unknown"
+      ]
+    },
+    "error": {
+      "enum": [
+        "replay",
+        "duplicate",
+        "job-open",
+        "unknown-job"
+      ]
+    },
+    "mark": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4294967295
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "ok"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "state"
+        ],
+        "not": {
+          "required": [
+            "error"
+          ]
+        }
+      },
+      "else": {
+        "not": {
+          "required": [
+            "state"
+          ]
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "const": "replay"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "mark",
+          "status"
+        ],
+        "properties": {
+          "status": {
+            "const": "refused"
+          }
+        }
+      },
+      "else": {
+        "not": {
+          "required": [
+            "mark"
+          ]
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "enum": [
+              "duplicate",
+              "unknown-job"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "status": {
+            "const": "failed"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "const": "job-open"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "status": {
+            "const": "busy"
+          }
+        }
+      }
+    }
+  ]
 }

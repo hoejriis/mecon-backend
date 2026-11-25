@@ -8,7 +8,7 @@ import Ajv2020 from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
 import { checkReadme } from './validate-common.mjs';
 import {
-  CONTRACT_VERSION, CATALOGUE, replayDispatch, replayCommands, replayOrigins, DISPATCH_STEPS, ORIGIN_STEPS, COMMAND_REASONS, ORIGIN_RESULTS, RADIO_OPS,
+  CONTRACT_VERSION, CATALOGUE, iso, replayDispatch, replayCommands, replayOrigins, DISPATCH_STEPS, ORIGIN_STEPS, COMMAND_REASONS, ORIGIN_RESULTS, RADIO_OPS, ALL_STATES,
 } from './device-dispatch-reference.mjs';
 
 const SCHEMAS = ['command', 'result', 'dispositions', 'origin-state'];
@@ -50,6 +50,7 @@ export function validateDeviceDispatch(dir = 'device-dispatch/v1') {
     seenOps.add(o.op);
     if (!/^[a-z]+\.[a-z]+$/.test(o.op)) fail(`catalogue: ${o.op} is not a valid op name`);
     if (!Array.isArray(o.roles) || !o.roles.length || o.roles.some((r) => !['companion', 'repeater'].includes(r))) fail(`catalogue: ${o.op} roles`);
+    if (!Array.isArray(o.cancellable_states) || o.cancellable_states.some((x) => !ALL_STATES.includes(x)) || (o.internal && o.cancellable_states.length)) fail(`catalogue: ${o.op} cancellable_states`);
     if (typeof o.changes_state !== 'boolean' || typeof o.internal !== 'boolean') fail(`catalogue: ${o.op} changes_state and internal must be booleans`);
     if (o.args?.type !== 'object' || o.args.additionalProperties !== false || !Array.isArray(o.args.required)) fail(`catalogue: ${o.op} args must be a closed object schema with required fields`);
     if (!readme.includes(`\`${o.op}\``)) fail(`README.md does not name ${o.op}`);
@@ -84,11 +85,11 @@ export function validateDeviceDispatch(dir = 'device-dispatch/v1') {
           if (!v.dispositions(d)) fail(`fixtures/${f}: step ${i + 1} ${rq} ${JSON.stringify(v.dispositions.errors)}`);
           const att = doc.setup.attempts.find((a) => a.request_id === rq);
           if (s.step === 'transport_accept' && s.request_id === rq && prev[rq] && !same(prev[rq].device_answered, d.device_answered)) fail(`fixtures/${f}: step ${i + 1} broker acceptance changed the device answer`);
-          if (d.native_ack !== null && !(att.command.op === 'message.send' && att.command.args.kind === 'direct')) fail(`fixtures/${f}: ${rq} has a native ACK where the message is not direct`);
+          if (d.acked !== null && !(att.command.op === 'message.send' && att.command.args.kind === 'direct')) fail(`fixtures/${f}: ${rq} has a native ACK (acked) where the message is not direct`);
           if (d.rf_transmitted !== null && !RADIO_OPS.includes(att.command.op)) fail(`fixtures/${f}: ${rq} has a radio transmission for ${att.command.op}`);
           if (d.transport_accepted !== null && d.signed === null) fail(`fixtures/${f}: ${rq} was accepted by a transport without being signed`);
           if (prev[rq]) {
-            for (const k of ['signed', 'transport_accepted', 'native_ack']) if (prev[rq][k] !== null && prev[rq][k] !== d[k]) fail(`fixtures/${f}: ${rq} ${k} changed once set`);
+            for (const k of ['signed', 'transport_accepted', 'acked']) if (prev[rq][k] !== null && prev[rq][k] !== d[k]) fail(`fixtures/${f}: ${rq} ${k} changed once set`);
             if (prev[rq].rf_transmitted && (d.rf_transmitted.count < prev[rq].rf_transmitted.count || d.rf_transmitted.first_at !== prev[rq].rf_transmitted.first_at)) fail(`fixtures/${f}: ${rq} rf_transmitted went backwards`);
           }
           prev[rq] = d;
@@ -105,19 +106,36 @@ export function validateDeviceDispatch(dir = 'device-dispatch/v1') {
     } else if (doc.kind === 'origin') {
       doc.runs.forEach((run, ri) => {
         const got = replayOrigins(run.setup, stripped(run.steps));
-        if (run.setup.window_s < 10 || run.setup.window_s > 15) fail(`fixtures/${f}: runs[${ri}] window_s must be 10 to 15`);
-        let windowSet = null;
+        const st = run.setup;
+        if (st.window_s < 10 || st.window_s > 15) fail(`fixtures/${f}: runs[${ri}] window_s must be 10 to 15`);
+        if (st.packet_fixed !== true || st.companion_timeout_s !== 120 || st.lifetime_s !== 600) fail(`fixtures/${f}: runs[${ri}] must be a fixed-bytes packet send with a Companion timeout of 120 s and a lifetime of 600 s`);
+        if (JSON.stringify([...st.order].sort()) !== JSON.stringify(Object.keys(st.gateways).sort())) fail(`fixtures/${f}: runs[${ri}] order is not a seeded order of every gateway`);
+        let prev = null;
         run.steps.forEach((s, i) => {
           coverage.origin.add(s.step);
           const e = s.expect;
-          if (!v['origin-state'](e)) fail(`fixtures/${f}: runs[${ri}] step ${i + 1} ${JSON.stringify(v['origin-state'].errors)}`);
-          if (!same(e, got[i])) fail(`fixtures/${f}: runs[${ri}] step ${i + 1} expect differs from the replay: ${JSON.stringify(got[i])}`);
+          const at = `fixtures/${f}: runs[${ri}] step ${i + 1}`;
+          if (!v['origin-state'](e)) fail(`${at} ${JSON.stringify(v['origin-state'].errors)}`);
+          if (!same(e, got[i])) fail(`${at} expect differs from the replay: ${JSON.stringify(got[i])}`);
           for (const o of e.origins) coverage.results.add(o.result);
-          if (new Set(e.origins.map((o) => o.gateway)).size !== e.origins.length) fail(`fixtures/${f}: runs[${ri}] step ${i + 1} an origin repeats`);
-          if (e.origins.length === 2 && windowSet !== null && s.t < windowSet && e.scheduled.length) fail(`fixtures/${f}: runs[${ri}] step ${i + 1} a second origin before the window ended`);
-          if (e.window_ends_at !== null && !e.origins.some((o) => o.transmitted_at !== null)) fail(`fixtures/${f}: runs[${ri}] step ${i + 1} a window with no transmission`);
-          if (e.closed === 'native_ack' && run.setup.message_kind !== 'direct') fail(`fixtures/${f}: runs[${ri}] step ${i + 1} a native ACK stopped a channel message`);
-          if (e.window_ends_at !== null) windowSet ??= s.t + run.setup.window_s;
+          if (new Set(e.origins.map((o) => o.gateway)).size !== e.origins.length) fail(`${at} an origin repeats`);
+          if (e.scheduled.length > 1) fail(`${at} more than one origin in one round`);
+          // A further origin comes only when the last one ended without transmitting, or when the window or the Companion's 120 s has run out.
+          if (e.scheduled.length && prev && prev.origins.length) {
+            const lastNow = e.origins[prev.origins.length - 1];
+            const failedNow = ['refused', 'expired', 'failed', 'unknown'].includes(lastNow.result);
+            const due = prev.next_round_at !== null && iso(st.start, s.t) >= prev.next_round_at;
+            if (!failedNow && !due) fail(`${at} a further origin was scheduled before its round was due`);
+          }
+          if (prev?.closed !== null && prev?.closed !== undefined && e.scheduled.length) fail(`${at} an origin after the scheduling closed`);
+          if (e.closed === 'native_ack' && st.message_kind !== 'direct') fail(`${at} a native ACK stopped a channel message`);
+          if (e.closed === 'lifetime' && s.t < st.lifetime_s) fail(`${at} closed before the lifetime`);
+          if (e.cancel_sent.length && s.step !== 'native_ack') fail(`${at} a cancel outside a native ACK`);
+          for (const g of e.cancel_sent) {
+            const before = prev?.origins.find((o) => o.gateway === g);
+            if (!before || !['queued', 'duty-held', null].includes(before.result)) fail(`${at} a cancel to ${g}, whose job is no longer cancellable`);
+          }
+          prev = e;
         });
       });
     } else if (doc.kind === 'invalid') {

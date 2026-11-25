@@ -62,8 +62,6 @@
       "created_at": "2026-01-01T00:00:00Z",
       "updated_at": "2026-01-01T00:00:00Z",
       "expires_at": "2026-01-01T00:10:00Z",
-      "claimed_by": null,
-      "lease_until": null,
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [],
@@ -101,8 +99,6 @@
       "created_at": "2026-01-01T00:00:00Z",
       "updated_at": "2026-01-01T00:00:00Z",
       "expires_at": "2026-01-01T00:10:00Z",
-      "claimed_by": "worker_1",
-      "lease_until": "2026-01-01T00:00:30Z",
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [],
@@ -141,8 +137,6 @@
       "created_at": "2026-01-01T00:00:00Z",
       "updated_at": "2026-01-01T00:00:00Z",
       "expires_at": "2026-01-01T00:10:00Z",
-      "claimed_by": "worker_1",
-      "lease_until": "2026-01-01T00:00:30Z",
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [],
@@ -180,8 +174,6 @@
       "created_at": "2026-01-01T00:00:00Z",
       "updated_at": "2026-01-01T00:00:00Z",
       "expires_at": "2026-01-01T00:10:00Z",
-      "claimed_by": null,
-      "lease_until": null,
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [],
@@ -224,8 +216,6 @@
       "created_at": "2026-01-01T00:00:00Z",
       "updated_at": "2026-01-01T00:00:00Z",
       "expires_at": "2026-01-01T00:10:00Z",
-      "claimed_by": null,
-      "lease_until": null,
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [],
@@ -275,8 +265,6 @@
       "created_at": "2026-01-01T00:00:00Z",
       "updated_at": "2026-01-01T00:00:00Z",
       "expires_at": "2026-01-01T00:10:00Z",
-      "claimed_by": null,
-      "lease_until": null,
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [],
@@ -304,8 +292,6 @@
       "created_at": "2026-01-01T00:00:00Z",
       "updated_at": "2026-01-01T00:00:00Z",
       "expires_at": "2026-01-01T00:10:00Z",
-      "claimed_by": null,
-      "lease_until": null,
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [],
@@ -343,8 +329,6 @@
       "created_at": "2026-01-01T00:00:00Z",
       "updated_at": "2026-01-01T00:00:00Z",
       "expires_at": "2026-01-01T00:10:00Z",
-      "claimed_by": null,
-      "lease_until": null,
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [],
@@ -372,8 +356,6 @@
       "created_at": "2026-01-01T00:00:00Z",
       "updated_at": "2026-01-01T00:00:00Z",
       "expires_at": "2026-01-01T00:10:00Z",
-      "claimed_by": "worker_1",
-      "lease_until": "2026-01-01T00:00:30Z",
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [],
@@ -424,8 +406,6 @@
       "created_at": "2026-01-01T00:00:00Z",
       "updated_at": "2026-01-01T00:00:00Z",
       "expires_at": "2026-01-01T00:10:00Z",
-      "claimed_by": null,
-      "lease_until": null,
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [],
@@ -453,8 +433,6 @@
       "created_at": "2026-01-01T00:00:00Z",
       "updated_at": "2026-01-01T00:00:00Z",
       "expires_at": "2026-01-01T00:10:00Z",
-      "claimed_by": "worker_1",
-      "lease_until": "2026-01-01T00:00:30Z",
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [
@@ -470,7 +448,7 @@
          "transport_accepted": null,
          "device_answered": null,
          "rf_transmitted": null,
-         "native_ack": null
+         "acked": null
         }
        }
       ],
@@ -508,8 +486,6 @@
       "created_at": "2026-01-01T00:00:00Z",
       "updated_at": "2026-01-01T00:00:00Z",
       "expires_at": "2026-01-01T00:10:00Z",
-      "claimed_by": null,
-      "lease_until": null,
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [],
@@ -537,8 +513,6 @@
       "created_at": "2026-01-01T00:00:00Z",
       "updated_at": "2026-01-01T00:00:00Z",
       "expires_at": "2026-01-01T00:10:00Z",
-      "claimed_by": "worker_1",
-      "lease_until": "2026-01-01T00:00:30Z",
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [
@@ -554,7 +528,7 @@
          "transport_accepted": null,
          "device_answered": null,
          "rf_transmitted": null,
-         "native_ack": null
+         "acked": null
         }
        }
       ],
@@ -591,8 +565,6 @@
       "created_at": "2026-01-01T00:00:00Z",
       "updated_at": "2026-01-01T00:00:00Z",
       "expires_at": "2026-01-01T00:10:00Z",
-      "claimed_by": null,
-      "lease_until": null,
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [],
@@ -620,8 +592,6 @@
       "created_at": "2026-01-01T00:00:00Z",
       "updated_at": "2026-01-01T00:00:00Z",
       "expires_at": "2026-01-01T00:10:00Z",
-      "claimed_by": "worker_1",
-      "lease_until": "2026-01-01T00:00:30Z",
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [
@@ -637,7 +607,7 @@
          "transport_accepted": null,
          "device_answered": null,
          "rf_transmitted": null,
-         "native_ack": null
+         "acked": null
         }
        }
       ],
@@ -675,8 +645,6 @@
       "created_at": "2026-01-01T00:00:00Z",
       "updated_at": "2026-01-01T00:00:00Z",
       "expires_at": "2026-01-01T00:10:00Z",
-      "claimed_by": null,
-      "lease_until": null,
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [],
@@ -702,10 +670,8 @@
       "idempotency_key": null,
       "state": "dispatched",
       "created_at": "2026-01-01T00:00:00Z",
-      "updated_at": "2026-01-01T00:01:01Z",
+      "updated_at": "2026-01-01T00:00:00Z",
       "expires_at": "2026-01-01T00:10:00Z",
-      "claimed_by": "worker_1",
-      "lease_until": "2026-01-01T00:01:31Z",
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [
@@ -721,7 +687,7 @@
          "transport_accepted": null,
          "device_answered": null,
          "rf_transmitted": null,
-         "native_ack": null
+         "acked": null
         }
        }
       ],
@@ -759,8 +725,6 @@
       "created_at": "2026-01-01T00:00:00Z",
       "updated_at": "2026-01-01T00:00:00Z",
       "expires_at": "2026-01-01T00:10:00Z",
-      "claimed_by": null,
-      "lease_until": null,
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [],
@@ -788,8 +752,6 @@
       "created_at": "2026-01-01T00:00:00Z",
       "updated_at": "2026-01-01T00:01:01Z",
       "expires_at": "2026-01-01T00:10:00Z",
-      "claimed_by": "worker_1",
-      "lease_until": "2026-01-01T00:01:31Z",
       "cancel_requested_at": null,
       "redelivery_halted": true,
       "attempts": [
@@ -805,7 +767,7 @@
          "transport_accepted": null,
          "device_answered": null,
          "rf_transmitted": null,
-         "native_ack": null
+         "acked": null
         }
        }
       ],
@@ -843,8 +805,6 @@
       "created_at": "2026-01-01T00:00:00Z",
       "updated_at": "2026-01-01T00:00:00Z",
       "expires_at": "2026-01-01T00:10:00Z",
-      "claimed_by": null,
-      "lease_until": null,
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [],
@@ -872,8 +832,6 @@
       "created_at": "2026-01-01T00:00:00Z",
       "updated_at": "2026-01-01T00:01:01Z",
       "expires_at": "2026-01-01T00:10:00Z",
-      "claimed_by": "worker_1",
-      "lease_until": "2026-01-01T00:01:31Z",
       "cancel_requested_at": null,
       "redelivery_halted": true,
       "attempts": [
@@ -889,7 +847,7 @@
          "transport_accepted": null,
          "device_answered": null,
          "rf_transmitted": null,
-         "native_ack": null
+         "acked": null
         }
        }
       ],
@@ -927,8 +885,6 @@
       "created_at": "2026-01-01T00:00:00Z",
       "updated_at": "2026-01-01T00:00:00Z",
       "expires_at": "2026-01-01T00:10:00Z",
-      "claimed_by": null,
-      "lease_until": null,
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [],
@@ -956,8 +912,6 @@
       "created_at": "2026-01-01T00:00:00Z",
       "updated_at": "2026-01-01T00:01:01Z",
       "expires_at": "2026-01-01T00:10:00Z",
-      "claimed_by": "worker_1",
-      "lease_until": "2026-01-01T00:01:31Z",
       "cancel_requested_at": null,
       "redelivery_halted": true,
       "attempts": [
@@ -973,7 +927,7 @@
          "transport_accepted": null,
          "device_answered": null,
          "rf_transmitted": null,
-         "native_ack": null
+         "acked": null
         }
        }
       ],
@@ -1010,8 +964,6 @@
       "created_at": "2026-01-01T00:00:00Z",
       "updated_at": "2026-01-01T00:00:00Z",
       "expires_at": "2026-01-01T00:10:00Z",
-      "claimed_by": null,
-      "lease_until": null,
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [],
@@ -1039,8 +991,6 @@
       "created_at": "2026-01-01T00:00:00Z",
       "updated_at": "2026-01-01T01:01:01Z",
       "expires_at": "2026-01-01T00:10:00Z",
-      "claimed_by": null,
-      "lease_until": null,
       "cancel_requested_at": null,
       "redelivery_halted": true,
       "attempts": [
@@ -1056,7 +1006,7 @@
          "transport_accepted": null,
          "device_answered": null,
          "rf_transmitted": null,
-         "native_ack": null
+         "acked": null
         }
        }
       ],
@@ -1106,8 +1056,6 @@
       "created_at": "2026-01-01T00:00:00Z",
       "updated_at": "2026-01-01T00:00:00Z",
       "expires_at": "2026-01-01T00:10:00Z",
-      "claimed_by": null,
-      "lease_until": null,
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [],
@@ -1135,8 +1083,6 @@
       "created_at": "2026-01-01T00:00:00Z",
       "updated_at": "2026-01-01T01:01:01Z",
       "expires_at": "2026-01-01T00:10:00Z",
-      "claimed_by": null,
-      "lease_until": null,
       "cancel_requested_at": null,
       "redelivery_halted": true,
       "attempts": [
@@ -1152,7 +1098,7 @@
          "transport_accepted": null,
          "device_answered": null,
          "rf_transmitted": null,
-         "native_ack": null
+         "acked": null
         }
        }
       ],
@@ -1180,8 +1126,6 @@
       "created_at": "2026-01-01T01:01:01Z",
       "updated_at": "2026-01-01T01:01:01Z",
       "expires_at": "2026-01-01T01:11:01Z",
-      "claimed_by": null,
-      "lease_until": null,
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [],
@@ -1219,8 +1163,6 @@
       "created_at": "2026-01-01T00:00:00Z",
       "updated_at": "2026-01-01T00:00:00Z",
       "expires_at": "2026-01-01T00:10:00Z",
-      "claimed_by": null,
-      "lease_until": null,
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [],
@@ -1248,8 +1190,6 @@
       "created_at": "2026-01-01T00:00:00Z",
       "updated_at": "2026-01-01T01:01:01Z",
       "expires_at": "2026-01-01T00:10:00Z",
-      "claimed_by": null,
-      "lease_until": null,
       "cancel_requested_at": null,
       "redelivery_halted": true,
       "attempts": [
@@ -1265,7 +1205,7 @@
          "transport_accepted": null,
          "device_answered": null,
          "rf_transmitted": null,
-         "native_ack": null
+         "acked": null
         }
        }
       ],
@@ -1293,8 +1233,6 @@
       "created_at": "2026-01-01T01:01:01Z",
       "updated_at": "2026-01-01T01:01:01Z",
       "expires_at": "2026-01-01T01:11:01Z",
-      "claimed_by": "worker_1",
-      "lease_until": "2026-01-01T01:01:31Z",
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [],
@@ -1332,8 +1270,6 @@
       "created_at": "2026-01-01T00:00:00Z",
       "updated_at": "2026-01-01T00:00:00Z",
       "expires_at": "2026-01-01T00:10:00Z",
-      "claimed_by": null,
-      "lease_until": null,
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [],
@@ -1361,8 +1297,6 @@
       "created_at": "2026-01-01T00:00:00Z",
       "updated_at": "2026-01-01T01:01:01Z",
       "expires_at": "2026-01-01T00:10:00Z",
-      "claimed_by": null,
-      "lease_until": null,
       "cancel_requested_at": null,
       "redelivery_halted": true,
       "attempts": [
@@ -1378,7 +1312,7 @@
          "transport_accepted": null,
          "device_answered": null,
          "rf_transmitted": null,
-         "native_ack": null
+         "acked": null
         }
        }
       ],
@@ -1406,8 +1340,6 @@
       "created_at": "2026-01-01T01:01:01Z",
       "updated_at": "2026-01-01T01:01:01Z",
       "expires_at": "2026-01-01T01:11:01Z",
-      "claimed_by": "worker_1",
-      "lease_until": "2026-01-01T01:01:31Z",
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [],
@@ -1445,8 +1377,6 @@
       "created_at": "2026-01-01T00:00:00Z",
       "updated_at": "2026-01-01T00:00:00Z",
       "expires_at": "2026-01-01T00:10:00Z",
-      "claimed_by": null,
-      "lease_until": null,
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [],
@@ -1474,8 +1404,6 @@
       "created_at": "2026-01-01T00:00:00Z",
       "updated_at": "2026-01-01T01:01:01Z",
       "expires_at": "2026-01-01T00:10:00Z",
-      "claimed_by": null,
-      "lease_until": null,
       "cancel_requested_at": null,
       "redelivery_halted": true,
       "attempts": [
@@ -1491,7 +1419,7 @@
          "transport_accepted": null,
          "device_answered": null,
          "rf_transmitted": null,
-         "native_ack": null
+         "acked": null
         }
        }
       ],
@@ -1519,8 +1447,6 @@
       "created_at": "2026-01-01T01:01:01Z",
       "updated_at": "2026-01-01T01:01:01Z",
       "expires_at": "2026-01-01T01:11:01Z",
-      "claimed_by": null,
-      "lease_until": null,
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [],
@@ -1573,8 +1499,6 @@
       "created_at": "2026-01-01T00:00:00Z",
       "updated_at": "2026-01-01T00:00:00Z",
       "expires_at": "2026-01-01T00:10:00Z",
-      "claimed_by": null,
-      "lease_until": null,
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [],
@@ -1602,8 +1526,6 @@
       "created_at": "2026-01-01T00:00:00Z",
       "updated_at": "2026-01-01T01:01:01Z",
       "expires_at": "2026-01-01T00:10:00Z",
-      "claimed_by": null,
-      "lease_until": null,
       "cancel_requested_at": null,
       "redelivery_halted": true,
       "attempts": [
@@ -1619,7 +1541,7 @@
          "transport_accepted": null,
          "device_answered": null,
          "rf_transmitted": null,
-         "native_ack": null
+         "acked": null
         }
        }
       ],
@@ -1647,8 +1569,6 @@
       "created_at": "2026-01-01T01:01:01Z",
       "updated_at": "2026-01-01T01:01:01Z",
       "expires_at": "2026-01-01T01:11:01Z",
-      "claimed_by": null,
-      "lease_until": null,
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [],
@@ -1690,8 +1610,6 @@
       "created_at": "2026-01-01T00:00:00Z",
       "updated_at": "2026-01-01T00:00:00Z",
       "expires_at": "2026-01-01T00:10:00Z",
-      "claimed_by": null,
-      "lease_until": null,
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [],
@@ -1719,8 +1637,6 @@
       "created_at": "2026-01-01T00:00:00Z",
       "updated_at": "2026-01-01T01:01:01Z",
       "expires_at": "2026-01-01T00:10:00Z",
-      "claimed_by": null,
-      "lease_until": null,
       "cancel_requested_at": null,
       "redelivery_halted": true,
       "attempts": [
@@ -1736,7 +1652,7 @@
          "transport_accepted": null,
          "device_answered": null,
          "rf_transmitted": null,
-         "native_ack": null
+         "acked": null
         }
        }
       ],
@@ -1764,8 +1680,6 @@
       "created_at": "2026-01-01T01:01:01Z",
       "updated_at": "2026-01-01T01:01:01Z",
       "expires_at": "2026-01-01T01:11:01Z",
-      "claimed_by": null,
-      "lease_until": null,
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [],
@@ -1815,8 +1729,6 @@
       "created_at": "2026-01-01T00:00:00Z",
       "updated_at": "2026-01-01T00:00:00Z",
       "expires_at": "2026-01-01T00:10:00Z",
-      "claimed_by": null,
-      "lease_until": null,
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [],
@@ -1844,8 +1756,6 @@
       "created_at": "2026-01-01T00:00:00Z",
       "updated_at": "2026-01-01T01:01:01Z",
       "expires_at": "2026-01-01T00:10:00Z",
-      "claimed_by": null,
-      "lease_until": null,
       "cancel_requested_at": null,
       "redelivery_halted": true,
       "attempts": [
@@ -1861,7 +1771,7 @@
          "transport_accepted": null,
          "device_answered": null,
          "rf_transmitted": null,
-         "native_ack": null
+         "acked": null
         }
        }
       ],
@@ -1889,8 +1799,6 @@
       "created_at": "2026-01-01T01:01:01Z",
       "updated_at": "2026-01-01T01:01:01Z",
       "expires_at": "2026-01-01T01:11:01Z",
-      "claimed_by": null,
-      "lease_until": null,
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [],
@@ -1918,8 +1826,6 @@
       "created_at": "2026-01-01T01:01:01Z",
       "updated_at": "2026-01-01T01:01:01Z",
       "expires_at": "2026-01-01T01:11:01Z",
-      "claimed_by": null,
-      "lease_until": null,
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [],
@@ -1957,8 +1863,6 @@
       "created_at": "2026-01-01T00:00:00Z",
       "updated_at": "2026-01-01T00:00:00Z",
       "expires_at": "2026-01-01T00:10:00Z",
-      "claimed_by": null,
-      "lease_until": null,
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [],
@@ -1986,8 +1890,6 @@
       "created_at": "2026-01-01T00:00:00Z",
       "updated_at": "2026-01-01T01:01:01Z",
       "expires_at": "2026-01-01T00:10:00Z",
-      "claimed_by": null,
-      "lease_until": null,
       "cancel_requested_at": null,
       "redelivery_halted": true,
       "attempts": [
@@ -2003,7 +1905,7 @@
          "transport_accepted": null,
          "device_answered": null,
          "rf_transmitted": null,
-         "native_ack": null
+         "acked": null
         }
        }
       ],
@@ -2031,8 +1933,6 @@
       "created_at": "2026-01-01T01:01:01Z",
       "updated_at": "2026-01-01T01:01:01Z",
       "expires_at": "2026-01-01T01:11:01Z",
-      "claimed_by": null,
-      "lease_until": null,
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [],
@@ -2060,8 +1960,6 @@
       "created_at": "2026-01-01T01:01:01Z",
       "updated_at": "2026-01-01T01:01:01Z",
       "expires_at": "2026-01-01T01:11:01Z",
-      "claimed_by": "worker_1",
-      "lease_until": "2026-01-01T01:01:31Z",
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [],
@@ -2112,8 +2010,6 @@
       "created_at": "2026-01-01T00:00:00Z",
       "updated_at": "2026-01-01T00:00:00Z",
       "expires_at": "2026-01-01T00:10:00Z",
-      "claimed_by": null,
-      "lease_until": null,
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [],
@@ -2141,8 +2037,6 @@
       "created_at": "2026-01-01T00:00:00Z",
       "updated_at": "2026-01-01T01:01:01Z",
       "expires_at": "2026-01-01T00:10:00Z",
-      "claimed_by": null,
-      "lease_until": null,
       "cancel_requested_at": null,
       "redelivery_halted": true,
       "attempts": [
@@ -2158,7 +2052,7 @@
          "transport_accepted": null,
          "device_answered": null,
          "rf_transmitted": null,
-         "native_ack": null
+         "acked": null
         }
        }
       ],
@@ -2186,8 +2080,6 @@
       "created_at": "2026-01-01T01:01:01Z",
       "updated_at": "2026-01-01T01:01:01Z",
       "expires_at": "2026-01-01T01:11:01Z",
-      "claimed_by": null,
-      "lease_until": null,
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [],
@@ -2215,8 +2107,6 @@
       "created_at": "2026-01-01T01:01:01Z",
       "updated_at": "2026-01-01T01:01:01Z",
       "expires_at": "2026-01-01T01:11:01Z",
-      "claimed_by": "worker_1",
-      "lease_until": "2026-01-01T01:01:31Z",
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [
@@ -2232,7 +2122,7 @@
          "transport_accepted": null,
          "device_answered": null,
          "rf_transmitted": null,
-         "native_ack": null
+         "acked": null
         }
        }
       ],
@@ -2249,7 +2139,8 @@
     "signed_by": "dev_1",
     "request_id": "rq_2",
     "job_number": 2,
-    "status": "progress"
+    "status": "ok",
+    "state": "progress"
    },
    "expect": {
     "response": {
@@ -2274,8 +2165,6 @@
       "created_at": "2026-01-01T00:00:00Z",
       "updated_at": "2026-01-01T00:00:00Z",
       "expires_at": "2026-01-01T00:10:00Z",
-      "claimed_by": null,
-      "lease_until": null,
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [],
@@ -2303,8 +2192,6 @@
       "created_at": "2026-01-01T00:00:00Z",
       "updated_at": "2026-01-01T01:01:01Z",
       "expires_at": "2026-01-01T00:10:00Z",
-      "claimed_by": null,
-      "lease_until": null,
       "cancel_requested_at": null,
       "redelivery_halted": true,
       "attempts": [
@@ -2320,7 +2207,7 @@
          "transport_accepted": null,
          "device_answered": null,
          "rf_transmitted": null,
-         "native_ack": null
+         "acked": null
         }
        }
       ],
@@ -2348,8 +2235,6 @@
       "created_at": "2026-01-01T01:01:01Z",
       "updated_at": "2026-01-01T01:01:01Z",
       "expires_at": "2026-01-01T01:11:01Z",
-      "claimed_by": null,
-      "lease_until": null,
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [],
@@ -2377,8 +2262,6 @@
       "created_at": "2026-01-01T01:01:01Z",
       "updated_at": "2026-01-01T01:01:01Z",
       "expires_at": "2026-01-01T01:11:01Z",
-      "claimed_by": "worker_1",
-      "lease_until": "2026-01-01T01:01:31Z",
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [
@@ -2393,11 +2276,13 @@
          "signed": "2026-01-01T01:01:01Z",
          "transport_accepted": null,
          "device_answered": {
-          "status": "progress",
+          "status": "ok",
+          "error": null,
+          "state": "progress",
           "at": "2026-01-01T01:01:01Z"
          },
          "rf_transmitted": null,
-         "native_ack": null
+         "acked": null
         }
        }
       ],
@@ -2435,8 +2320,6 @@
       "created_at": "2026-01-01T00:00:00Z",
       "updated_at": "2026-01-01T00:00:00Z",
       "expires_at": "2026-01-01T00:10:00Z",
-      "claimed_by": null,
-      "lease_until": null,
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [],
@@ -2464,8 +2347,6 @@
       "created_at": "2026-01-01T00:00:00Z",
       "updated_at": "2026-01-01T01:01:01Z",
       "expires_at": "2026-01-01T00:10:00Z",
-      "claimed_by": null,
-      "lease_until": null,
       "cancel_requested_at": null,
       "redelivery_halted": true,
       "attempts": [
@@ -2481,7 +2362,7 @@
          "transport_accepted": null,
          "device_answered": null,
          "rf_transmitted": null,
-         "native_ack": null
+         "acked": null
         }
        }
       ],
@@ -2509,8 +2390,6 @@
       "created_at": "2026-01-01T01:01:01Z",
       "updated_at": "2026-01-01T01:01:01Z",
       "expires_at": "2026-01-01T01:11:01Z",
-      "claimed_by": null,
-      "lease_until": null,
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [],
@@ -2538,8 +2417,6 @@
       "created_at": "2026-01-01T01:01:01Z",
       "updated_at": "2026-01-01T01:01:01Z",
       "expires_at": "2026-01-01T01:11:01Z",
-      "claimed_by": "worker_1",
-      "lease_until": "2026-01-01T01:01:31Z",
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [
@@ -2554,11 +2431,13 @@
          "signed": "2026-01-01T01:01:01Z",
          "transport_accepted": null,
          "device_answered": {
-          "status": "progress",
+          "status": "ok",
+          "error": null,
+          "state": "progress",
           "at": "2026-01-01T01:01:01Z"
          },
          "rf_transmitted": null,
-         "native_ack": null
+         "acked": null
         }
        }
       ],
@@ -2575,7 +2454,8 @@
     "signed_by": "dev_1",
     "request_id": "rq_2",
     "job_number": 2,
-    "status": "awaiting-confirm",
+    "status": "ok",
+    "state": "awaiting-confirm",
     "data": "after leaving reach"
    },
    "expect": {
@@ -2601,8 +2481,6 @@
       "created_at": "2026-01-01T00:00:00Z",
       "updated_at": "2026-01-01T00:00:00Z",
       "expires_at": "2026-01-01T00:10:00Z",
-      "claimed_by": null,
-      "lease_until": null,
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [],
@@ -2630,8 +2508,6 @@
       "created_at": "2026-01-01T00:00:00Z",
       "updated_at": "2026-01-01T01:01:01Z",
       "expires_at": "2026-01-01T00:10:00Z",
-      "claimed_by": null,
-      "lease_until": null,
       "cancel_requested_at": null,
       "redelivery_halted": true,
       "attempts": [
@@ -2647,7 +2523,7 @@
          "transport_accepted": null,
          "device_answered": null,
          "rf_transmitted": null,
-         "native_ack": null
+         "acked": null
         }
        }
       ],
@@ -2675,8 +2551,6 @@
       "created_at": "2026-01-01T01:01:01Z",
       "updated_at": "2026-01-01T01:01:01Z",
       "expires_at": "2026-01-01T01:11:01Z",
-      "claimed_by": null,
-      "lease_until": null,
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [],
@@ -2704,8 +2578,6 @@
       "created_at": "2026-01-01T01:01:01Z",
       "updated_at": "2026-01-01T01:01:01Z",
       "expires_at": "2026-01-01T01:11:01Z",
-      "claimed_by": "worker_1",
-      "lease_until": "2026-01-01T01:01:31Z",
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [
@@ -2720,11 +2592,13 @@
          "signed": "2026-01-01T01:01:01Z",
          "transport_accepted": null,
          "device_answered": {
-          "status": "awaiting-confirm",
+          "status": "ok",
+          "error": null,
+          "state": "awaiting-confirm",
           "at": "2026-01-01T01:01:01Z"
          },
          "rf_transmitted": null,
-         "native_ack": null
+         "acked": null
         }
        }
       ],
@@ -2732,7 +2606,8 @@
       "events": [
        {
         "at": "2026-01-01T01:01:01Z",
-        "status": "awaiting-confirm",
+        "status": "ok",
+        "state": "awaiting-confirm",
         "data": null
        }
       ],

@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import Ajv2020 from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
 import { checkReadme } from './validate-common.mjs';
-import { CONTRACT_VERSION } from './device-dispatch-reference.mjs';
+import { CONTRACT_VERSION, CATALOGUE, ANSWER_STATUSES, ERROR_CODES } from './device-dispatch-reference.mjs';
 import { replayLifecycle, STEP_KINDS, STATES, TERMINAL, TRANSITIONS, OUTCOME_REASONS, ERRORS } from './job-lifecycle-reference.mjs';
 
 const SCHEMAS = ['job', 'attempt', 'control', 'outcome', 'error', 'response', 'delivery', 'create-request'];
@@ -55,6 +55,7 @@ export function validateJobLifecycle(dir = 'job-lifecycle/v1') {
   }
 
   const covered = new Set();
+  const answers = { statuses: new Set(), errors: new Set() };
   const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   const num = (id) => Number(id.split('_')[1]);
   for (const [f, doc] of Object.entries(docs)) {
@@ -97,17 +98,31 @@ export function validateJobLifecycle(dir = 'job-lifecycle/v1') {
           });
         }
         if (TERMINAL.includes(j.state) && !OUTCOME_REASONS[j.state].includes(j.outcome?.reason)) fail(`${where} ${j.id} ${j.state} carries the reason ${j.outcome?.reason}`);
-        if (j.state === 'unknown' && j.outcome.device_status !== null) fail(`${where} ${j.id} unknown carries a device status`);
+        if (j.state === 'unknown' && ['abandon_deadline', 'device_lost_job'].includes(j.outcome.reason) && j.outcome.device_status !== null) fail(`${where} ${j.id} ${j.outcome.reason} carries a device status`);
         if (j.state === 'failed' && j.outcome.reason !== 'device_final') fail(`${where} ${j.id} failed without the device's say`);
         if (j.attempts.length > 1 && !j.attempts.slice(0, -1).every((a) => a.nothing_ran)) fail(`${where} ${j.id} has a new attempt after an attempt that may have run`);
+        if (j.attempts.length > 2) fail(`${where} ${j.id} has more than one new attempt`);
+        for (const a of j.attempts) {
+          if (a.nothing_ran && !(a.dispositions.device_answered?.status === 'refused' && a.dispositions.device_answered.error === 'replay' && a.deliveries === 1)) fail(`${where} ${j.id} ${a.id} is marked nothing ran without a replay after one delivery`);
+        }
         const lastAtt = j.attempts[j.attempts.length - 1];
-        if (lastAtt?.nothing_ran && lastAtt.deliveries > 0 && ['replay'].includes(lastAtt.dispositions.device_answered?.status) && lastAtt.deliveries !== 1) fail(`${where} ${j.id} a replay after a re-delivery was treated as nothing ran`);
+        if (j.state === 'unknown' && j.outcome.reason === 'abandon_deadline' && Date.parse(j.outcome.at) - Date.parse(lastAtt.dispositions.signed) < 3600000) fail(`${where} ${j.id} was abandoned less than 3600 s after signing`);
+        for (const c of j.controls) {
+          if ((c.op === 'job.get') !== (c.job_number === null)) fail(`${where} ${j.id} ${c.id}: a job.get has no job number and a job.cancel has one`);
+        }
       }
       // Section 5: every delivery carries the stored bytes of its attempt or control, and counts up by one.
       for (const o of e.out) {
         const j = now.get(o.job);
         const t = j?.attempts.find((a) => a.id === o.target) ?? j?.controls.find((c) => c.id === o.target);
         if (!t) { fail(`${where} delivery to ${o.target}, which the job does not have`); continue; }
+        if (o.op === 'job.cancel') {
+          // Section 8: a cancel goes out only after the device acknowledged the job, in a cancellable state, with no other request to the device open.
+          const att = j.attempts.find((a) => a.id === t.attempt);
+          const d = att.dispositions.device_answered;
+          if (d?.status !== 'ok' || !CATALOGUE.ops.find((x) => x.op === j.command.op).cancellable_states.includes(d.state)) fail(`${where} a job.cancel was sent while the device's latest state was ${d?.state ?? 'none'}`);
+          if (e.jobs.some((x) => x.id !== j.id && x.device === j.device && ['dispatched', 'running'].includes(x.state))) fail(`${where} a job.cancel was sent while another request to the device was open`);
+        }
         const key = `${o.job}/${o.target}`;
         const n = (deliveries.get(key) ?? 0) + 1;
         deliveries.set(key, n);
@@ -117,9 +132,9 @@ export function validateJobLifecycle(dir = 'job-lifecycle/v1') {
         for (const a of j.attempts) if (a.deliveries !== (deliveries.get(`${j.id}/${a.id}`) ?? 0)) fail(`${where} ${j.id} ${a.id} deliveries is not the count of deliveries emitted`);
         for (const c of j.controls) if (c.deliveries !== (deliveries.get(`${j.id}/${c.id}`) ?? 0)) fail(`${where} ${j.id} ${c.id} deliveries is not the count of deliveries emitted`);
       }
-      // Section 4: a job number is unique per device and increases with each signed request.
+      // Section 4: a job number is unique per device and increases with each signed request (a job.get has none).
       const byDevice = {};
-      for (const j of e.jobs) for (const t of [...j.attempts, ...j.controls]) (byDevice[j.device] ??= []).push([num(t.request_id), t.job_number]);
+      for (const j of e.jobs) for (const t of [...j.attempts, ...j.controls.filter((c) => c.job_number !== null)]) (byDevice[j.device] ??= []).push([num(t.request_id), t.job_number]);
       for (const [dev, list] of Object.entries(byDevice)) {
         list.sort((a, b) => a[0] - b[0]);
         if (list.some((x, k) => k > 0 && x[1] <= list[k - 1][1])) fail(`${where} job numbers of ${dev} do not strictly increase with the requests`);
@@ -134,11 +149,15 @@ export function validateJobLifecycle(dir = 'job-lifecycle/v1') {
       if (s.step === 'list' && !same(e.response.job_ids, e.jobs.filter((j) => j.caller === s.caller).map((j) => j.id))) fail(`${where} a list must hold exactly the caller's jobs`);
       if (s.step === 'create' && e.response.outcome === 'error' && now.size !== prevJobs.size) fail(`${where} a refused create made a job`);
       if (s.step === 'create' && e.response.outcome === 'error' && e.out.length) fail(`${where} a refused create sent something`);
+      const r = s.result;
+      if (r) { answers.statuses.add(r.status); if (r.error) answers.errors.add(r.error); }
       prevJobs = now;
     });
     if (failures === b0) ok(`fixtures/${f}`);
   }
   for (const k of STEP_KINDS) if (!covered.has(k)) fail(`no fixture covers the step kind ${k}`);
+  for (const k of ANSWER_STATUSES) if (!answers.statuses.has(k)) fail(`no fixture covers the device status ${k}`);
+  for (const k of Object.keys(ERROR_CODES)) if (!answers.errors.has(k)) fail(`no fixture covers the device error ${k}`);
   ok('every step kind is covered by a fixture');
   return { checked, failures };
 }

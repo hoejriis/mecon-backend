@@ -1,0 +1,1 @@
+{"user_id":"usr_synthetic_0002","session_ref":"ses_synthetic_0002","role":"instance_admin","break_glass":false,"display_name":"Admin (synthetic)","capabilities":{"devices":"available","messaging":"available","send":"available","events":"available","observations":"available"},"expires_at":"2030-01-15T10:00:00Z","csrf_token":"synthetic_csrf_token_admin"}

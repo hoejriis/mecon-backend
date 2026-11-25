@@ -1,0 +1,57 @@
+{
+  "contract": "mecon-session-lookup/1.0.0-draft.1",
+  "synthetic": true,
+  "actions": {
+    "issue-session": {
+      "args": [
+        "user"
+      ],
+      "description": "Give `user` a new live session and capture its cookie value (the credential), by whatever means the core's tests use. The credential is made up and never a real one."
+    },
+    "expire-session": {
+      "args": [
+        "credential"
+      ],
+      "description": "Move the session's expiry into the past, as time passing would."
+    },
+    "revoke-session": {
+      "args": [
+        "credential"
+      ],
+      "description": "Revoke the session on the core, as signing out elsewhere or an administrator would."
+    },
+    "csrf-for": {
+      "args": [
+        "credential"
+      ],
+      "description": "Capture the CSRF token the core derives for that session, by the core's own derivation (a test hook, never a production route)."
+    },
+    "core-degraded": {
+      "args": [],
+      "description": "Make the core unable to answer lookups until `core-recovered`."
+    },
+    "core-recovered": {
+      "args": [],
+      "description": "Undo `core-degraded`."
+    }
+  },
+  "worlds": {
+    "basic": {
+      "description": "One core with a service token, an origin allow-list of one entry, and two users. Every name, origin and id is made up. A session's credential is captured from `issue-session`; no case assumes any credential or id.",
+      "service_token": "a per-deployment secret the runner holds; `valid` sends it, `wrong` sends a different string",
+      "origin_allow_list": [
+        "https://reader.example.test"
+      ],
+      "users": {
+        "alice": {
+          "display_name": "Alice (synthetic)",
+          "role": "user"
+        },
+        "admin": {
+          "display_name": "Admin (synthetic)",
+          "role": "instance_admin"
+        }
+      }
+    }
+  }
+}

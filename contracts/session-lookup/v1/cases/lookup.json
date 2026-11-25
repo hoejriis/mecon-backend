@@ -1,0 +1,771 @@
+{
+ "contract": "mecon-session-lookup/1.0.0-draft.1",
+ "synthetic": true,
+ "group": "lookup",
+ "cases": [
+  {
+   "id": "lookup-01",
+   "title": "A live session gives a Caller with exactly the documented fields and no scope",
+   "world": "basic",
+   "steps": [
+    {
+     "action": "issue-session",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "cookie"
+    },
+    {
+     "request": {
+      "operation": "lookupCaller",
+      "body": {
+       "credential": "${cookie}",
+       "purpose": "read",
+       "origin": null,
+       "sec_fetch_site": "same-origin"
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "Caller",
+      "body": {
+       "/role": "user",
+       "/break_glass": false,
+       "/display_name": "Alice (synthetic)"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "lookup-02",
+   "title": "An instance admin is a Caller with role instance_admin",
+   "world": "basic",
+   "steps": [
+    {
+     "action": "issue-session",
+     "args": {
+      "user": "admin"
+     },
+     "capture": "cookie"
+    },
+    {
+     "request": {
+      "operation": "lookupCaller",
+      "body": {
+       "credential": "${cookie}",
+       "purpose": "read",
+       "origin": null,
+       "sec_fetch_site": "same-origin"
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "Caller",
+      "body": {
+       "/role": "instance_admin",
+       "/display_name": "Admin (synthetic)"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "lookup-03",
+   "title": "An expired session is denied expired",
+   "world": "basic",
+   "steps": [
+    {
+     "action": "issue-session",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "cookie"
+    },
+    {
+     "action": "expire-session",
+     "args": {
+      "credential": "${cookie}"
+     }
+    },
+    {
+     "request": {
+      "operation": "lookupCaller",
+      "body": {
+       "credential": "${cookie}",
+       "purpose": "read",
+       "origin": null,
+       "sec_fetch_site": "same-origin"
+      }
+     },
+     "expect": {
+      "status": 403,
+      "schema": "Denied",
+      "body": {
+       "/reason": "expired",
+       "/retryable": false
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "lookup-04",
+   "title": "A revoked session is denied revoked",
+   "world": "basic",
+   "steps": [
+    {
+     "action": "issue-session",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "cookie"
+    },
+    {
+     "action": "revoke-session",
+     "args": {
+      "credential": "${cookie}"
+     }
+    },
+    {
+     "request": {
+      "operation": "lookupCaller",
+      "body": {
+       "credential": "${cookie}",
+       "purpose": "read",
+       "origin": null,
+       "sec_fetch_site": "same-origin"
+      }
+     },
+     "expect": {
+      "status": 403,
+      "schema": "Denied",
+      "body": {
+       "/reason": "revoked",
+       "/retryable": false
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "lookup-05",
+   "title": "A credential the core never issued is denied unknown",
+   "world": "basic",
+   "steps": [
+    {
+     "request": {
+      "operation": "lookupCaller",
+      "body": {
+       "credential": "synthetic_unknown_credential",
+       "purpose": "read",
+       "origin": null,
+       "sec_fetch_site": "same-origin"
+      }
+     },
+     "expect": {
+      "status": 403,
+      "schema": "Denied",
+      "body": {
+       "/reason": "unknown",
+       "/retryable": false
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "lookup-06",
+   "title": "A write with a valid CSRF token and the allow-listed origin is accepted",
+   "world": "basic",
+   "steps": [
+    {
+     "action": "issue-session",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "cookie"
+    },
+    {
+     "action": "csrf-for",
+     "args": {
+      "credential": "${cookie}"
+     },
+     "capture": "csrf"
+    },
+    {
+     "request": {
+      "operation": "lookupCaller",
+      "body": {
+       "credential": "${cookie}",
+       "purpose": "write",
+       "origin": "https://reader.example.test",
+       "sec_fetch_site": "cross-site",
+       "csrf_token": "${csrf}"
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "Caller"
+     }
+    }
+   ]
+  },
+  {
+   "id": "lookup-07",
+   "title": "A write without a CSRF token is denied csrf_failed",
+   "world": "basic",
+   "steps": [
+    {
+     "action": "issue-session",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "cookie"
+    },
+    {
+     "request": {
+      "operation": "lookupCaller",
+      "body": {
+       "credential": "${cookie}",
+       "purpose": "write",
+       "origin": "https://reader.example.test",
+       "sec_fetch_site": "same-origin"
+      }
+     },
+     "expect": {
+      "status": 403,
+      "schema": "Denied",
+      "body": {
+       "/reason": "csrf_failed",
+       "/retryable": false
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "lookup-08",
+   "title": "A write with a wrong CSRF token is denied csrf_failed",
+   "world": "basic",
+   "steps": [
+    {
+     "action": "issue-session",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "cookie"
+    },
+    {
+     "request": {
+      "operation": "lookupCaller",
+      "body": {
+       "credential": "${cookie}",
+       "purpose": "write",
+       "origin": "https://reader.example.test",
+       "sec_fetch_site": "same-origin",
+       "csrf_token": "synthetic_wrong_csrf_token"
+      }
+     },
+     "expect": {
+      "status": 403,
+      "schema": "Denied",
+      "body": {
+       "/reason": "csrf_failed",
+       "/retryable": false
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "lookup-09",
+   "title": "The allow-listed origin is accepted with and without a trailing slash",
+   "world": "basic",
+   "steps": [
+    {
+     "action": "issue-session",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "cookie"
+    },
+    {
+     "action": "csrf-for",
+     "args": {
+      "credential": "${cookie}"
+     },
+     "capture": "csrf"
+    },
+    {
+     "request": {
+      "operation": "lookupCaller",
+      "body": {
+       "credential": "${cookie}",
+       "purpose": "write",
+       "origin": "https://reader.example.test",
+       "sec_fetch_site": "cross-site",
+       "csrf_token": "${csrf}"
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "Caller"
+     }
+    },
+    {
+     "request": {
+      "operation": "lookupCaller",
+      "body": {
+       "credential": "${cookie}",
+       "purpose": "write",
+       "origin": "https://reader.example.test/",
+       "sec_fetch_site": "cross-site",
+       "csrf_token": "${csrf}"
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "Caller"
+     }
+    }
+   ]
+  },
+  {
+   "id": "lookup-10",
+   "title": "Same-origin is accepted whatever the Origin header says, and when it is absent",
+   "world": "basic",
+   "steps": [
+    {
+     "action": "issue-session",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "cookie"
+    },
+    {
+     "action": "csrf-for",
+     "args": {
+      "credential": "${cookie}"
+     },
+     "capture": "csrf"
+    },
+    {
+     "request": {
+      "operation": "lookupCaller",
+      "body": {
+       "credential": "${cookie}",
+       "purpose": "write",
+       "origin": null,
+       "sec_fetch_site": "same-origin",
+       "csrf_token": "${csrf}"
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "Caller"
+     }
+    },
+    {
+     "request": {
+      "operation": "lookupCaller",
+      "body": {
+       "credential": "${cookie}",
+       "purpose": "write",
+       "origin": "https://other.example.test",
+       "sec_fetch_site": "same-origin",
+       "csrf_token": "${csrf}"
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "Caller"
+     }
+    }
+   ]
+  },
+  {
+   "id": "lookup-11",
+   "title": "A foreign origin that is not same-origin is refused with origin_rejected",
+   "world": "basic",
+   "steps": [
+    {
+     "action": "issue-session",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "cookie"
+    },
+    {
+     "action": "csrf-for",
+     "args": {
+      "credential": "${cookie}"
+     },
+     "capture": "csrf"
+    },
+    {
+     "request": {
+      "operation": "lookupCaller",
+      "body": {
+       "credential": "${cookie}",
+       "purpose": "write",
+       "origin": "https://other.example.test",
+       "sec_fetch_site": "cross-site",
+       "csrf_token": "${csrf}"
+      }
+     },
+     "expect": {
+      "status": 403,
+      "schema": "Denied",
+      "body": {
+       "/reason": "origin_rejected",
+       "/retryable": false
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "lookup-12",
+   "title": "No origin and a cross-site request is refused with origin_rejected",
+   "world": "basic",
+   "steps": [
+    {
+     "action": "issue-session",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "cookie"
+    },
+    {
+     "action": "csrf-for",
+     "args": {
+      "credential": "${cookie}"
+     },
+     "capture": "csrf"
+    },
+    {
+     "request": {
+      "operation": "lookupCaller",
+      "body": {
+       "credential": "${cookie}",
+       "purpose": "write",
+       "origin": null,
+       "sec_fetch_site": "cross-site",
+       "csrf_token": "${csrf}"
+      }
+     },
+     "expect": {
+      "status": 403,
+      "schema": "Denied",
+      "body": {
+       "/reason": "origin_rejected",
+       "/retryable": false
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "lookup-13",
+   "title": "No origin and no Sec-Fetch-Site is refused with origin_rejected",
+   "world": "basic",
+   "steps": [
+    {
+     "action": "issue-session",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "cookie"
+    },
+    {
+     "action": "csrf-for",
+     "args": {
+      "credential": "${cookie}"
+     },
+     "capture": "csrf"
+    },
+    {
+     "request": {
+      "operation": "lookupCaller",
+      "body": {
+       "credential": "${cookie}",
+       "purpose": "write",
+       "origin": null,
+       "sec_fetch_site": null,
+       "csrf_token": "${csrf}"
+      }
+     },
+     "expect": {
+      "status": 403,
+      "schema": "Denied",
+      "body": {
+       "/reason": "origin_rejected",
+       "/retryable": false
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "lookup-14",
+   "title": "A read and a stream lookup are not subject to the origin rule",
+   "world": "basic",
+   "steps": [
+    {
+     "action": "issue-session",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "cookie"
+    },
+    {
+     "request": {
+      "operation": "lookupCaller",
+      "body": {
+       "credential": "${cookie}",
+       "purpose": "read",
+       "origin": "https://other.example.test",
+       "sec_fetch_site": "cross-site"
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "Caller"
+     }
+    },
+    {
+     "request": {
+      "operation": "lookupCaller",
+      "body": {
+       "credential": "${cookie}",
+       "purpose": "stream",
+       "origin": null,
+       "sec_fetch_site": null
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "Caller"
+     }
+    }
+   ]
+  },
+  {
+   "id": "lookup-15",
+   "title": "A missing service token is refused with service_unauthorized",
+   "world": "basic",
+   "steps": [
+    {
+     "action": "issue-session",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "cookie"
+    },
+    {
+     "request": {
+      "operation": "lookupCaller",
+      "body": {
+       "credential": "${cookie}",
+       "purpose": "read",
+       "origin": null,
+       "sec_fetch_site": "same-origin"
+      },
+      "service_token": "absent"
+     },
+     "expect": {
+      "status": 401,
+      "schema": "ServiceError",
+      "body": {
+       "/code": "service_unauthorized"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "lookup-16",
+   "title": "A wrong service token is refused with service_unauthorized",
+   "world": "basic",
+   "steps": [
+    {
+     "action": "issue-session",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "cookie"
+    },
+    {
+     "request": {
+      "operation": "lookupCaller",
+      "body": {
+       "credential": "${cookie}",
+       "purpose": "read",
+       "origin": null,
+       "sec_fetch_site": "same-origin"
+      },
+      "service_token": "wrong"
+     },
+     "expect": {
+      "status": 401,
+      "schema": "ServiceError",
+      "body": {
+       "/code": "service_unauthorized"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "lookup-17",
+   "title": "A core that cannot answer says core_unavailable, retryable",
+   "world": "basic",
+   "steps": [
+    {
+     "action": "issue-session",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "cookie"
+    },
+    {
+     "action": "core-degraded",
+     "args": {}
+    },
+    {
+     "request": {
+      "operation": "lookupCaller",
+      "body": {
+       "credential": "${cookie}",
+       "purpose": "read",
+       "origin": null,
+       "sec_fetch_site": "same-origin"
+      }
+     },
+     "expect": {
+      "status": 503,
+      "schema": "Unavailable",
+      "body": {
+       "/reason": "core_unavailable",
+       "/retryable": true
+      }
+     }
+    },
+    {
+     "action": "core-recovered",
+     "args": {}
+    },
+    {
+     "request": {
+      "operation": "lookupCaller",
+      "body": {
+       "credential": "${cookie}",
+       "purpose": "read",
+       "origin": null,
+       "sec_fetch_site": "same-origin"
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "Caller"
+     }
+    }
+   ]
+  },
+  {
+   "id": "lookup-18",
+   "title": "A revocations subscription starts with subscribed",
+   "world": "basic",
+   "steps": [
+    {
+     "request": {
+      "operation": "streamRevocations"
+     },
+     "expect": {
+      "status": 200,
+      "schema": "RevocationItem",
+      "stream": {
+       "match": [
+        {
+         "at": "",
+         "where": {
+          "/type": "subscribed"
+         },
+         "at_least": 1
+        }
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "lookup-19",
+   "title": "A second subscription starts with subscribed again",
+   "world": "basic",
+   "steps": [
+    {
+     "request": {
+      "operation": "streamRevocations"
+     },
+     "expect": {
+      "status": 200,
+      "schema": "RevocationItem",
+      "stream": {
+       "match": [
+        {
+         "at": "",
+         "where": {
+          "/type": "subscribed"
+         },
+         "at_least": 1
+        }
+       ]
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "streamRevocations"
+     },
+     "expect": {
+      "status": 200,
+      "schema": "RevocationItem",
+      "stream": {
+       "match": [
+        {
+         "at": "",
+         "where": {
+          "/type": "subscribed"
+         },
+         "at_least": 1
+        }
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "lookup-20",
+   "title": "The revocations feed needs the service token",
+   "world": "basic",
+   "steps": [
+    {
+     "request": {
+      "operation": "streamRevocations",
+      "service_token": "absent"
+     },
+     "expect": {
+      "status": 401,
+      "schema": "ServiceError",
+      "body": {
+       "/code": "service_unauthorized"
+      }
+     }
+    }
+   ]
+  }
+ ]
+}

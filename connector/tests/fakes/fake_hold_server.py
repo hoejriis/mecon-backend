@@ -10,6 +10,7 @@ It records everything it receives, so tests can assert on the exact text the age
 from __future__ import annotations
 
 import json
+import socket
 import threading
 import time
 from http import HTTPStatus
@@ -38,6 +39,13 @@ class Conn:
     def close(self, code: int = 1000, reason: str = "") -> None:
         self.ws.close(code, reason)
 
+    def drop(self) -> None:
+        """Ends the TCP connection with no close frame: the agent sees 1006, as on a network loss."""
+        try:
+            self.ws.socket.shutdown(socket.SHUT_RDWR)
+        except OSError:
+            pass
+
     def parsed(self) -> list[dict]:
         return [json.loads(f) for f in self.frames]
 
@@ -52,6 +60,11 @@ class FakeHoldServer:
         self.enforce_single = enforce_single
         self.http_status: int | None = None  # when set, every handshake is answered with this status
         self.on_connect = None  # callable(Conn), run in the handler thread once the socket is accepted
+        # A Backend that has not yet noticed the agent's previous socket close: the next refuse_next accepted
+        # sockets get `refused` with refuse_reason, then close 1008 (each one counted in refusals).
+        self.refuse_next = 0
+        self.refuse_reason = "another agent holds this device"
+        self.refusals = 0
         self.conns: list[Conn] = []
         self.handshakes = 0  # connection attempts, including rejected ones
         self.handshake_times: list[float] = []
@@ -128,8 +141,14 @@ class FakeHoldServer:
             if not self._authorized(ws.request):
                 ws.close(1008, "")
                 return
-            if held:
-                conn.send({"type": "refused", "reason": "another agent holds this device"})
+            with self._lock:
+                stale = self.refuse_next > 0
+                if stale:
+                    self.refuse_next -= 1
+            if held or stale:
+                with self._lock:
+                    self.refusals += 1
+                conn.send({"type": "refused", "reason": "another agent holds this device" if held else self.refuse_reason})
                 ws.close(1008, "")
                 return
             conn.accepted = True

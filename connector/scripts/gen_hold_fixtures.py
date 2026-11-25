@@ -15,7 +15,7 @@ import sys
 import zipfile
 
 OUT = pathlib.Path(__file__).resolve().parents[2] / "contracts" / "connector-hold" / "v1" / "fixtures"
-CONTRACT = "mecon-connector-hold/1.0.0-draft.2"
+CONTRACT = "mecon-connector-hold/1.0.0-draft.3"
 
 
 def j(o):
@@ -45,12 +45,26 @@ HANDSHAKE_HDR = {"step": "handshake", "presentation": "header", "offered": ["Aut
 HELLO = {"epoch": 1, "node_public_key_hex": "<pubkey>"}
 
 
-def prelude():
+def prelude(ref=1):
     return [
         {"step": "send", "frame": {"type": "iface_relay"}},
-        {"step": "send", "frame": {"type": "iface_hello", "ref": 1, "hello": HELLO}},
-        {"step": "recv", "frame": {"type": "iface_ack", "of": "iface_hello", "ref": 1, "outcome": "recorded"}},
+        {"step": "send", "frame": {"type": "iface_hello", "ref": ref, "hello": HELLO}},
+        {"step": "recv", "frame": {"type": "iface_ack", "of": "iface_hello", "ref": ref, "outcome": "recorded"}},
     ]
+
+
+# ---- fixtures G and H: a refusal right after the agent's own close (section 2.5). t is seconds from the start.
+
+STALE = "another agent holds this device"
+
+
+def at(step, t):
+    return {**step, "t": t}
+
+
+def refused_at(t):
+    return [at(HANDSHAKE_HDR, t), {"step": "recv", "frame": {"type": "refused", "reason": STALE}},
+            {"step": "close", "by": "backend", "code": 1008, "t": t}]
 
 
 # ---- fixture F: bootloader serial DFU (section 12). Its own HCI/SLIP encoder, independent of the Connector's.
@@ -223,6 +237,22 @@ def build():
          {"step": "send", "frame": relay_dfu},
          {"step": "send", "frame": {"type": "iface_hello", "ref": 3, "hello": hello2}},
          {"step": "recv", "frame": {"type": "iface_ack", "of": "iface_hello", "ref": 3, "outcome": "recorded"}}])
+    own_close = {"step": "close", "by": "network", "code": 1006, "t": 60}
+    out["G-refused-after-own-close-retried.json"] = fixture(
+        "G", "A refusal right after the agent's own close is retried",
+        "The hold is up. At 60 s the network ends it (no close frame: 1006). The agent reconnects on the normal backoff, 1 s "
+        "later, and the Backend, which has not yet noticed that the old socket is gone, refuses it: another agent holds this "
+        "device. The refusal came within 30 s of the agent's own close, so the agent retries on the backoff, 1 s later, and "
+        "is let in; it declares and says hello again on the new socket. Frames the agent may have sent on a refused socket "
+        "before the refusal reached it are not shown, so the ref values after it are examples of a ref that grows.",
+        "companion",
+        [at(HANDSHAKE_HDR, 0), *prelude(1), own_close, *refused_at(61), at(HANDSHAKE_HDR, 62), *prelude(2)])
+    out["H-refused-after-own-close-three-retries-then-stop.json"] = fixture(
+        "H", "Three retries after the agent's own close, then the fourth refusal stops it",
+        "As G, but the Backend keeps refusing. The agent retries 1, 2 and 4 s after each refusal (all within 30 s of its own "
+        "close at 60 s); the fourth refusal, at 68 s, is a stop: the agent surfaces the reason and does not reconnect.",
+        "companion",
+        [at(HANDSHAKE_HDR, 0), *prelude(1), own_close, *refused_at(61), *refused_at(62), *refused_at(64), *refused_at(68)])
     out["invalid-frames.json"] = {
         "contract": CONTRACT, "synthetic": True, "id": "invalid", "title": "Frames the schemas must reject",
         "description": "Each frame must fail the schema of its direction and type.",

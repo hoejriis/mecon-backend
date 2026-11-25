@@ -477,6 +477,27 @@ def test_conf_25_a_new_socket_during_the_dfu_gets_iface_relay_then_the_current_s
     assert len(c3.frames) == 2  # once
 
 
+def test_conf_25_27_a_socket_kept_by_the_dfu_is_the_agents_own_and_a_refusal_after_its_drop_is_retried(mk):
+    r = mk()
+    conn = r.up()
+    armed(r, conn)
+    reset_into_bootloader(r)
+    r.wait(lambda: states(conn)[-1:] == [("waiting-bootloader", None, None)])
+    r.server.refuse_next = 1  # the Backend still sees the kept socket
+    conn.drop()
+    r.wait(lambda: r.bridge._state == "idle")
+    r.jump(1.1)
+    r.wait(lambda: r.m("hold_refused_retries_total") == 1)
+    assert r.bridge.hold_stop is None and r.bridge._dfu_phase == "waiting-bootloader"
+    r.jump(1.1)
+    r.wait(lambda: r.bridge._state == "connected")
+    c2 = r.server.current()
+    r.wait(lambda: len(c2.frames) >= 2)
+    assert c2.parsed() == [{"type": "iface_relay", "serial_dfu": True},
+                           {"type": "dfu_state", "job": "fw-1", "state": "waiting-bootloader"}]
+    assert r.bridge._dfu_phase == "waiting-bootloader" and r.server.refusals == 1
+
+
 # ---- the failed cap (26) --------------------------------------------------------------------------------
 
 

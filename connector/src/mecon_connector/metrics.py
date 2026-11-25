@@ -85,6 +85,7 @@ HOLD_REGISTRY: dict[str, tuple[str, str, tuple[str, ...]]] = {
     "hold_stopped": ("gauge", "1 once the hold was stopped for good (refused, or a rejected token)", ()),
     "hold_connect_attempts_total": ("counter", "Hold connection attempts by outcome", ("result",)),
     "hold_disconnects_total": ("counter", "Open holds that ended", ()),
+    "hold_refused_retries_total": ("counter", "Refusals retried because they came within 30 s of the Connector's own close (contract section 2.5)", ()),
     "hold_relay_declared_total": ("counter", "iface_relay frames sent (one per connection)", ()),
     "hold_uploads_total": ("counter", "Frames uploaded on the hold, by kind", ("kind",)),
     "hold_acks_total": ("counter", "iface_ack frames by outcome class", ("outcome",)),

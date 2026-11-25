@@ -1,0 +1,139 @@
+{
+  "contract": "mecon-connector-hold/1.0.0-draft.3",
+  "synthetic": true,
+  "id": "H",
+  "title": "Three retries after the agent's own close, then the fourth refusal stops it",
+  "description": "As G, but the Backend keeps refusing. The agent retries 1, 2 and 4 s after each refusal (all within 30 s of its own close at 60 s); the fourth refusal, at 68 s, is a stop: the agent surfaces the reason and does not reconnect.",
+  "link": "companion",
+  "steps": [
+    {
+      "step": "handshake",
+      "presentation": "header",
+      "offered": [
+        "Authorization: Bearer <token>"
+      ],
+      "selected": null,
+      "t": 0
+    },
+    {
+      "step": "send",
+      "frame": {
+        "type": "iface_relay"
+      }
+    },
+    {
+      "step": "send",
+      "frame": {
+        "type": "iface_hello",
+        "ref": 1,
+        "hello": {
+          "epoch": 1,
+          "node_public_key_hex": "<pubkey>"
+        }
+      }
+    },
+    {
+      "step": "recv",
+      "frame": {
+        "type": "iface_ack",
+        "of": "iface_hello",
+        "ref": 1,
+        "outcome": "recorded"
+      }
+    },
+    {
+      "step": "close",
+      "by": "network",
+      "code": 1006,
+      "t": 60
+    },
+    {
+      "step": "handshake",
+      "presentation": "header",
+      "offered": [
+        "Authorization: Bearer <token>"
+      ],
+      "selected": null,
+      "t": 61
+    },
+    {
+      "step": "recv",
+      "frame": {
+        "type": "refused",
+        "reason": "another agent holds this device"
+      }
+    },
+    {
+      "step": "close",
+      "by": "backend",
+      "code": 1008,
+      "t": 61
+    },
+    {
+      "step": "handshake",
+      "presentation": "header",
+      "offered": [
+        "Authorization: Bearer <token>"
+      ],
+      "selected": null,
+      "t": 62
+    },
+    {
+      "step": "recv",
+      "frame": {
+        "type": "refused",
+        "reason": "another agent holds this device"
+      }
+    },
+    {
+      "step": "close",
+      "by": "backend",
+      "code": 1008,
+      "t": 62
+    },
+    {
+      "step": "handshake",
+      "presentation": "header",
+      "offered": [
+        "Authorization: Bearer <token>"
+      ],
+      "selected": null,
+      "t": 64
+    },
+    {
+      "step": "recv",
+      "frame": {
+        "type": "refused",
+        "reason": "another agent holds this device"
+      }
+    },
+    {
+      "step": "close",
+      "by": "backend",
+      "code": 1008,
+      "t": 64
+    },
+    {
+      "step": "handshake",
+      "presentation": "header",
+      "offered": [
+        "Authorization: Bearer <token>"
+      ],
+      "selected": null,
+      "t": 68
+    },
+    {
+      "step": "recv",
+      "frame": {
+        "type": "refused",
+        "reason": "another agent holds this device"
+      }
+    },
+    {
+      "step": "close",
+      "by": "backend",
+      "code": 1008,
+      "t": 68
+    }
+  ]
+}

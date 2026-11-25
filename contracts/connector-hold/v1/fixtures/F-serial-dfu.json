@@ -1,5 +1,5 @@
 {
-  "contract": "mecon-connector-hold/1.0.0-draft.2",
+  "contract": "mecon-connector-hold/1.0.0-draft.3",
   "synthetic": true,
   "id": "F",
   "title": "Bootloader serial DFU on a held device",

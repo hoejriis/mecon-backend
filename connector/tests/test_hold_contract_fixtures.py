@@ -182,6 +182,60 @@ def test_scenario_f_serial_dfu_replays(tmp_path):
         r.close()
 
 
+@pytest.mark.parametrize("fid", ["G", "H"])
+def test_scenario_refusal_after_own_close_replays(mk, fid):
+    """Fixtures G and H (section 2.5) through the real bridge: the network ends the hold (the fake Backend drops
+    the TCP connection, so the agent sees 1006), the Backend refuses as many reconnects as the scenario shows, and
+    the agent waits exactly the scenario's delays between them; G ends on a new socket with the scenario's frames,
+    H in a stop with no further reconnect."""
+    (path,) = (V1 / "fixtures").glob(f"{fid}-*.json")
+    doc = json.loads(path.read_text())
+    steps = doc["steps"]
+    own = next(i for i, s in enumerate(steps) if s["step"] == "close" and s["code"] != 1008)
+    assert steps[own]["by"] == "network" and steps[own]["code"] == 1006
+    refusals = [s["frame"]["reason"] for s in steps if s["step"] == "recv" and s["frame"]["type"] == "refused"]
+    times = [steps[own]["t"]] + [s["t"] for s in steps[own:] if s["step"] == "handshake"]
+    delays = [round(b - a, 3) for a, b in zip(times, [*times[1:]])]
+    after = [s["frame"] for s in steps[max(i for i, s in enumerate(steps) if s["step"] == "handshake"):] if s["step"] == "send"]
+    before = [s["frame"] for s in steps[:own] if s["step"] == "send"]
+
+    r = mk()
+    r.dev.hello_result = next(f["hello"] for f in before if f["type"] == "iface_hello")
+    conn = r.up()
+    r.wait(lambda: len(conn.frames) >= len(before))
+    assert conn.parsed()[: len(before)] == before
+    r.server.refuse_next = len(refusals)
+    r.server.refuse_reason = refusals[0]
+    conn.drop()
+    r.wait(lambda: r.bridge._state == "idle")
+    assert '"code":1006' in r.logbuf.getvalue()
+    seen = []
+    for k, d in enumerate(delays):
+        seen.append(round(r.bridge._retry_at - r.clock()))
+        r.clock.advance(r.bridge._retry_at - r.clock() + 0.001)
+        if k < len(refusals):
+            r.wait(lambda k=k: r.server.refusals == k + 1 and (r.bridge._state == "idle" or r.bridge.hold_stop is not None))
+    assert seen == [round(d) for d in delays]
+    if fid == "G":
+        c2 = r.up()
+        r.wait(lambda: len(c2.frames) >= len(after))
+        r.settle(30)
+        got = c2.parsed()
+        first_refs = [f["ref"] for f in conn.parsed() if "ref" in f]
+        # ref is any value that grows for the life of the process: a refused socket may already have used some
+        assert all(f["ref"] > max(first_refs) for f in got if "ref" in f)
+        strip = lambda fs: [{k: v for k, v in f.items() if k != "ref"} for f in fs]  # noqa: E731
+        assert strip(got) == strip(after) and r.bridge.hold_stop is None
+        assert r.m("hold_refused_retries_total") == len(refusals)
+    else:
+        r.wait(lambda: r.bridge.hold_stop is not None)
+        assert r.bridge.hold_stop == ("refused", refusals[-1]) and r.server.refusals == len(refusals)
+        assert r.m("hold_refused_retries_total") == len(refusals) - 1
+        n = r.server.handshakes
+        r.jump(120)
+        assert r.server.handshakes == n  # no auto-reconnect after the stop
+
+
 def test_generator_reproduces_the_fixture_files():
     root = pathlib.Path(__file__).resolve().parents[2]
     gen = root / "connector" / "scripts" / "gen_hold_fixtures.py"
@@ -192,12 +246,12 @@ def test_generator_reproduces_the_fixture_files():
 
 
 def test_every_checklist_item_has_a_test():
-    """contracts/connector-hold/v1/README.md section 9 numbers 26 items; tests/test_hold.py and tests/test_dfu.py
+    """contracts/connector-hold/v1/README.md section 9 numbers 27 items; tests/test_hold.py and tests/test_dfu.py
     name their tests test_conf_NN for each, so a new item cannot ship without one."""
     text = (V1 / "README.md").read_text()
     items = re.findall(r"(?m)^(\d+)\. ", text.split("## 9. Conformance checklist")[1].split("## 10.")[0])
-    assert items == [str(n) for n in range(1, 26 + 1)]
+    assert items == [str(n) for n in range(1, 27 + 1)]
     src = "".join((pathlib.Path(__file__).parent / f).read_text() for f in ("test_hold.py", "test_dfu.py"))
     covered = set(re.findall(r"def test_conf_(\d\d)", src))
     covered |= {n for grp in re.findall(r"def test_conf_((?:\d\d_)+)", src) for n in re.findall(r"\d\d", grp)}
-    assert {f"{n:02d}" for n in range(1, 26 + 1)} <= covered
+    assert {f"{n:02d}" for n in range(1, 27 + 1)} <= covered

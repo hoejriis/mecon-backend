@@ -1,0 +1,239 @@
+{
+  "catalogue_version": "1.0.0-draft.1",
+  "description": "The typed commands a Backend may sign for a device. A synthetic subset: a real catalogue adds ops by pull request. Internal ops are signed by the Backend itself and cannot be requested by a caller. cancellable_states lists the device job states in which a job.cancel still has something to cancel. status_read names the internal read the Backend uses to ask the device about a job of that op.",
+  "ops": [
+    {
+      "op": "contact.put",
+      "roles": [
+        "companion"
+      ],
+      "changes_state": true,
+      "internal": false,
+      "args": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "contact_ref",
+          "name"
+        ],
+        "properties": {
+          "contact_ref": {
+            "type": "string",
+            "pattern": "^[a-z0-9_-]{1,32}$"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32
+          }
+        }
+      },
+      "cancellable_states": [
+        "accepted",
+        "awaiting-confirm"
+      ],
+      "status_read": "job.get"
+    },
+    {
+      "op": "contact.remove",
+      "roles": [
+        "companion"
+      ],
+      "changes_state": true,
+      "internal": false,
+      "args": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "contact_ref"
+        ],
+        "properties": {
+          "contact_ref": {
+            "type": "string",
+            "pattern": "^[a-z0-9_-]{1,32}$"
+          }
+        }
+      },
+      "cancellable_states": [
+        "accepted",
+        "awaiting-confirm"
+      ],
+      "status_read": "job.get"
+    },
+    {
+      "op": "message.send",
+      "roles": [
+        "companion"
+      ],
+      "changes_state": true,
+      "internal": false,
+      "args": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "target",
+          "text"
+        ],
+        "properties": {
+          "kind": {
+            "enum": [
+              "direct",
+              "channel"
+            ]
+          },
+          "target": {
+            "type": "string",
+            "pattern": "^[a-z0-9_-]{1,32}$"
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          }
+        }
+      },
+      "cancellable_states": [],
+      "status_read": "message.get"
+    },
+    {
+      "op": "packet.transmit",
+      "roles": [
+        "companion",
+        "repeater"
+      ],
+      "changes_state": true,
+      "internal": false,
+      "args": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "packet_hex"
+        ],
+        "properties": {
+          "packet_hex": {
+            "type": "string",
+            "pattern": "^([0-9a-f]{2}){2,184}$"
+          }
+        }
+      },
+      "cancellable_states": [
+        "accepted"
+      ],
+      "status_read": "job.get"
+    },
+    {
+      "op": "config.apply",
+      "roles": [
+        "companion",
+        "repeater"
+      ],
+      "changes_state": true,
+      "internal": false,
+      "args": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "settings"
+        ],
+        "properties": {
+          "settings": {
+            "type": "object",
+            "minProperties": 1,
+            "maxProperties": 16,
+            "propertyNames": {
+              "pattern": "^[a-z][a-z0-9_]{0,31}$"
+            },
+            "additionalProperties": {
+              "type": [
+                "string",
+                "number",
+                "boolean"
+              ]
+            }
+          }
+        }
+      },
+      "cancellable_states": [
+        "accepted",
+        "awaiting-confirm"
+      ],
+      "status_read": "job.get"
+    },
+    {
+      "op": "job.cancel",
+      "roles": [
+        "companion",
+        "repeater"
+      ],
+      "changes_state": true,
+      "internal": true,
+      "args": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "target_job_number"
+        ],
+        "properties": {
+          "target_job_number": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4294967295
+          }
+        }
+      },
+      "cancellable_states": [],
+      "status_read": null
+    },
+    {
+      "op": "job.get",
+      "roles": [
+        "companion",
+        "repeater"
+      ],
+      "changes_state": false,
+      "internal": true,
+      "args": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "target_job_number"
+        ],
+        "properties": {
+          "target_job_number": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4294967295
+          }
+        }
+      },
+      "cancellable_states": [],
+      "description": "A plain read of a job on the device. It carries no job number of its own and no signature-bound job id, and takes no place in the job number sequence; target_job_number names the job it reads.",
+      "status_read": null
+    },
+    {
+      "op": "message.get",
+      "roles": [
+        "companion"
+      ],
+      "changes_state": false,
+      "internal": true,
+      "cancellable_states": [],
+      "status_read": null,
+      "description": "A plain read of a message on the device. A message is not a job: the device keeps it in a separate table of 8 slots held in RAM, and a job.get for it always answers unknown-job. It carries no job number and takes no place in the job number sequence. It answers the entry's state with the device epoch, or, when the entry is not found, the state unknown with the current epoch: an evicted entry, one lost to a reboot and one never sent look the same.",
+      "args": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "message"
+        ],
+        "properties": {
+          "message": {
+            "type": "string",
+            "pattern": "^msg_[1-9][0-9]*$"
+          }
+        }
+      }
+    }
+  ]
+}

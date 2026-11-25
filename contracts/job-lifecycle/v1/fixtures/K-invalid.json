@@ -1,0 +1,330 @@
+{
+ "fixture": "K",
+ "title": "Documents the schemas reject",
+ "kind": "invalid",
+ "contract_version": "1.0.0-draft.1",
+ "cases": [
+  {
+   "schema": "error",
+   "note": "an error body that echoes the job id it was asked for",
+   "value": {
+    "code": "not_found",
+    "message": "No job job_7."
+   }
+  },
+  {
+   "schema": "error",
+   "note": "a code outside the three",
+   "value": {
+    "code": "forbidden",
+    "message": "Not found."
+   }
+  },
+  {
+   "schema": "error",
+   "note": "a field beyond code and message",
+   "value": {
+    "code": "invalid",
+    "message": "The request is not valid.",
+    "field": "command.args"
+   }
+  },
+  {
+   "schema": "response",
+   "note": "an error with no error body",
+   "value": {
+    "outcome": "error"
+   }
+  },
+  {
+   "schema": "response",
+   "note": "created with no job_id",
+   "value": {
+    "outcome": "created"
+   }
+  },
+  {
+   "schema": "response",
+   "note": "a body on a non-error outcome that carries an error",
+   "value": {
+    "outcome": "created",
+    "job_id": "job_1",
+    "error": {
+     "code": "invalid",
+     "message": "The request is not valid."
+    }
+   }
+  },
+  {
+   "schema": "create-request",
+   "note": "a caller named in the body",
+   "value": {
+    "device": "dev_1",
+    "command": {
+     "op": "contact.remove",
+     "args": {
+      "contact_ref": "ctc_1"
+     }
+    },
+    "caller": "cal_2"
+   }
+  },
+  {
+   "schema": "create-request",
+   "note": "a time to live of zero",
+   "value": {
+    "device": "dev_1",
+    "command": {
+     "op": "contact.remove",
+     "args": {
+      "contact_ref": "ctc_1"
+     }
+    },
+    "ttl_s": 0
+   }
+  },
+  {
+   "schema": "attempt",
+   "note": "job number zero",
+   "value": {
+    "id": "att_1",
+    "request_id": "rq_1",
+    "job_number": 0,
+    "bytes": "signed:rq_1",
+    "deliveries": 0,
+    "nothing_ran": false,
+    "dispositions": {
+     "signed": null,
+     "transport_accepted": null,
+     "device_answered": null,
+     "rf_transmitted": null,
+     "acked": null
+    }
+   }
+  },
+  {
+   "schema": "attempt",
+   "note": "a negative delivery count",
+   "value": {
+    "id": "att_1",
+    "request_id": "rq_1",
+    "job_number": 1,
+    "bytes": "signed:rq_1",
+    "deliveries": -1,
+    "nothing_ran": false,
+    "dispositions": {
+     "signed": null,
+     "transport_accepted": null,
+     "device_answered": null,
+     "rf_transmitted": null,
+     "acked": null
+    }
+   }
+  },
+  {
+   "schema": "outcome",
+   "note": "a reason not in the list",
+   "value": {
+    "reason": "gave_up",
+    "device_status": null,
+    "at": "2026-01-01T00:00:00Z"
+   }
+  },
+  {
+   "schema": "delivery",
+   "note": "delivery number zero",
+   "value": {
+    "job": "job_1",
+    "target": "att_1",
+    "kind": "attempt",
+    "op": "contact.put",
+    "job_number": 1,
+    "request_id": "rq_1",
+    "bytes": "signed:rq_1",
+    "delivery": 0
+   }
+  },
+  {
+   "schema": "control",
+   "note": "a control with an op outside job.get and job.cancel",
+   "value": {
+    "id": "ctl_1",
+    "op": "contact.put",
+    "request_id": "rq_2",
+    "job_number": 2,
+    "attempt": "att_1",
+    "bytes": "signed:rq_2",
+    "deliveries": 1,
+    "transport_accepted": null,
+    "device_answered": null
+   }
+  },
+  {
+   "schema": "job",
+   "note": "a terminal state with no outcome",
+   "value": {
+    "id": "job_1",
+    "caller": "cal_1",
+    "device": "dev_1",
+    "command": {
+     "op": "contact.remove",
+     "args": {
+      "contact_ref": "ctc_1"
+     }
+    },
+    "idempotency_key": null,
+    "state": "succeeded",
+    "created_at": "2026-01-01T00:00:00Z",
+    "updated_at": "2026-01-01T00:00:00Z",
+    "expires_at": "2026-01-01T00:10:00Z",
+    "cancel_requested_at": null,
+    "redelivery_halted": false,
+    "attempts": [],
+    "controls": [],
+    "events": [],
+    "outcome": null
+   }
+  },
+  {
+   "schema": "job",
+   "note": "a non-terminal state with an outcome",
+   "value": {
+    "id": "job_1",
+    "caller": "cal_1",
+    "device": "dev_1",
+    "command": {
+     "op": "contact.remove",
+     "args": {
+      "contact_ref": "ctc_1"
+     }
+    },
+    "idempotency_key": null,
+    "state": "running",
+    "created_at": "2026-01-01T00:00:00Z",
+    "updated_at": "2026-01-01T00:00:00Z",
+    "expires_at": "2026-01-01T00:10:00Z",
+    "cancel_requested_at": null,
+    "redelivery_halted": false,
+    "attempts": [],
+    "controls": [],
+    "events": [],
+    "outcome": {
+     "reason": "device_final",
+     "device_status": "ok",
+     "at": "2026-01-01T00:00:00Z"
+    }
+   }
+  },
+  {
+   "schema": "job",
+   "note": "a state not in the list",
+   "value": {
+    "id": "job_1",
+    "caller": "cal_1",
+    "device": "dev_1",
+    "command": {
+     "op": "contact.remove",
+     "args": {
+      "contact_ref": "ctc_1"
+     }
+    },
+    "idempotency_key": null,
+    "state": "failed_noanswer",
+    "created_at": "2026-01-01T00:00:00Z",
+    "updated_at": "2026-01-01T00:00:00Z",
+    "expires_at": "2026-01-01T00:10:00Z",
+    "cancel_requested_at": null,
+    "redelivery_halted": false,
+    "attempts": [],
+    "controls": [],
+    "events": [],
+    "outcome": null
+   }
+  },
+  {
+   "schema": "job",
+   "note": "a job view that exposes the internal lease",
+   "value": {
+    "id": "job_1",
+    "caller": "cal_1",
+    "device": "dev_1",
+    "command": {
+     "op": "contact.remove",
+     "args": {
+      "contact_ref": "ctc_1"
+     }
+    },
+    "idempotency_key": null,
+    "state": "accepted",
+    "created_at": "2026-01-01T00:00:00Z",
+    "updated_at": "2026-01-01T00:00:00Z",
+    "expires_at": "2026-01-01T00:10:00Z",
+    "cancel_requested_at": null,
+    "redelivery_halted": false,
+    "attempts": [],
+    "controls": [],
+    "events": [],
+    "outcome": null,
+    "claimed_by": "worker_1",
+    "lease_until": "2026-01-01T00:00:30Z"
+   }
+  },
+  {
+   "schema": "control",
+   "note": "a job.get with a job number of its own",
+   "value": {
+    "id": "ctl_1",
+    "op": "job.get",
+    "request_id": "rq_2",
+    "job_number": 2,
+    "target_job_number": 1,
+    "attempt": "att_1",
+    "bytes": "signed:rq_2",
+    "deliveries": 1,
+    "transport_accepted": null,
+    "device_answered": null
+   }
+  },
+  {
+   "schema": "control",
+   "note": "a job.cancel with no job number",
+   "value": {
+    "id": "ctl_1",
+    "op": "job.cancel",
+    "request_id": "rq_2",
+    "job_number": null,
+    "target_job_number": 1,
+    "attempt": "att_1",
+    "bytes": "signed:rq_2",
+    "deliveries": 1,
+    "transport_accepted": null,
+    "device_answered": null
+   }
+  },
+  {
+   "schema": "outcome",
+   "note": "a device status in capitals",
+   "value": {
+    "reason": "device_final",
+    "device_status": "OK",
+    "at": "2026-01-01T00:00:00Z"
+   }
+  },
+  {
+   "schema": "control",
+   "note": "a message.get with a job number of its own",
+   "value": {
+    "id": "ctl_1",
+    "op": "message.get",
+    "request_id": "rq_2",
+    "job_number": 2,
+    "target_job_number": 1,
+    "attempt": "att_1",
+    "bytes": "signed:rq_2",
+    "deliveries": 1,
+    "transport_accepted": null,
+    "device_answered": null
+   }
+  }
+ ]
+}

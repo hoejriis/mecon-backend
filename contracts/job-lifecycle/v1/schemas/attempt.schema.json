@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.test/mecon/job-lifecycle/v1/attempt",
+  "title": "One signed request",
+  "description": "Identical bytes delivered again are the same attempt: deliveries counts them. bytes stands for the stored signed bytes.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "request_id", "job_number", "bytes", "deliveries", "nothing_ran", "dispositions"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^att_[1-9][0-9]*$" },
+    "request_id": { "type": "string", "pattern": "^rq_[1-9][0-9]*$" },
+    "job_number": { "type": "integer", "minimum": 1, "maximum": 4294967295 },
+    "bytes": { "type": "string", "minLength": 1 },
+    "deliveries": { "type": "integer", "minimum": 0 },
+    "nothing_ran": { "type": "boolean" },
+    "dispositions": { "$ref": "https://example.test/mecon/device-dispatch/v1/dispositions" }
+  }
+}

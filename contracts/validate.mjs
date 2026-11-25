@@ -123,6 +123,13 @@ for (const r of [validateReaderCases('reader-core/v1', 'mecon-reader-core'), val
   checked += r.checked;
   failures += r.failures;
 }
+// The device dispatch and job lifecycle contracts: catalogue, schemas, fixtures replayed through their reference models.
+import { validateDeviceDispatch } from './validate-device-dispatch.mjs';
+import { validateJobLifecycle } from './validate-job-lifecycle.mjs';
+for (const r of [validateDeviceDispatch(), validateJobLifecycle()]) {
+  checked += r.checked;
+  failures += r.failures;
+}
 // The WebSocket hold contract: frame schemas, fixtures A-F, rejected frames, and the README's references.
 const hold = validateHold();
 checked += hold.checked;

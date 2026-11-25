@@ -1,6 +1,6 @@
 # Deployment models and lifecycle — target
 
-**Post-MVP architecture.** MVP1 reuses the existing MECON Backend; these models describe the eventual public application, not a released installer. The only current deployment is the restricted Reader described at the end of this document.
+**Post-MVP architecture.** MVP1 reuses the existing MECON Backend; these models describe the eventual public application, not a released installer. The only current deployment of this repository is the restricted Reader described at the end of this document; there is no public production service. A bounded capture shadow trial is recorded in [migration status](MIGRATION_STATUS.md).
 
 ## Vocabulary
 
@@ -28,7 +28,7 @@ Reproducible images, secrets separation, TLS, local CA/mDNS guidance, backup/res
 
 ## Restricted Reader deployment and availability
 
-**Approved 17 November 2026; availability as of 18 November 2026.** The first Reader deployment is an access-restricted integration environment at `https://reader.mecon.cloud`, independently deployed from the public Reader code and connected to the existing Backend at `mecon.cloud`. It is **not** a public beta, a cutover or a public Backend replacement.
+**Approved 17 November 2026; availability as of 25 November 2026 (previous statement: 18 November 2026).** The first Reader deployment is an access-restricted integration environment at `https://reader.mecon.cloud`, independently deployed from the public Reader code and connected to the existing Backend at `mecon.cloud`. It is **not** a public beta, a cutover or a public Backend replacement.
 
 - **Access:** exactly the existing `mecon.cloud` users, through the Backend's own login, session and per-user capability checks. No independent user store, self-signup, extra grants or bypass through the API or live updates. Administrators and Fleet Owners do not gain other users' private messages.
 - **Integration:** the versioned Reader API ([contract](READER_API_CONTRACT.md), [OpenAPI](../contracts/reader-api/v1/openapi.yaml)), HTTPS, a secure cross-origin session/CSRF/live-update arrangement, sanitized fixtures and auditable configuration. No private credentials in public client code.
@@ -37,9 +37,12 @@ Reproducible images, secrets separation, TLS, local CA/mDNS guidance, backup/res
 
 | Status | What |
 |---|---|
-| **Deployed (restricted, existing `mecon.cloud` users only)** | The Reader shell with the five-tab navigation (Chats / Nodes / Map / Tools / Settings), the login client, the design system and a read-only Bluetooth diagnostics page. The Reader API is routed to the existing Backend (signed-out checks pass); signed-in acceptance with test accounts has not yet run, so verified sign-in is not claimed. |
+| **Deployed (restricted, existing `mecon.cloud` users only)** | Reader release v0.9.2: the five-tab shell (Chats / Nodes / Map / Tools / Settings), the login client, the design system and a read-only Bluetooth diagnostics page. The Reader API is routed to the existing Backend. The latest tag, v0.9.3, is build-only and is not what is served. Live signed-in acceptance with test users passed (33 passed, 1 manual row skipped), as the [acceptance evidence](MVP1_ACCEPTANCE.md) records. |
+| **Implemented and deployed in the restricted Reader, awaiting acceptance** | Offline cache and leases (checked with a virtual authenticator; a real passkey on a phone is not yet verified); safe updates (checked live across five updates, v0.5.0 to v0.9.1; the case of an update banner with an unsent draft is not yet verified); USB access (the hardware acceptance session is still open). None is described as available. |
 | **Implemented, not verified live** | The Backend-path messaging client, written against a draft contract. |
 | **Simulated only** | The BLE Companion adapter, exercised through an Android Chrome profile simulation; not verified on hardware. Bluefy on iPhone/iPad still awaits real-hardware testing. |
-| **Planned** | Live observation Map, contacts, offline cache, safe updates, USB access and the public Backend replacement. |
+| **Merged, not deployed** | The public Reader facade (`reader-backend/`) and its session-lookup HTTP adapter, run only against fakes and a stub, with no interop run against a real core yet. |
+| **Shadow trial (bounded)** | The public capture service, release v0.9.2, since 2026-11-25 for 7 days, subscribe-only beside the hosted Backend. Connected and subscribed; no observation traffic received yet, so no parity evidence. Not a cutover. |
+| **Planned** | Live observation Map, contacts and the staged public Backend. It does not replace the hosted Backend. |
 
 Evidence is recorded in the [acceptance matrix](MVP1_ACCEPTANCE.md); the normative design is [MVP1 implementation design](MVP1_IMPLEMENTATION_DESIGN.md). Nothing here implies public availability or verified full messaging.

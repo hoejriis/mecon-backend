@@ -1,0 +1,269 @@
+{
+ "fixture": "K",
+ "title": "Documents the schemas reject",
+ "kind": "invalid",
+ "contract_version": "1.0.0-draft.1",
+ "cases": [
+  {
+   "schema": "command",
+   "note": "no args",
+   "value": {
+    "op": "contact.put"
+   }
+  },
+  {
+   "schema": "command",
+   "note": "an op without a dot",
+   "value": {
+    "op": "reboot",
+    "args": {}
+   }
+  },
+  {
+   "schema": "command",
+   "note": "an extra field",
+   "value": {
+    "op": "contact.put",
+    "args": {},
+    "raw": "x"
+   }
+  },
+  {
+   "schema": "result",
+   "note": "no signed_by",
+   "value": {
+    "request_id": "rq_1",
+    "job_number": 1,
+    "status": "ok"
+   }
+  },
+  {
+   "schema": "result",
+   "note": "job number zero",
+   "value": {
+    "signed_by": "dev_1",
+    "request_id": "rq_1",
+    "job_number": 0,
+    "status": "ok"
+   }
+  },
+  {
+   "schema": "result",
+   "note": "job number past 32 bits",
+   "value": {
+    "signed_by": "dev_1",
+    "request_id": "rq_1",
+    "job_number": 4294967296,
+    "status": "ok"
+   }
+  },
+  {
+   "schema": "result",
+   "note": "a status the device cannot answer",
+   "value": {
+    "signed_by": "dev_1",
+    "request_id": "rq_1",
+    "job_number": 1,
+    "status": "delivered"
+   }
+  },
+  {
+   "schema": "result",
+   "note": "an rf_count of zero",
+   "value": {
+    "signed_by": "dev_1",
+    "request_id": "rq_1",
+    "job_number": 1,
+    "status": "ok",
+    "state": "transmitted",
+    "rf_count": 0
+   }
+  },
+  {
+   "schema": "dispositions",
+   "note": "a disposition missing",
+   "value": {
+    "signed": null,
+    "transport_accepted": null,
+    "device_answered": null,
+    "rf_transmitted": null
+   }
+  },
+  {
+   "schema": "dispositions",
+   "note": "rf_transmitted without a last time",
+   "value": {
+    "signed": null,
+    "transport_accepted": null,
+    "device_answered": null,
+    "rf_transmitted": {
+     "count": 1,
+     "first_at": "2026-01-01T00:00:00Z"
+    },
+    "acked": null
+   }
+  },
+  {
+   "schema": "dispositions",
+   "note": "a device answer with an unknown status",
+   "value": {
+    "signed": null,
+    "transport_accepted": null,
+    "device_answered": {
+     "status": "accepted",
+     "at": "2026-01-01T00:00:00Z"
+    },
+    "rf_transmitted": null,
+    "acked": null
+   }
+  },
+  {
+   "schema": "origin-state",
+   "note": "three origins",
+   "value": {
+    "origins": [
+     {
+      "gateway": "a",
+      "result": null,
+      "transmitted_at": null
+     },
+     {
+      "gateway": "b",
+      "result": null,
+      "transmitted_at": null
+     },
+     {
+      "gateway": "c",
+      "result": null,
+      "transmitted_at": null
+     }
+    ],
+    "window_ends_at": null,
+    "scheduled": [],
+    "closed": null,
+    "ignored_results": 0
+   }
+  },
+  {
+   "schema": "origin-state",
+   "note": "a closing reason not in the list",
+   "value": {
+    "origins": [],
+    "window_ends_at": null,
+    "scheduled": [],
+    "closed": "gave_up",
+    "ignored_results": 0
+   }
+  },
+  {
+   "schema": "result",
+   "note": "status ok with no state",
+   "value": {
+    "signed_by": "dev_1",
+    "request_id": "rq_1",
+    "job_number": 1,
+    "status": "ok"
+   }
+  },
+  {
+   "schema": "result",
+   "note": "a state under a status other than ok",
+   "value": {
+    "signed_by": "dev_1",
+    "request_id": "rq_1",
+    "job_number": 1,
+    "status": "failed",
+    "state": "done"
+   }
+  },
+  {
+   "schema": "result",
+   "note": "replay as a status instead of an error code",
+   "value": {
+    "signed_by": "dev_1",
+    "request_id": "rq_1",
+    "job_number": 1,
+    "status": "replay",
+    "mark": 3
+   }
+  },
+  {
+   "schema": "result",
+   "note": "replay with no mark",
+   "value": {
+    "signed_by": "dev_1",
+    "request_id": "rq_1",
+    "job_number": 1,
+    "status": "refused",
+    "error": "replay"
+   }
+  },
+  {
+   "schema": "result",
+   "note": "a mark without replay",
+   "value": {
+    "signed_by": "dev_1",
+    "request_id": "rq_1",
+    "job_number": 1,
+    "status": "busy",
+    "mark": 3
+   }
+  },
+  {
+   "schema": "result",
+   "note": "duplicate under the wrong status",
+   "value": {
+    "signed_by": "dev_1",
+    "request_id": "rq_1",
+    "job_number": 1,
+    "status": "refused",
+    "error": "duplicate"
+   }
+  },
+  {
+   "schema": "result",
+   "note": "job-open under failed",
+   "value": {
+    "signed_by": "dev_1",
+    "request_id": "rq_1",
+    "job_number": 1,
+    "status": "failed",
+    "error": "job-open"
+   }
+  },
+  {
+   "schema": "result",
+   "note": "the old name of a state",
+   "value": {
+    "signed_by": "dev_1",
+    "request_id": "rq_1",
+    "job_number": 1,
+    "status": "ok",
+    "state": "duty_held"
+   }
+  },
+  {
+   "schema": "origin-state",
+   "note": "a field of the old design",
+   "value": {
+    "origins": [],
+    "window_ends_at": null,
+    "scheduled": [],
+    "closed": null,
+    "ignored_results": 0
+   }
+  },
+  {
+   "schema": "result",
+   "note": "a negative epoch",
+   "value": {
+    "signed_by": "dev_1",
+    "request_id": "rq_1",
+    "job_number": 1,
+    "status": "ok",
+    "state": "unknown",
+    "epoch": -1
+   }
+  }
+ ]
+}

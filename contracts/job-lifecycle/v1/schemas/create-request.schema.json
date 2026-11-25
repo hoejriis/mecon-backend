@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.test/mecon/job-lifecycle/v1/create-request",
+  "title": "The body of a create request",
+  "description": "The caller and the idempotency key are not in the body: the caller is authenticated, the key is the Idempotency-Key header.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["device", "command"],
+  "properties": {
+    "device": { "type": "string", "pattern": "^[a-z0-9_-]{1,64}$" },
+    "command": { "$ref": "https://example.test/mecon/device-dispatch/v1/command" },
+    "ttl_s": { "type": "integer", "minimum": 1, "maximum": 86400 }
+  }
+}

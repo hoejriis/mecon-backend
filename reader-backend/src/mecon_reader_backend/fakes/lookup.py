@@ -21,8 +21,7 @@ class FakeSessionLookup:
                 "events": "available", "observations": user.observations if w.observes else "unavailable"}
 
     async def resolve(self, credential: str, purpose: str, *, csrf_token: str | None = None,
-                      origin: str | None = None, sec_fetch_site: str | None = None,
-                      include_csrf: bool = False) -> Union[Caller, Denied]:
+                      origin: str | None = None, sec_fetch_site: str | None = None) -> Union[Caller, Denied]:
         if self.unavailable:
             return Denied("core_unavailable")
         s = self.world.sessions.get(credential)
@@ -44,7 +43,7 @@ class FakeSessionLookup:
         return Caller(session_ref=self.world.session_ref(s), user_id=u.id, display_name=u.display_name,
                       role="instance_admin" if u.role == "instance_admin" else "user", break_glass=False,
                       capabilities=self.capabilities(u), expires_at=s.expires_at,
-                      csrf_token=expected if include_csrf else None)
+                      csrf_token=expected if purpose == "session" else None)
 
     async def revocations(self) -> AsyncIterator[Union[Subscribed, Revocation]]:
         q: asyncio.Queue = asyncio.Queue()

@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, AsyncIterator, Literal, Mapping, Protocol, Sequence, Union, runtime_checkable
 
-Purpose = Literal["read", "write", "stream"]
+Purpose = Literal["read", "write", "stream", "session"]
 CapabilityState = Literal["available", "unavailable", "forbidden"]
 CAPABILITY_NAMES = ("devices", "messaging", "send", "events", "observations")
 CAPABILITY_STATES = ("available", "unavailable", "forbidden")
@@ -34,7 +34,7 @@ class Caller:
     break_glass: bool
     capabilities: Mapping[str, str]
     expires_at: datetime  # timezone-aware
-    csrf_token: str | None = None  # derived by the core; only on a lookup with include_csrf (GET /session)
+    csrf_token: str | None = None  # derived by the core; only on a `session` lookup (the one serving GET /session)
 
 
 @dataclass(frozen=True)
@@ -56,15 +56,17 @@ class Subscribed:
 @runtime_checkable
 class SessionLookup(Protocol):
     async def resolve(self, credential: str, purpose: Purpose, *, csrf_token: str | None = None,
-                      origin: str | None = None, sec_fetch_site: str | None = None,
-                      include_csrf: bool = False) -> Union[Caller, Denied]:
+                      origin: str | None = None, sec_fetch_site: str | None = None) -> Union[Caller, Denied]:
         """Resolve the raw session cookie value.
 
         For purpose="write" the facade passes the request's X-CSRF-Token, Origin and Sec-Fetch-Site values
         (None when absent). The lookup checks them: the Origin rule (an allow-listed Origin, trailing "/"
         stripped, or Sec-Fetch-Site "same-origin") and the CSRF token, answering Denied("origin_rejected")
-        or Denied("csrf_failed"). `include_csrf` asks for the session's CSRF token in the Caller; the facade
-        asks only on the lookup behind GET /session, and the Caller carries none otherwise.
+        or Denied("csrf_failed"). `origin` and `sec_fetch_site` travel on every lookup (None when absent).
+        purpose="session" is a read that serves GET /session: only it returns `Caller.csrf_token`. The token is
+        stable for the session's life (derived from the session, not stored), and the facade may cache it with the
+        Caller for up to its cache bound. A core that ever changes a live session's token must first end that
+        session with a revocation, so no cached Caller can serve the old one.
         """
         ...
 

@@ -20,8 +20,7 @@ class _Lookup:
         self.first_started = asyncio.Event()
         self.release = asyncio.Event()
 
-    async def resolve(self, credential, purpose, *, csrf_token=None, origin=None, sec_fetch_site=None,
-                      include_csrf=False):
+    async def resolve(self, credential, purpose, *, csrf_token=None, origin=None, sec_fetch_site=None):
         self.calls += 1
         if self.calls == 1:
             self.first_started.set()
@@ -76,8 +75,7 @@ class _FeedLookup:
         self.calls = 0
         self.subscriptions: list[asyncio.Queue] = []
 
-    async def resolve(self, credential, purpose, *, csrf_token=None, origin=None, sec_fetch_site=None,
-                      include_csrf=False):
+    async def resolve(self, credential, purpose, *, csrf_token=None, origin=None, sec_fetch_site=None):
         self.calls += 1
         return _caller()
 

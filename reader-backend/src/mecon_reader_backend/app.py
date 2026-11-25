@@ -134,19 +134,15 @@ def create_app(lookup: SessionLookup, core: ReaderCore, config: FacadeConfig | N
         # core_unavailable, and anything unexpected: never serve on a lookup error.
         return Refusal(503, "unavailable", "session lookup unavailable", retryable=True)
 
-    async def authenticate(request: Request, purpose: str, include_csrf: bool = False) -> Caller:
+    async def authenticate(request: Request, purpose: str) -> Caller:
         credential = request.cookies.get(COOKIE)
         if not credential:
             raise Refusal(401, "unauthenticated", "no session")
-        if purpose == "write":
-            answer = await sessions.resolve(credential, "write",
-                                            csrf_token=request.headers.get("x-csrf-token"),
-                                            origin=request.headers.get("origin"),
-                                            sec_fetch_site=request.headers.get("sec-fetch-site"))
-        elif include_csrf:
-            answer = await sessions.resolve(credential, purpose, include_csrf=True)
-        else:
-            answer = await sessions.resolve(credential, purpose)
+        # Every lookup carries the request's Origin and Sec-Fetch-Site; a write also carries its CSRF token.
+        answer = await sessions.resolve(credential, purpose,
+                                        csrf_token=request.headers.get("x-csrf-token") if purpose == "write" else None,
+                                        origin=request.headers.get("origin"),
+                                        sec_fetch_site=request.headers.get("sec-fetch-site"))
         if isinstance(answer, Denied):
             raise refuse_denial(answer)
         return answer
@@ -235,7 +231,7 @@ def create_app(lookup: SessionLookup, core: ReaderCore, config: FacadeConfig | N
         return resp
 
     async def get_session(request: Request) -> Response:
-        c = await authenticate(request, "read", include_csrf=True)
+        c = await authenticate(request, "session")
         return ok({"user": {"id": c.user_id, "display_name": c.display_name},
                    "capabilities": dict(c.capabilities), "contract_version": cfg.contract_version,
                    "csrf_token": c.csrf_token, "expires_at": iso(c.expires_at)})

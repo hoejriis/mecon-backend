@@ -205,15 +205,15 @@ MUTANTS = [
      [("                now_visible = await asyncio.wait_for(scope.visible_observers(now), core_timeout_s)\n",
        "                now_visible = visible\n")]),
     # ---- the session lookup draft: the CSRF token only behind GET /session, Sec-Fetch-Site on writes ----
-    ("a1", "a write lookup carries no Sec-Fetch-Site", "app.py",
-     [('sec_fetch_site=request.headers.get("sec-fetch-site"))\n        elif include_csrf:',
-       'sec_fetch_site=None)\n        elif include_csrf:')]),
+    ("a1", "a lookup carries no Sec-Fetch-Site", "app.py",
+     [('                                        sec_fetch_site=request.headers.get("sec-fetch-site"))',
+       '                                        sec_fetch_site=None)')]),
     ("a2", "GET /session does not ask the lookup for the token", "app.py",
-     [('c = await authenticate(request, "read", include_csrf=True)', 'c = await authenticate(request, "read")')]),
+     [('c = await authenticate(request, "session")', 'c = await authenticate(request, "read")')]),
     ("a3", "GET /session is served without the token it asked for", "sessions.py",
-     [("if include_csrf and answer.csrf_token is None:", "if False:")]),
+     [('if purpose == "session" and answer.csrf_token is None:', "if False:")]),
     ("a4", "GET /session answers from a cached Caller that carries no token", "sessions.py",
-     [("if hit is not None and include_csrf and hit.caller.csrf_token is None:", "if False:")]),
+     [('if hit is not None and purpose == "session" and hit.caller.csrf_token is None:', "if False:")]),
 ]
 
 

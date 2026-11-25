@@ -63,13 +63,12 @@ class SessionResolver:
     # ---- resolution ----
 
     async def resolve(self, credential: str, purpose: str, *, csrf_token: str | None = None,
-                      origin: str | None = None, sec_fetch_site: str | None = None,
-                      include_csrf: bool = False) -> Union[Caller, Denied]:
+                      origin: str | None = None, sec_fetch_site: str | None = None) -> Union[Caller, Denied]:
         self.ensure_feed()
         now = self._clock()
-        if purpose == "read":
+        if purpose in ("read", "session"):
             hit = self._cache.get(credential)
-            if hit is not None and include_csrf and hit.caller.csrf_token is None:
+            if hit is not None and purpose == "session" and hit.caller.csrf_token is None:
                 hit = None  # GET /session needs the token: ask the core, never answer without it
             if hit is not None:
                 if hit.until > now and not self._expired(hit.caller):
@@ -77,15 +76,9 @@ class SessionResolver:
                 self._cache.pop(credential, None)
         epoch = self._revocation_epoch
         try:
-            if purpose == "write":
-                answer = await asyncio.wait_for(
-                    self.lookup.resolve(credential, "write", csrf_token=csrf_token, origin=origin,
-                                        sec_fetch_site=sec_fetch_site), self.timeout_s)
-            elif include_csrf:
-                answer = await asyncio.wait_for(self.lookup.resolve(credential, purpose, include_csrf=True),
-                                                self.timeout_s)
-            else:
-                answer = await asyncio.wait_for(self.lookup.resolve(credential, purpose), self.timeout_s)
+            answer = await asyncio.wait_for(
+                self.lookup.resolve(credential, purpose, csrf_token=csrf_token if purpose == "write" else None,
+                                    origin=origin, sec_fetch_site=sec_fetch_site), self.timeout_s)
         except Exception as exc:  # noqa: BLE001 - timeouts and adapter errors fail closed
             log.warning("session lookup failed: %s", type(exc).__name__)
             return Denied("core_unavailable")
@@ -94,14 +87,14 @@ class SessionResolver:
         if not caller_is_well_formed(answer):
             log.warning("session lookup answered with a malformed caller")
             return Denied("core_unavailable")
-        if include_csrf and answer.csrf_token is None:
+        if purpose == "session" and answer.csrf_token is None:
             log.warning("session lookup answered without the CSRF token it was asked for")
             return Denied("core_unavailable")
         if self._expired(answer):
             return Denied("expired")
         # Cache only an answer no revocation can have overtaken: none arrived while the lookup ran, and the
         # feed that would deliver one is up.
-        if purpose == "read" and epoch == self._revocation_epoch and self.feed_up:
+        if purpose in ("read", "session") and epoch == self._revocation_epoch and self.feed_up:
             self._insert(credential, _Entry(answer, now + self.cache_s), now)
         return answer
 

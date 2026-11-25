@@ -27,8 +27,7 @@ def test_a_caller_without_a_csrf_token_serves_every_other_request():
         async with rig.client("alice") as c:
             r = await c.get(PREFIX + "/devices")
             assert r.status_code == 200, r.text
-            reads = [e for e in rig.port.extra if not e["include_csrf"]]
-            assert reads, "an ordinary read asks for no token"
+            assert [e["purpose"] for e in rig.port.extra] == ["read"], "an ordinary read is no session lookup"
     run(go())
 
 
@@ -39,7 +38,7 @@ def test_get_session_asks_for_the_token_and_returns_it():
             r = await c.get(PREFIX + "/session")
             assert r.status_code == 200, r.text
             assert isinstance(r.json()["csrf_token"], str) and len(r.json()["csrf_token"]) >= 16
-            assert rig.port.extra[-1]["include_csrf"] is True
+            assert rig.port.extra[-1]["purpose"] == "session"
     run(go())
 
 
@@ -62,7 +61,18 @@ def test_get_session_never_answers_from_a_cached_caller_without_the_token():
             rig.port.extra.clear()
             r = await c.get(PREFIX + "/session")
             assert r.status_code == 200 and r.json()["csrf_token"]
-            assert rig.port.extra and rig.port.extra[-1]["include_csrf"] is True, "asked the core again"
+            assert rig.port.extra and rig.port.extra[-1]["purpose"] == "session", "asked the core again"
+    run(go())
+
+
+def test_every_lookup_carries_origin_and_sec_fetch_site():
+    async def go():
+        rig = Rig(lookup_wrap=Recording)
+        async with rig.client("alice") as c:
+            r = await c.get(PREFIX + "/devices", headers={"Sec-Fetch-Site": "same-origin"})
+            assert r.status_code == 200, r.text
+            assert rig.port.extra[-1]["purpose"] == "read"
+            assert rig.port.extra[-1]["sec_fetch_site"] == "same-origin" and rig.port.extra[-1]["origin"]
     run(go())
 
 
@@ -74,7 +84,7 @@ def test_every_write_lookup_carries_sec_fetch_site():
             rig.port.extra.clear()
             r = await c.post(PREFIX + "/leases", headers={"X-CSRF-Token": token, "Sec-Fetch-Site": "same-origin"})
             assert r.status_code == 200, r.text
-            assert rig.port.extra == [{"sec_fetch_site": "same-origin", "include_csrf": False}]
+            assert [(e["purpose"], e["sec_fetch_site"]) for e in rig.port.extra] == [("write", "same-origin")]
     run(go())
 
 
@@ -90,4 +100,20 @@ def test_a_same_origin_write_without_an_origin_header_is_accepted():
             assert_error(r, 403, "origin_rejected")
             r = await c.post(PREFIX + "/leases", headers={"X-CSRF-Token": token})
             assert_error(r, 403, "origin_rejected")
+    run(go())
+
+
+def test_same_origin_with_an_unlisted_origin_is_accepted_and_csrf_still_checked():
+    """The OR's Sec-Fetch-Site branch with a foreign Origin: accepted, and the CSRF check still applies."""
+    async def go():
+        rig = Rig()
+        async with rig.client("alice") as c:
+            token = (await c.get(PREFIX + "/session")).json()["csrf_token"]
+            foreign = {"Origin": "https://foreign.example.test", "Sec-Fetch-Site": "same-origin"}
+            r = await c.post(PREFIX + "/leases", headers={**foreign, "X-CSRF-Token": token})
+            assert r.status_code == 200, r.text
+            r = await c.post(PREFIX + "/leases", headers={**foreign, "X-CSRF-Token": "w" * 43})
+            assert_error(r, 403, "csrf_failed")
+            r = await c.post(PREFIX + "/leases", headers=foreign)
+            assert_error(r, 403, "csrf_failed")
     run(go())

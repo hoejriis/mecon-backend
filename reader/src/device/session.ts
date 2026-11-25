@@ -475,7 +475,24 @@ export class DeviceSession {
     });
     answer.catch(() => undefined);
     try {
-      for (const f of encodeMeconFrames(1, buildRequest(id, op as 'hello', args))) await t.write(f);
+      // Each write is bounded (default 60 s; same option as the adapter's), so a transport whose write never settles cannot hang request().
+      const writeMs = this.opts.companion?.writeTimeoutMs ?? 60000;
+      for (const f of encodeMeconFrames(1, buildRequest(id, op as 'hello', args))) {
+        let wt: ReturnType<typeof setTimeout> | undefined;
+        try {
+          await Promise.race([
+            t.write(f),
+            new Promise<never>((_, rej) => {
+              wt = setTimeout(() => {
+                console.warn(`[reader] write_timeout during ${op} after ${writeMs} ms`);
+                rej(new BleError('write_timeout', `write of ${op} not completed`));
+              }, writeMs);
+            }),
+          ]);
+        } finally {
+          clearTimeout(wt);
+        }
+      }
       // The reply timer starts after the writes: a write can block (serial flow control), and that is not a slow device.
       timer = setTimeout(() => {
         console.warn(`[reader] response_timeout: no answer to ${op} within ${timeoutMs} ms`);

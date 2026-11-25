@@ -11,11 +11,11 @@ afterEach(() => sessions.splice(0).forEach((s) => s.dispose()));
 
 const OPTS: SessionOptions = { detect: { stepTimeoutMs: 120 }, companion: { responseTimeoutMs: 150, connectTimeoutMs: 150, nowSec: () => 1700000000 } };
 
-function bleRig(mockOpts: MockCompanionOptions = {}) {
+function bleRig(mockOpts: MockCompanionOptions = {}, extra: { companion?: { writeTimeoutMs?: number } } = {}) {
   const mock = new MockCompanion(mockOpts);
   const transport = new MockTransport(mock);
   const backend = { post: vi.fn(async () => undefined) };
-  const session = new DeviceSession(transport, { ...OPTS, companion: { ...OPTS.companion, backendPath: backend } });
+  const session = new DeviceSession(transport, { ...OPTS, companion: { ...OPTS.companion, ...extra.companion, backendPath: backend } });
   sessions.push(session);
   return { mock, transport, session, backend };
 }
@@ -214,6 +214,17 @@ describe(`${S}: link trust (read-only on an unknown link)`, () => {
     slowWrite(r, 20, 400);
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     await expect(r.session.request('status.get', 100)).rejects.toMatchObject({ code: 'response_timeout', message: 'no answer to status.get' });
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+  });
+
+  it('request: a write that never resolves fails write_timeout after the write bound, naming the op', async () => {
+    const r = bleRig(MECON, { companion: { writeTimeoutMs: 80 } });
+    await r.session.connect();
+    const t = (r.session as unknown as { adapterTransport: { write(f: Uint8Array): Promise<void> } }).adapterTransport;
+    t.write = () => new Promise<void>(() => undefined);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    await expect(r.session.request('status.get', 100)).rejects.toMatchObject({ code: 'write_timeout', message: 'write of status.get not completed' });
     expect(warn).toHaveBeenCalledTimes(1);
     warn.mockRestore();
   });

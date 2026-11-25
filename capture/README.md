@@ -11,7 +11,7 @@ It is the public implementation of two published contracts:
 - [`contracts/observation-subscription/v1`](../contracts/observation-subscription/v1/README.md): the receive-only subscription profile (draft.2);
 - [`contracts/raw-capture/v1`](../contracts/raw-capture/v1/README.md): the raw capture append (draft.3).
 
-**Status.** It passes the fixtures of both contracts and an integration test against a real mosquitto, in its own CI job (`.github/workflows/capture.yml`). It has not been deployed anywhere, run against a real feed, or measured under load. Nothing downstream of the archive (parsing, normalization, deduplication) is here.
+**Status.** It passes the fixtures of both contracts and an integration test against a real mosquitto, in its own CI job (`.github/workflows/capture.yml`). Since 2026-11-25 release v0.9.2 has run as a bounded 7-day subscribe-only shadow trial beside the hosted Backend; it is connected and subscribed but has received no observation traffic, so it has not been run against a real feed or measured under load, and there is no parity evidence. Nothing is cut over. Nothing downstream of the archive (parsing, normalization, deduplication) is here.
 
 ## Run
 

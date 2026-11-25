@@ -8,7 +8,7 @@ capture archive (SQLite, read-only)  --pending captures, capture_id order, batch
 
 It is the public implementation of [`contracts/observation-processing/v1`](../contracts/observation-processing/v1/README.md) (version `1.0.0-draft.1`).
 
-**Status.** It replays all five published fixtures (A to E) in its own CI job (`.github/workflows/processing.yml`), with unit tests and a mutation check. It has not been deployed, run against a live feed, or measured under load. Observer records, decryption and contact records from adverts are outside the contract and not here.
+**Status.** It replays all five published fixtures (A to E) in its own CI job (`.github/workflows/processing.yml`), with unit tests and a mutation check. It has not been deployed, run against a live feed, or measured under load; the private reference replay of its contract is merged. Observer records, decryption and contact records from adverts are outside the contract and not here.
 
 ## Run
 

@@ -132,8 +132,14 @@ def check(schema: dict, v: Any) -> bool:
 
 
 def valid(name: str, value: Any) -> bool:
-    """True when `value` matches the contract's component schema `name`."""
-    return check(SCHEMAS[name], value)
+    """True when `value` matches the contract's component schema `name`.
+
+    The check descends only as deep as the schemas do (none refers to itself), never as deep as the value; a
+    RecursionError is still answered False, so no input can make it raise."""
+    try:
+        return check(SCHEMAS[name], value)
+    except RecursionError:
+        return False
 
 
 def _keywords_known(schema: Any) -> None:

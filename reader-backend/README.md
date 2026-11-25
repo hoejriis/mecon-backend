@@ -83,7 +83,7 @@ Read answers are cached for at most `lookup_cache_s` (5 s), never past the calle
 - **The mapping** gives the `CoreError`s the fake core raises, so the facade's `call_core` maps both the same way:
   - 403 `session_ended` is `CoreError("forbidden", "session_ended")`, which the facade answers 401 with the cookie cleared, and which closes an open stream after `session_revoked`;
   - 403 `origin_rejected` and `sending_disabled`, 404 `not_found`, 409 `conflict`, 410 `cursor_expired`, 422 `invalid` and `validation_failed`, 429 `rate_limited` and `throttled` (with `retry_after_s`) and 503 `lease_signing_unavailable` keep their code, with the kind from the status;
-  - everything else is `core_unavailable` (503 `unavailable`, retryable, cookie kept): 401 `service_unauthorized` (logged at ERROR once when it starts and once when it stops), 503 `core_unavailable`, a status the operation does not declare, a redirect (never followed), a body that is not JSON, breaks the schema or is over 8 MiB, a refusal code the status does not declare, a timeout and a connection error;
+  - everything else is `core_unavailable` (503 `unavailable`, retryable, cookie kept): 401 `service_unauthorized` (logged at ERROR once when it starts and once when it stops), 503 `core_unavailable`, a status the operation does not declare, a redirect (never followed), a body that is not JSON (nested past the parser's depth included), breaks the schema or is over 8 MiB, a refusal code the status does not declare, a timeout and a connection error;
   - 422 `malformed_request` means the adapter sent a body the contract refuses. That is an adapter bug, never an answer about the caller, so it is logged at ERROR once per operation and answered `core_unavailable`.
 
   A batch holding a `session_revoked` envelope is `core_unavailable` too: the contract says the core never sends one, and relaying it would sign the user out.
@@ -122,6 +122,8 @@ PYTHONPATH=src python -m mecon_reader_backend --core-url http://core.internal:80
 | `--lookup-timeout-s` | `MECON_READER_LOOKUP_TIMEOUT_S` | 2 |
 | `--host` | `MECON_READER_HOST` | 127.0.0.1 |
 | `--origin` | `MECON_READER_ORIGIN` | http://127.0.0.1:8787 |
+
+`--world` wins over `MECON_READER_CORE_URL` when both are set.
 
 The facade's own bounds on a lookup and a core call are set just above the adapters', so an adapter's timeout answers first.
 

@@ -22,7 +22,7 @@ from mecon_reader_backend import FacadeConfig, create_app
 from mecon_reader_backend.__main__ import build, parse
 from mecon_reader_backend.app import COOKIE, PREFIX
 from mecon_reader_backend.core_schema import valid
-from mecon_reader_backend.http_core import HttpReaderCore, refusal_codes
+from mecon_reader_backend.http_core import _NOT_JSON, HttpReaderCore, _json, refusal_codes
 from mecon_reader_backend.http_lookup import HttpSessionLookup, parse_date_time
 from mecon_reader_backend.ports import Caller, CoreError, EventBatch, LoginPoll, Page, SendResult, Subscribed
 from mecon_reader_backend.reader_core_schemas import OPERATIONS, SCHEMAS, VERSION
@@ -620,3 +620,46 @@ def test_the_entry_point_wires_both_http_adapters(tmp_path, monkeypatch):
     monkeypatch.delenv("MECON_READER_CORE_URL")
     with pytest.raises(SystemExit):
         parse([])  # neither a world nor a core
+
+
+# ---- deeply nested input ----
+
+DEEP = b"[" * 200_000 + b"]" * 200_000  # far past the JSON parser's recursion limit
+
+
+def test_a_body_nested_past_the_parser_limit_is_not_json():
+    assert _json(DEEP) is _NOT_JSON
+    assert _json(b'{"code":' * 100_000 + b"1" + b"}" * 100_000) is _NOT_JSON
+
+
+def test_a_deeply_nested_answer_is_core_unavailable_on_a_2xx_and_on_a_refusal(tmp_path):
+    handlers = [answer(200, DEEP), answer(404, DEEP), answer(429, DEEP), answer(201, DEEP)]
+    inv = [("list_devices", (C, None, 50), {}), ("get_conversation", (C, "cnv_1"), {}),
+           ("start_login", ("a@example.test",), _login_kwargs("start_login")), ("create_send_attempt", (C, SEND), {})]
+    got, _ = run(calls(tmp_path, handlers, inv), bound=60)
+    assert got == [UNAVAILABLE] * 4
+
+
+def test_the_schema_check_is_bounded_on_deep_values():
+    deep = []
+    cur = deep
+    for _ in range(50_000):  # built directly, deeper than any parse could give
+        nxt = []
+        cur.append(nxt)
+        cur = nxt
+    t0 = time.monotonic()
+    assert valid("EventBatch", {"events": deep, "cursor": "c"}) is False  # an envelope must be an object
+    assert valid("DeviceList", dict(PAGE, items=[dict(fixture("devices-one.json")["items"][0],
+                                                      capability_evidence={"ble": deep})])) is False
+    assert valid("Health", {"status": "ok", "commit": None, "extra": deep}) is True  # open object: not descended
+    assert time.monotonic() - t0 < 2.0
+
+
+def test_help_says_the_world_wins_over_the_core_url(tmp_path, monkeypatch, capsys):
+    with pytest.raises(SystemExit):
+        parse(["--help"])
+    assert "--world wins over MECON_READER_CORE_URL" in " ".join(capsys.readouterr().out.split())
+    monkeypatch.setenv("MECON_READER_CORE_URL", "http://core.internal:9000")
+    world = CORE.root.parent.parent / "reader-api" / "v1" / "cases" / "worlds.json"
+    _, _, core = build(parse(["--world", str(world)]))
+    assert not isinstance(core, HttpReaderCore)

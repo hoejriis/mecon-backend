@@ -141,7 +141,13 @@ class HttpReaderCore:
         except Exception as exc:  # noqa: BLE001 - a timeout, a refused connection, an unreadable token file
             log.warning("reader core %s failed: %s", op, type(exc).__name__)
             raise _unavailable() from None
-        return self._answer(op, status, raw)
+        try:
+            return self._answer(op, status, raw)
+        except CoreError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - no answer, however built, may escape as anything but CoreError
+            log.warning("reader core %s answer could not be read: %s", op, type(exc).__name__)
+            raise _unavailable() from None
 
     async def _send(self, req: httpx.Request) -> tuple[int, bytes]:
         resp = await self._client.send(req, stream=True, follow_redirects=False)
@@ -286,5 +292,5 @@ _NOT_JSON = object()
 def _json(raw: bytes) -> Any:
     try:
         return json.loads(raw)
-    except ValueError:
+    except (ValueError, RecursionError):  # RecursionError: a body nested deeper than the parser goes
         return _NOT_JSON

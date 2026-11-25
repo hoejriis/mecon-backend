@@ -24,7 +24,8 @@ def _env_float(name: str, default: float) -> float:
 def parse(argv: list[str] | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(prog="mecon-reader-backend")
     src = p.add_mutually_exclusive_group()
-    src.add_argument("--world", help="a worlds.json file (contracts/reader-api/v1/cases/worlds.json): fake adapters")
+    src.add_argument("--world", help="a worlds.json file (contracts/reader-api/v1/cases/worlds.json): fake adapters; "
+                                     "--world wins over MECON_READER_CORE_URL when both are set")
     src.add_argument("--core-url", default=os.environ.get("MECON_READER_CORE_URL") or None,
                      help="the core's base URL on the private network, including any prefix in front of /reader/ "
                           "(MECON_READER_CORE_URL): HTTP adapters")

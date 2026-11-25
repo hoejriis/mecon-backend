@@ -375,6 +375,8 @@ MUTANTS = [
     ("hc15", "a redirect from the core is followed", "http_core.py",
      [("resp = await self._client.send(req, stream=True, follow_redirects=False)",
        "resp = await self._client.send(req, stream=True, follow_redirects=True)")]),
+    ("hc16", "a body nested past the parser's depth is not read as malformed (RecursionError escapes)", "http_core.py",
+     [("    except (ValueError, RecursionError):", "    except ValueError:")]),
 ]
 
 

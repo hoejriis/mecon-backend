@@ -256,6 +256,15 @@ MUTANTS = [
      [("subscribe_by = loop.time() + self.subscribe_timeout_s", "subscribe_by = loop.time() + 1e9")]),
     ("hl17", "the health output leaves out the session lookup state", "app.py",
      [('            body["session_lookup"] = lookup_state\n', "            pass\n")]),
+    ("hl18", "a feed item of an unknown type is skipped instead of ending the feed", "http_lookup.py",
+     [('    raise _Malformed("unreadable feed item")', '    return None'),
+      ("                        yield item\n", "                        if item is not None:\n                            yield item\n")]),
+    ("hl19", "a revocation reason outside expired/revoked is accepted", "http_lookup.py",
+     [(' and obj["reason"] in REVOCATION_REASONS:', ":")]),
+    ("hl20", "a CSRF token under 16 characters is accepted", "http_lookup.py",
+     [('_is_str(obj["csrf_token"], 16, 512)', '_is_str(obj["csrf_token"], 1, 512)')]),
+    ("hl21", "a user_id over 128 characters is accepted", "http_lookup.py",
+     [('_is_str(obj["user_id"], 1, 128)', '_is_str(obj["user_id"], 1)')]),
 ]
 
 

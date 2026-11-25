@@ -50,8 +50,8 @@ class _Malformed(Exception):
     pass
 
 
-def _is_str(v: Any, min_len: int = 0) -> bool:
-    return type(v) is str and len(v) >= min_len
+def _is_str(v: Any, min_len: int = 0, max_len: int | None = None) -> bool:
+    return type(v) is str and len(v) >= min_len and (max_len is None or len(v) <= max_len)
 
 
 def parse_date_time(v: Any) -> datetime | None:
@@ -77,10 +77,10 @@ def parse_caller(obj: Any) -> Caller | None:
         return None
     if not all(_is_str(s) and s in CAPABILITY_STATES for s in caps.values()):
         return None
-    if not (_is_str(obj["user_id"], 1) and _is_str(obj["session_ref"], 1) and _is_str(obj["display_name"])
+    if not (_is_str(obj["user_id"], 1, 128) and _is_str(obj["session_ref"], 1) and _is_str(obj["display_name"])
             and _is_str(obj["role"]) and obj["role"] in ROLES and type(obj["break_glass"]) is bool):
         return None
-    if "csrf_token" in obj and not _is_str(obj["csrf_token"], 1):
+    if "csrf_token" in obj and not _is_str(obj["csrf_token"], 16, 512):
         return None
     expires_at = parse_date_time(obj["expires_at"])
     if expires_at is None:
@@ -101,19 +101,21 @@ def parse_denied(obj: Any) -> Denied | None:
     return Denied(obj["reason"])
 
 
-def parse_revocation_item(obj: Any) -> Union[Subscribed, Revocation, None]:
-    """One feed item. None: a type this version does not know, ignored. A malformed known item raises."""
+REVOCATION_REASONS = ("expired", "revoked")
+
+
+def parse_revocation_item(obj: Any) -> Union[Subscribed, Revocation]:
+    """One feed item, exactly as RevocationItem describes it. Anything else raises: the contract says an item
+    the facade cannot read (not JSON, an unknown type, a missing or invalid member) breaks the feed, which is
+    ended and subscribed again, never skipped, since a skipped item could be a revocation."""
     if not isinstance(obj, dict) or not _is_str(obj.get("type")):
         raise _Malformed("feed item")
-    if obj["type"] == "subscribed":
+    if obj["type"] == "subscribed" and set(obj) == {"type"}:
         return Subscribed()
-    if obj["type"] == "revocation":
-        ref, reason = obj.get("session_ref"), obj.get("reason")
-        if not _is_str(ref, 1) or not _is_str(reason):
-            raise _Malformed("revocation item")
-        # A reason outside expired/revoked still ends that session here: dropping a cached caller is the safe side.
-        return Revocation(ref, reason)
-    return None
+    if obj["type"] == "revocation" and set(obj) == {"type", "session_ref", "reason"}:
+        if _is_str(obj["session_ref"], 1) and _is_str(obj["reason"]) and obj["reason"] in REVOCATION_REASONS:
+            return Revocation(obj["session_ref"], obj["reason"])
+    raise _Malformed("unreadable feed item")
 
 
 class HttpSessionLookup:
@@ -256,8 +258,8 @@ class HttpSessionLookup:
 
     async def revocations(self) -> AsyncIterator[Union[Subscribed, Revocation]]:
         """The feed. It ends (the facade then counts it down) on silence past `feed_silence_s`, on no `subscribed`
-        within `subscribe_timeout_s`, on a refused token, on any status but 200, on a malformed item, and on any
-        transport error."""
+        within `subscribe_timeout_s`, on a refused token, on any status but 200, on an item it cannot read
+        (including an unknown type), and on any transport error."""
         try:
             req = self._client.build_request("GET", self.base_url + "/revocations",
                                              headers=self._headers("text/event-stream"), timeout=self._feed_timeout)
@@ -328,8 +330,7 @@ class HttpSessionLookup:
                         if isinstance(item, Subscribed):
                             subscribed = True
                             self._set_state("ok")
-                        if item is not None:
-                            yield item
+                        yield item
                 elif line.startswith(":"):
                     continue  # a comment: the heartbeat
                 elif line.startswith("data:"):

@@ -59,14 +59,14 @@ Read answers are cached for at most `lookup_cache_s` (5 s), never past the calle
 - **The service token** is read from `token_file` (the deployment's mode-600 file) by path, again whenever the file changes, and sent as `Authorization: Bearer` on every request. It is never logged and never shown in a repr. A missing or empty file makes every lookup `core_unavailable` without a request.
 - **`resolve`** sends `POST {base}/lookup` with `credential`, `purpose`, `origin` and `sec_fetch_site`, plus `csrf_token` on a write. A value past its schema bound is never sent: an over-long Origin or Sec-Fetch-Site goes as absent, which never accepts what the core would refuse, and an over-long CSRF token is left out (`csrf_failed`). A credential that is empty or longer than 4096 characters is `unknown` without asking.
 - **The answer** is mapped by status:
-  - 200 is a `Caller` only if it matches the contract's schema exactly: every required member, no extra member (so no scope can slip in), and an RFC 3339 `expires_at` with an offset.
+  - 200 is a `Caller` only if it matches the contract's schema exactly: every required member, no extra member (so no scope can slip in), a `user_id` of at most 128 characters, a `csrf_token` (when present) of 16 to 512, and an RFC 3339 `expires_at` with an offset.
   - 403 is a `Denied` only with one of its five reasons and `retryable: false`.
   - Everything else is `core_unavailable`, so the cookie is kept: 503, 401 `service_unauthorized`, any other status, a redirect (never followed), a timeout (`timeout_s` bounds the whole lookup), a refused connection, a body that is not JSON or breaks the schema, or one over 64 KiB.
-- **`revocations`** reads `GET {base}/revocations` as server-sent events. It yields `Subscribed` and `Revocation(session_ref, reason)` and skips comment lines (the heartbeat) and item types it does not know. It ends, so the resolver counts the feed down, caches nothing and reconnects after `feed_retry_s`, in these cases:
+- **`revocations`** reads `GET {base}/revocations` as server-sent events. It yields `Subscribed` and `Revocation(session_ref, reason)` and skips comment lines (the heartbeat). An item it cannot read is never skipped, since it could be a revocation. It ends, so the resolver counts the feed down, caches nothing and reconnects after `feed_retry_s`, in these cases:
   - no bytes for `feed_silence_s`, heartbeats included;
   - no `subscribed` item within `subscribe_timeout_s` (30 s) of connecting, whatever other bytes arrive (logged as a warning), so caching cannot stay off unnoticed;
   - any status but 200, or a body that is not an event stream;
-  - a malformed item or an over-long line;
+  - an item it cannot read (not JSON, an unknown `type`, a missing, extra or invalid member) or an over-long line;
   - any transport error.
 - **A refused service token** (401 `service_unauthorized`, on a lookup or on the feed) is a configuration fault, not an outage. It is still answered as `core_unavailable`, so the cookie is kept. It is logged at ERROR once when it starts and once when it stops, never once per request; a 503 is logged as a warning.
 - **`health_state`** is `unknown` until the core first answers, then `ok`, `unavailable` or `service_unauthorized`. `GET /health` reports it as `session_lookup`, a member the Reader API's `Health` schema allows. A lookup without that attribute, such as the fake, adds nothing.
@@ -109,7 +109,7 @@ The adapter's own tests ([`tests/test_http_lookup.py`](tests/test_http_lookup.py
 - malformed, oversized and schema-breaking bodies, with the hand-written `Caller` and `Denied` checks cross-checked against the document;
 - a redirect, a timeout and a refused connection;
 - the request body and the token header, a token file that changes, and no token;
-- the feed: comments, unknown types, split frames, silence past the bound, heartbeats that keep it up, no `subscribed` within its bound and the resolver resubscribing, every non-200 status, malformed items, and the resolver marking it down;
+- the feed: comments, unreadable items (unknown types included, cross-checked against `RevocationItem`), split frames, silence past the bound, heartbeats that keep it up, no `subscribed` within its bound and the resolver resubscribing, every non-200 status, malformed items, and the resolver marking it down;
 - the refused-token state: ERROR once per change, and `session_lookup` in the health output;
 - that neither the token nor the cookie value appears in the logs.
 

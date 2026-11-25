@@ -13,7 +13,8 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from mecon_reader_backend.http_lookup import HttpSessionLookup, parse_caller, parse_denied
+from mecon_reader_backend.http_lookup import HttpSessionLookup, _Malformed, parse_caller, parse_denied, \
+    parse_revocation_item
 from mecon_reader_backend.ports import Caller, Denied, Revocation, Subscribed
 from mecon_reader_backend.sessions import SessionResolver
 from lookup_replay import LOOKUP
@@ -119,7 +120,9 @@ def _bad_callers():
            "empty session_ref": dict(CALLER, session_ref=""), "no offset on expires_at":
            dict(CALLER, expires_at="2030-01-15T10:00:00"), "date only": dict(CALLER, expires_at="2030-01-15"),
            "capability outside the enum": copy.deepcopy(CALLER), "empty csrf_token": dict(CALLER, csrf_token=""),
-           "display_name not a string": dict(CALLER, display_name=None)}
+           "display_name not a string": dict(CALLER, display_name=None),
+           "user_id over 128": dict(CALLER, user_id="u" * 129), "csrf_token under 16": dict(CALLER, csrf_token="t" * 15),
+           "csrf_token over 512": dict(CALLER, csrf_token="t" * 513)}
     out["extra capability"]["capabilities"]["fleets"] = "available"
     out["capability outside the enum"]["capabilities"]["send"] = "maybe"
     for k in CALLER:
@@ -153,7 +156,8 @@ def test_an_oversized_answer_is_core_unavailable(tmp_path):
 
 def test_the_caller_check_agrees_with_the_document():
     val = LOOKUP.schema_validator("Caller")
-    bodies = [CALLER, dict(CALLER, csrf_token="t"), dict(CALLER, role="instance_admin", break_glass=True)]
+    bodies = [CALLER, dict(CALLER, csrf_token="t" * 16), dict(CALLER, csrf_token="t" * 512),
+              dict(CALLER, user_id="u" * 128), dict(CALLER, role="instance_admin", break_glass=True)]
     bodies += [b for k, b in BAD_CALLERS.items() if "expires_at" not in k and "date only" not in k]
     disagreements = [(b, val.is_valid(b)) for b in bodies if val.is_valid(b) != (parse_caller(b) is not None)]
     assert not disagreements, disagreements[:2]
@@ -398,9 +402,8 @@ async def collect(tmp_path, handler, *, silence=5.0, bound=5.0, subscribe=30.0):
     return items, ended, took, app.seen
 
 
-def test_the_feed_yields_subscribed_then_revocations_and_ignores_comments_and_unknown_types(tmp_path):
-    chunks = [sse({"type": "subscribed"}), HEARTBEAT, b": another comment\n\n",
-              sse({"type": "future_kind", "x": 1}), b"event: revocation\nid: 7\n",
+def test_the_feed_yields_subscribed_then_revocations_and_skips_comments(tmp_path):
+    chunks = [sse({"type": "subscribed"}), HEARTBEAT, b": another comment\n\n", b"event: revocation\nid: 7\n",
               sse({"type": "revocation", "session_ref": "ses_synthetic_0001", "reason": "revoked"}),
               b'data: {"type":"revocation",\r\ndata: "session_ref":"ses_synthetic_0002","reason":"expired"}\r\n\r\n']
     items, ended, _, seen = run(collect(tmp_path, feed(chunks)))
@@ -445,8 +448,12 @@ def test_a_feed_that_is_not_an_event_stream_ends(tmp_path):
 
 
 @pytest.mark.parametrize("bad", [b"data: {not json\n\n", b'data: {"type":"revocation","reason":"revoked"}\n\n',
-                                 b'data: ["subscribed"]\n\n', b"data: " + b"x" * 70_000],
-                         ids=["not json", "revocation without session_ref", "not an object", "line too long"])
+                                 b'data: ["subscribed"]\n\n', b"data: " + b"x" * 70_000,
+                                 b'data: {"type":"future_kind"}\n\n',
+                                 b'data: {"type":"revocation","session_ref":"s","reason":"logged_out"}\n\n',
+                                 b'data: {"type":"revocation","session_ref":"s","reason":"revoked","x":1}\n\n'],
+                         ids=["not json", "revocation without session_ref", "not an object", "line too long",
+                              "unknown type", "reason outside the enum", "extra member"])
 def test_a_malformed_feed_item_ends_the_feed(tmp_path, bad):
     items, ended, _, _ = run(collect(tmp_path, feed([sse({"type": "subscribed"}), bad], then_silent=True)))
     assert items == [Subscribed()] and ended
@@ -618,3 +625,24 @@ def test_the_subscribe_bound_defaults_to_thirty_seconds(tmp_path):
     a = HttpSessionLookup("http://127.0.0.1:9", token_file(tmp_path), timeout_s=1.0)
     assert a.subscribe_timeout_s == 30.0 and a.health_state == "unknown"
     asyncio.run(a.aclose())
+
+
+def test_the_feed_item_check_agrees_with_the_document():
+    val = LOOKUP.schema_validator("RevocationItem")
+    items = [{"type": "subscribed"}, {"type": "subscribed", "x": 1}, {"type": "revocation"},
+             {"type": "revocation", "session_ref": "s", "reason": "revoked"},
+             {"type": "revocation", "session_ref": "s", "reason": "expired"},
+             {"type": "revocation", "session_ref": "", "reason": "revoked"},
+             {"type": "revocation", "session_ref": "s", "reason": "other"},
+             {"type": "revocation", "session_ref": 1, "reason": "revoked"},
+             {"type": "revocation", "session_ref": "s", "reason": "revoked", "x": 1},
+             {"type": "future_kind"}, {"type": 1}, {}, [], None, "subscribed"]
+
+    def readable(item):
+        try:
+            parse_revocation_item(item)
+            return True
+        except _Malformed:
+            return False
+    disagreements = [i for i in items if val.is_valid(i) != readable(i)]
+    assert not disagreements, disagreements

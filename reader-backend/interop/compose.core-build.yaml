@@ -1,0 +1,5 @@
+# Added by run.sh when CORE_DIR is set: build the core image from that path (CORE_IMAGE then names the result).
+services:
+  core:
+    build:
+      context: ${CORE_DIR:?}

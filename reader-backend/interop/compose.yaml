@@ -1,0 +1,105 @@
+# One-off interop run: a real core, the facade and the driver on one internal network, nothing published.
+# Driven by run.sh, which sets every ${...} below. The core's own settings come from CORE_ENV_FILE. All values are made up.
+name: ${INTEROP_PROJECT:-lookup-interop}
+
+x-facade-build: &facade-build
+  context: ../..
+  dockerfile: reader-backend/interop/Dockerfile
+
+x-token: &token
+  type: bind
+  source: ${INTEROP_TOKEN_FILE:?set by run.sh}
+  target: /run/interop/service_token
+  read_only: true
+
+services:
+  core:
+    image: ${CORE_IMAGE:?set CORE_IMAGE, or CORE_DIR (run.sh builds it)}
+    env_file: ${CORE_ENV_FILE:?set by run.sh}   # the core's own settings, supplied by whoever runs this
+    volumes:
+      - { <<: *token }
+      - core-data:/data   # the env file keeps the core's database under /data
+    networks: [internal]
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import sys, urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=8).status == 200 else 1)"]
+      interval: 5s
+      timeout: 10s
+      retries: 60
+      start_period: 20s
+
+  # The core's image again, running only the ops agent: it acts on the core's database through the core's own code.
+  core-ops:
+    image: ${CORE_IMAGE:?set CORE_IMAGE, or CORE_DIR (run.sh builds it)}
+    command: ["python3", "/interop/ops_agent.py"]
+    env_file: ${CORE_ENV_FILE:?set by run.sh}
+    environment:
+      CORE_OPS: /ops-impl/${CORE_OPS_FILE:?set by run.sh}
+      OPS_SOCKET: /ops/ops.sock
+    volumes:
+      - { <<: *token }
+      - core-data:/data
+      - ./:/interop:ro
+      - ${CORE_OPS_DIR:?set by run.sh}:/ops-impl:ro
+      - ops:/ops
+    depends_on:
+      core: { condition: service_healthy }
+    networks: [internal]
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import os, stat, sys; sys.exit(0 if stat.S_ISSOCK(os.stat('/ops/ops.sock').st_mode) else 1)"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  facade:
+    image: lookup-interop-facade:local
+    build: *facade-build
+    user: "${INTEROP_UID:-1000}:${INTEROP_GID:-1000}"
+    environment:
+      CORE_LOOKUP_URL: http://core:8000/internal/session-lookup/v1
+      SERVICE_TOKEN_FILE: /run/interop/service_token
+      READER_ORIGINS: https://reader.example.test
+      LOOKUP_CACHE_S: "30"      # longer than the contract's 5 s on purpose: only the feed can drop a session sooner
+    volumes:
+      - { <<: *token }
+    depends_on:
+      core: { condition: service_healthy }
+    networks: [internal]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys, urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/api/reader/v1/health', timeout=4).status == 200 else 1)"]
+      interval: 3s
+      timeout: 6s
+      retries: 20
+
+  # Idle until run.sh execs the replay in it (`python /app/reader-backend/interop/driver.py`).
+  driver:
+    image: lookup-interop-facade:local
+    build: *facade-build
+    user: "${INTEROP_UID:-1000}:${INTEROP_GID:-1000}"
+    command: ["sleep", "infinity"]
+    environment:
+      CORE_LOOKUP_URL: http://core:8000/internal/session-lookup/v1
+      SERVICE_TOKEN_FILE: /run/interop/service_token
+      FACADE_URL: http://facade:8080
+      OPS_SOCKET: /ops/ops.sock
+      REVOCATION_BOUND_S: "5"
+    volumes:
+      - { <<: *token }
+      - ops:/ops
+    depends_on:
+      core: { condition: service_healthy }
+      core-ops: { condition: service_healthy }
+      facade: { condition: service_healthy }
+    networks: [internal]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import mecon_reader_backend"]
+      interval: 3s
+      timeout: 5s
+      retries: 10
+
+networks:
+  internal:
+    internal: true   # no route out and nothing published: the cases reach the core only from inside
+
+volumes:
+  core-data: {}
+  ops: {}

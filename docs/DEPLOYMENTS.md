@@ -37,7 +37,7 @@ Reproducible images, secrets separation, TLS, local CA/mDNS guidance, backup/res
 
 | Status | What |
 |---|---|
-| **Deployed (restricted, existing `mecon.cloud` users only)** | Reader release v0.9.2: the five-tab shell (Chats / Nodes / Map / Tools / Settings), the login client, the design system and a read-only Bluetooth diagnostics page. The Reader API is routed to the existing Backend. The latest tag, v0.9.3, is build-only and is not what is served. Verified sign-in is claimed only as far as the [acceptance matrix](MVP1_ACCEPTANCE.md) records it. |
+| **Deployed (restricted, existing `mecon.cloud` users only)** | Reader release v0.9.2: the five-tab shell (Chats / Nodes / Map / Tools / Settings), the login client, the design system and a read-only Bluetooth diagnostics page. The Reader API is routed to the existing Backend. The latest tag, v0.9.3, is build-only and is not what is served. Live signed-in acceptance with test users passed (33 passed, 1 manual row skipped), as the [acceptance evidence](MVP1_ACCEPTANCE.md) records. |
 | **Implemented and deployed in the restricted Reader, awaiting acceptance** | Offline cache and leases (checked with a virtual authenticator; a real passkey on a phone is not yet verified); safe updates (checked live across five updates, v0.5.0 to v0.9.1; the case of an update banner with an unsent draft is not yet verified); USB access (the hardware acceptance session is still open). None is described as available. |
 | **Implemented, not verified live** | The Backend-path messaging client, written against a draft contract. |
 | **Simulated only** | The BLE Companion adapter, exercised through an Android Chrome profile simulation; not verified on hardware. Bluefy on iPhone/iPad still awaits real-hardware testing. |

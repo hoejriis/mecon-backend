@@ -13,7 +13,7 @@ Private code is removed only after stage 4. The core (accounts, identity, key cu
 
 | Block | Contract | 1. Published | 2. Private reference | 3. Public implementation | 4. Production |
 |---|---|---|---|---|---|
-| Reader API | [`reader-api/v1`](../contracts/reader-api/v1/openapi.yaml) | Yes: draft.11, 55 replayable cases | **Passing at draft.11**, in its own CI job (see below), with two strict expected failures | In progress: [`reader-backend/`](../reader-backend/README.md) is a facade over session-lookup and core ports; it passes the cases with fake adapters only, in its own CI job. The session-lookup HTTP adapter is merged; it has run only against fakes and a stub, and an interop run against a real core is pending | No: not deployed anywhere |
+| Reader API | [`reader-api/v1`](../contracts/reader-api/v1/openapi.yaml) | Yes: draft.11, 55 replayable cases | **Passing at draft.11**, in its own CI job (see below), with three strict expected failures and one case not applicable | In progress: [`reader-backend/`](../reader-backend/README.md) is a facade over session-lookup and core ports; it passes the cases with fake adapters only, in its own CI job. The session-lookup HTTP adapter is merged; it has run only against fakes and a stub, and an interop run against a real core is pending | No: not deployed anywhere |
 | USB Connector | [`connector/v1`](../contracts/connector/v1/README.md), [`connector-hold/v1`](../contracts/connector-hold/v1/README.md) | Yes: wire contracts and fixtures | Not applicable: there is no private Connector | [`connector/`](../connector/README.md): passes its unit, fake-device and broker integration tests; the hold contract is at draft.3 (bounded retry after the agent's own close) and no deployed Connector is claimed to run it | No |
 | Observation reads | [`observations/v1`](../contracts/observations/v1/openapi.yaml) | Schemas, fixtures and 11 replayable cases ([`cases/`](../contracts/observations/v1/cases/README.md)) | Schemas and fixtures checked; no case replay yet | **Passing**: [`reader-backend/`](../reader-backend/README.md) serves observations/v1; all 11 published cases pass, 11 of 11, none skipped, in its CI job | No |
 | Observation capture | [`observation-subscription/v1`](../contracts/observation-subscription/v1/README.md), [`raw-capture/v1`](../contracts/raw-capture/v1/README.md) | Drafts: raw capture draft.3, subscription draft.2; schemas and 10 fixtures | **Replay merged** in the private reference Backend for both (raw capture draft.3, subscription draft.2) | **Passing**: [`capture/`](../capture/README.md) replays all 10 published fixtures (raw capture A to F, subscription A to D), 10 of 10, in its own CI job | **No. Shadow trial only, no parity evidence** (see below) |
@@ -23,9 +23,17 @@ Private code is removed only after stage 4. The core (accounts, identity, key cu
 
 ## Reader API, stage 2
 
-The private Backend vendors `contracts/reader-api/v1` at draft.11 and replays each case in a dedicated CI job, which its server test gate requires. The replay has two **strict expected failures**: cases `session-15` and `session-16`. During a session-lookup outage the reference Backend answers an error (500) instead of the contract's 503 `unavailable`. The cases are marked so that the job fails once they start passing unannounced. All other draft.11 cases pass.
+The private Backend vendors `contracts/reader-api/v1` at draft.11 and replays each case in a dedicated CI job, which its server test gate requires. Its results at draft.11, 55 cases:
 
-Earlier, at draft.10, the replay found that the login request accepted unknown body fields that the contract forbids; that is fixed, and production has refused such a request with 422 since 2026-11-22. The draft.10 expected failure on private channel names (the contract makes them unique within a fleet; the private Backend still makes them unique across the instance) was recorded at draft.10 and is not re-checked in this document at draft.11.
+- **51 cases pass.**
+- **1 case is not applicable** (`leases-04`): it covers a Backend that offers no offline leases, and this one always offers them.
+- **3 cases are strict expected failures:**
+  - `session-15` and `session-16`: during a session-lookup outage the reference Backend answers an error (500) instead of the contract's 503 `unavailable`.
+  - `messaging-12`: private channel names. The contract makes them unique within a fleet, but the reference Backend still makes them unique across the instance. The decision is taken and the change is pending.
+
+Each expected failure is marked so that the job fails once the case starts passing unannounced.
+
+Earlier, at draft.10, the replay found that the login request accepted unknown body fields that the contract forbids; that is fixed, and production has refused such a request with 422 since 2026-11-22.
 
 ## Observation capture: shadow trial
 

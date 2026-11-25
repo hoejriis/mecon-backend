@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: MECON Session Lookup (facade to core)
-  version: 1.0.0-draft.2
+  version: 1.0.0-draft.3
   summary: How a public facade asks the private core who a caller is and what it may do.
   description: |
     Target specification, not a claim that any core serves it today. This
@@ -108,7 +108,10 @@ info:
     identifier: Apache-2.0
 servers:
   - url: http://core.internal
-    description: The core, on the deployment's private network only
+    description: |
+      The core, on the deployment's private network only. The base URL,
+      including any path prefix in front of `/lookup` and `/revocations`, is the
+      deployer's choice; the facade is configured with it.
 security:
   - serviceToken: []
 tags:
@@ -126,8 +129,14 @@ paths:
         Returns the `Caller` when the credential is a live session and, for a
         `write`, the origin and CSRF checks pass. Otherwise it returns a `Denied`
         with the reason. Order of checks: the service token (401), then whether
-        the core can answer at all (503), then the session, then (for `write`)
-        the origin, then the CSRF token.
+        the body is a valid `LookupRequest` (422), then whether the core can
+        answer at all (503), then the session, then (for `write`) the origin,
+        then the CSRF token.
+
+        A 422 means the facade sent a body that does not follow this contract.
+        Its answer is fixed and echoes nothing from the request (no credential,
+        no field values). The facade treats it as `core_unavailable`: it is a
+        bug to fix, not an answer about the caller.
       requestBody:
         required: true
         content:
@@ -152,6 +161,13 @@ paths:
               schema: { $ref: '#/components/schemas/ServiceError' }
               examples:
                 serviceUnauthorized: { externalValue: fixtures/service-unauthorized.json }
+        '422':
+          description: The body is not a valid LookupRequest; sent only after the service token is accepted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MalformedRequest' }
+              examples:
+                malformedRequest: { externalValue: fixtures/malformed-request.json }
         '403':
           description: Denied. The reason says what the facade does next (table above).
           content:
@@ -302,6 +318,14 @@ components:
       additionalProperties: false
       properties:
         code: { type: string, const: service_unauthorized }
+
+    MalformedRequest:
+      type: object
+      required: [code]
+      additionalProperties: false
+      description: Fixed; carries nothing from the request.
+      properties:
+        code: { type: string, const: malformed_request }
 
     RevocationItem:
       oneOf:

@@ -377,6 +377,10 @@ MUTANTS = [
        "resp = await self._client.send(req, stream=True, follow_redirects=True)")]),
     ("hc16", "a body nested past the parser's depth is not read as malformed (RecursionError escapes)", "http_core.py",
      [("    except (ValueError, RecursionError):", "    except ValueError:")]),
+    ("hc17", "schema patterns are compiled without re.ASCII (\\d matches any script's digits)", "core_schema.py",
+     [("return re.compile(_ecma_anchors(pattern), re.ASCII)", "return re.compile(_ecma_anchors(pattern))")]),
+    ("hc18", "a schema pattern's $ also matches before a final newline", "core_schema.py",
+     [('            c = r"\\Z"\n', '            c = "$"\n')]),
 ]
 
 

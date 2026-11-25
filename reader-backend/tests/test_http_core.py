@@ -632,6 +632,15 @@ def test_a_body_nested_past_the_parser_limit_is_not_json():
     assert _json(b'{"code":' * 100_000 + b"1" + b"}" * 100_000) is _NOT_JSON
 
 
+@pytest.mark.parametrize("op,status", [("listDevices", 200), ("getConversation", 404), ("startLogin", 429)])
+def test_a_deeply_nested_answer_read_without_the_outer_guard_is_core_unavailable(op, status, tmp_path):
+    """`_answer` alone, outside `_call`'s guard: the parse itself must read the body as malformed."""
+    core = HttpReaderCore("http://core.invalid", token_file(tmp_path))
+    with pytest.raises(CoreError) as e:
+        core._answer(op, status, DEEP)
+    assert (e.value.kind, e.value.code) == ("unavailable", "core_unavailable")
+
+
 def test_a_deeply_nested_answer_is_core_unavailable_on_a_2xx_and_on_a_refusal(tmp_path):
     handlers = [answer(200, DEEP), answer(404, DEEP), answer(429, DEEP), answer(201, DEEP)]
     inv = [("list_devices", (C, None, 50), {}), ("get_conversation", (C, "cnv_1"), {}),
@@ -663,3 +672,58 @@ def test_help_says_the_world_wins_over_the_core_url(tmp_path, monkeypatch, capsy
     world = CORE.root.parent.parent / "reader-api" / "v1" / "cases" / "worlds.json"
     _, _, core = build(parse(["--world", str(world)]))
     assert not isinstance(core, HttpReaderCore)
+
+
+# ---- patterns: exact, as ECMA-262 means them ----
+
+from mecon_reader_backend.core_schema import check, compiled  # noqa: E402
+
+# Every patterned property of the reader-core schemas, with a value its pattern accepts and a position whose
+# character is replaced by a non-ASCII digit (Arabic-Indic three) to make it fail.
+PATTERNED = {
+    "^[0-9a-f]{2}$": ("a3", 1),
+    "^[0-9a-f]{2,16}$": ("0f3a", 2),
+    "^[A-Za-z0-9_-]{43}$": ("A" * 20 + "3" + "b_-" + "c" * 19, 20),
+    "^1\\.[0-9]+$": ("1.3", 2),
+    "^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$": ("eyJ3.c2ln3", 3),
+}
+ARABIC_INDIC_THREE = "\u0663"
+
+
+def _patterned(schema, where, out):
+    if isinstance(schema, dict):
+        if "pattern" in schema:
+            out.append((where, schema))
+        for k, v in schema.items():
+            _patterned(v, f"{where}.{k}", out)
+    elif isinstance(schema, list):
+        for i, v in enumerate(schema):
+            _patterned(v, f"{where}[{i}]", out)
+    return out
+
+
+def test_every_patterned_schema_is_exact():
+    found = [x for name, s in SCHEMAS.items() for x in _patterned(s, name, [])]
+    assert len(found) == 6, [w for w, _ in found]
+    for where, sub in found:
+        good, pos = PATTERNED[sub["pattern"]]
+        assert check(sub, good), where
+        assert not check(sub, good + "\n"), f"{where}: a trailing newline must fail"
+        assert not check(sub, good[:pos] + ARABIC_INDIC_THREE + good[pos + 1:]), f"{where}: a non-ASCII digit"
+        ref = Draft202012Validator(sub)
+        assert ref.is_valid(good) and not ref.is_valid(good[:pos] + ARABIC_INDIC_THREE + good[pos + 1:])
+
+
+def test_a_whole_lease_with_a_trailing_newline_is_refused():
+    lease = fixture("lease-issued.json")
+    assert valid("LeaseIssued", lease)
+    assert not valid("LeaseIssued", dict(lease, lease=lease["lease"] + "\n"))
+
+
+def test_pattern_classes_are_ascii_and_dollar_is_the_end_of_input():
+    # No reader-core pattern uses \\d or \\w yet; the compiler must still read them as ECMA-262 does.
+    assert compiled(r"^\d+$").search("123") and not compiled(r"^\d+$").search("1" + ARABIC_INDIC_THREE)
+    assert not compiled(r"^\w+$").search("\u00e9t\u00e9")
+    assert not compiled(r"^ab$").search("ab\n") and compiled(r"^ab$").search("ab")
+    assert compiled(r"^a\$b$").search("a$b") and compiled(r"^[$]$").search("$")  # escaped and in a class: literal
+    assert not compiled(r"^(a$|b)c").search("a\nc")

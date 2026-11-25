@@ -7,6 +7,7 @@ variants of them.
 """
 from __future__ import annotations
 
+import functools
 import ipaddress
 import re
 from typing import Any
@@ -49,6 +50,36 @@ def _eq(a: Any, b: Any) -> bool:
     if _type_ok(a, "number") and _type_ok(b, "number"):
         return a == b
     return type(a) is type(b) and a == b
+
+
+def _ecma_anchors(pattern: str) -> str:
+    """The pattern with each `$` anchor (unescaped, outside a character class) written as `\\Z`.
+
+    JSON Schema patterns are ECMA-262 regular expressions, where `$` (no multiline flag) matches only at the end of
+    the input. Python's `$` also matches before a final newline, so "ab\\n" would pass "^ab$". Rewriting the anchor
+    keeps the pattern's own meaning everywhere, not only where `$` is its last character."""
+    out, i, in_class = [], 0, False
+    while i < len(pattern):
+        c = pattern[i]
+        if c == "\\":
+            out.append(pattern[i:i + 2])  # an escape, `\\$` included, is kept as it is
+            i += 2
+            continue
+        if in_class:
+            in_class = c != "]"
+        elif c == "[":
+            in_class = True
+        elif c == "$":
+            c = r"\Z"
+        out.append(c)
+        i += 1
+    return "".join(out)
+
+
+@functools.lru_cache(maxsize=None)
+def compiled(pattern: str) -> re.Pattern:
+    # re.ASCII: as in ECMA-262, \d, \w and \s are ASCII only (no other script's digits or letters).
+    return re.compile(_ecma_anchors(pattern), re.ASCII)
 
 
 def _format_ok(v: str, fmt: str) -> bool:
@@ -121,7 +152,7 @@ def check(schema: dict, v: Any) -> bool:
             if isinstance(v, str) and not _format_ok(v, s):
                 return False
         elif k == "pattern":
-            if isinstance(v, str) and re.search(s, v) is None:
+            if isinstance(v, str) and compiled(s).search(v) is None:
                 return False
         elif k == "uniqueItems":
             if s and isinstance(v, list) and any(_eq(v[i], v[j]) for i in range(len(v)) for j in range(i)):

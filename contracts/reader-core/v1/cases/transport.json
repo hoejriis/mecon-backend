@@ -1,5 +1,5 @@
 {
- "contract": "mecon-reader-core/1.0.0-draft.1",
+ "contract": "mecon-reader-core/1.0.0-draft.2",
  "synthetic": true,
  "group": "transport",
  "cases": [
@@ -60,7 +60,8 @@
       "body": {
        "email": "alice@example.test",
        "origin": "https://reader.example.test",
-       "sec_fetch_site": "same-origin"
+       "sec_fetch_site": "same-origin",
+       "client_address": "192.0.2.10"
       },
       "service_token": "absent"
      },
@@ -391,7 +392,45 @@
      "request": {
       "operation": "pollLogin",
       "body": {
-       "request_id": "short"
+       "request_id": "short",
+       "client_address": "192.0.2.10"
+      },
+      "invalid": true
+     },
+     "expect": {
+      "status": 422,
+      "schema": "Refusal",
+      "body": {
+       "/code": "malformed_request",
+       "/retryable": false
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "pollLogin",
+      "body": {
+       "request_id": "lr_synthetic_0001_aaaaaaaaaaaa",
+       "client_address": "not-an-ip"
+      },
+      "invalid": true
+     },
+     "expect": {
+      "status": 422,
+      "schema": "Refusal",
+      "body": {
+       "/code": "malformed_request",
+       "/retryable": false
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "startLogin",
+      "body": {
+       "email": "alice@example.test",
+       "origin": null,
+       "sec_fetch_site": "same-origin"
       },
       "invalid": true
      },
@@ -653,7 +692,8 @@
       "body": {
        "email": "alice@example.test",
        "origin": "https://reader.example.test",
-       "sec_fetch_site": "same-origin"
+       "sec_fetch_site": "same-origin",
+       "client_address": "192.0.2.10"
       }
      },
      "expect": {

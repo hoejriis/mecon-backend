@@ -43,6 +43,18 @@ export function validateReaderCore(dir = 'reader-core/v1', apiDir = 'reader-api/
     return ref ? schemas[ref.split('/').pop()] : undefined;
   };
   const responseSchema = (op, status) => resolveResponse(op.responses?.[status])?.content?.['application/json']?.schema?.$ref?.split('/').pop();
+  // A Refusal, or a schema that narrows one (allOf the Refusal plus a narrower `code`), so the replay asserts the code.
+  const isRefusal = (name) => name === 'Refusal'
+    || (schemas[name]?.allOf ?? []).some((s) => s.$ref === '#/components/schemas/Refusal');
+  // Every narrowed code must be one Refusal allows.
+  for (const [name, s] of Object.entries(schemas)) {
+    if (name === 'Refusal' || !isRefusal(name)) continue;
+    const all = new Set(schemas.Refusal.properties.code.enum);
+    for (const part of s.allOf) {
+      const c = part.properties?.code;
+      for (const v of c ? (c.enum ?? [c.const]) : []) if (!all.has(v)) fail(`${dir}: ${name} narrows code to ${v}, which Refusal does not allow`);
+    }
+  }
   const before = failures;
   let n = 0;
   for (const [path, item] of Object.entries(core.paths)) {
@@ -58,7 +70,7 @@ export function validateReaderCore(dir = 'reader-core/v1', apiDir = 'reader-api/
       }
       if (!body) { fail(`${id}: a POST takes a JSON body`); continue; }
       if (body.additionalProperties !== false) fail(`${id}: its request schema must refuse unknown members`);
-      if (responseSchema(op, '422') !== 'Refusal') fail(`${id}: takes a body, so 422 must answer Refusal`);
+      if (!isRefusal(responseSchema(op, '422'))) fail(`${id}: takes a body, so 422 must answer a Refusal`);
       const takesCaller = body.properties?.caller?.$ref === '#/components/schemas/CallerRef' && body.required?.includes('caller');
       if (NO_CALLER.has(id)) {
         if (body.properties?.caller) fail(`${id}: a pre-session operation takes no caller`);

@@ -22,11 +22,13 @@ from stub_core import read_body, respond
 
 CORE = Contract("mecon-reader-core", REPO / "contracts" / "reader-core" / "v1",
                 ("events", "leases", "reads", "send", "session", "transport"), "",
-                ("issue-session", "user-id", "end-session", "expire-session", "approve-login", "set-switch",
+                ("issue-session", "user-id", "end-session", "expire-session", "approve-login",
+                 "exhaust-login-limit", "set-switch",
                  "age-out-events", "core-degraded", "core-recovered"),
                 lambda desc: (None, None, None, {}))
 
 MALFORMED = {"code": "malformed_request", "retryable": False}
+INVALID = {"code": "invalid", "retryable": False}  # createSendAttempt: a well-formed envelope, a refused `request`
 SERVICE_UNAUTHORIZED = {"code": "service_unauthorized"}
 KIND_STATUS = {"not_found": 404, "forbidden": 403, "conflict": 409, "unavailable": 503, "invalid": 422,
                "gone": 410, "throttled": 429}
@@ -74,9 +76,10 @@ async def dispatch(core: FakeReaderCore, op: str, body: dict | None) -> tuple[in
         if op == "getHealth":
             return 200, await core.health()
         if op == "startLogin":
-            return 202, await core.start_login(b["email"], origin=b["origin"], sec_fetch_site=b["sec_fetch_site"])
+            return 202, await core.start_login(b["email"], origin=b["origin"], sec_fetch_site=b["sec_fetch_site"],
+                                               client_address=b["client_address"])
         if op == "pollLogin":
-            return 200, poll_wire(await core.poll_login(b["request_id"]))
+            return 200, poll_wire(await core.poll_login(b["request_id"], client_address=b["client_address"]))
         if op == "logout":
             await core.logout(c)
             return 204, None
@@ -133,7 +136,13 @@ class StubReaderCore:
         self.routes = {(o["method"], o["path"]): op_id for op_id, o in CORE.ops.items()}
         self.validators = {op_id: CORE.schema_validator(name) for op_id in CORE.ops
                            if (name := request_schema(op_id)) is not None}
+        self.caller_validator = CORE.schema_validator("CallerRef")
         self.served: list[tuple[str, int]] = []
+
+    def _send_envelope_ok(self, body: Any) -> bool:
+        """createSendAttempt's body is `{caller, request}` with a valid caller and an object `request`."""
+        return (isinstance(body, dict) and set(body) == {"caller", "request"}
+                and isinstance(body["request"], dict) and self.caller_validator.is_valid(body["caller"]))
 
     def _authorized(self, headers: dict[bytes, bytes]) -> bool:
         got = headers.get(b"authorization")
@@ -156,8 +165,9 @@ class StubReaderCore:
             except ValueError:
                 body = _NOT_JSON
             if body is _NOT_JSON or not self.validators[op].is_valid(body):
+                refusal = INVALID if op == "createSendAttempt" and self._send_envelope_ok(body) else MALFORMED
                 self.served.append((op, 422))
-                return await respond(send, 422, json.dumps(MALFORMED).encode())
+                return await respond(send, 422, json.dumps(refusal).encode())
         status, wire = await dispatch(self.core, op, body)
         self.served.append((op, status))
         if wire is None:

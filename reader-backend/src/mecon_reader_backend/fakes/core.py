@@ -37,11 +37,21 @@ class FakeReaderCore:
         self.tick = poll_wait_tick_s
         self.login_origins = login_origins  # None: the Reader's own origin(s), as the world records them
         self.unavailable = False  # tests flip this to model a core that cannot answer (contracts/reader-core/v1)
+        self.login_limited: set[str] = set()  # client addresses over the login limit (exhaust_login_limit)
 
     def _login_origin_allowed(self, origin: str | None, sec_fetch_site: str | None) -> bool:
         # The core's rule: a listed Origin (trailing "/" stripped) OR Sec-Fetch-Site "same-origin".
         allow = list(self.world.reader_origins) if self.login_origins is None else self.login_origins
         return (origin is not None and origin.rstrip("/") in allow) or sec_fetch_site == "same-origin"
+
+    def exhaust_login_limit(self, client_address: str) -> None:
+        """What many login starts and polls from one client address do: the next one is over the limit."""
+        self.login_limited.add(client_address)
+
+    def _login_limit(self, client_address: str) -> None:
+        if client_address in self.login_limited:
+            raise CoreError("throttled", "rate_limited", "too many login requests from this address",
+                            retry_after_s=60)
 
     def _available(self) -> None:
         if self.unavailable:
@@ -63,8 +73,10 @@ class FakeReaderCore:
         self._available()
         return {"status": "ok", "commit": None}
 
-    async def start_login(self, email: str, *, origin: str | None, sec_fetch_site: str | None) -> dict[str, Any]:
+    async def start_login(self, email: str, *, origin: str | None, sec_fetch_site: str | None,
+                          client_address: str) -> dict[str, Any]:
         self._available()
+        self._login_limit(client_address)
         w = self.world
         if not self._login_origin_allowed(origin, sec_fetch_site):
             raise CoreError("forbidden", "origin_rejected", "origin not allowed")
@@ -81,8 +93,9 @@ class FakeReaderCore:
         if r is not None and r.user is not None and r.state == "pending":
             r.state = "approved"
 
-    async def poll_login(self, request_id: str) -> LoginPoll:
+    async def poll_login(self, request_id: str, *, client_address: str) -> LoginPoll:
         self._available()
+        self._login_limit(client_address)
         w = self.world
         r = w.logins.get(request_id)
         if r is None or r.expires_at <= now():
@@ -217,18 +230,19 @@ class FakeReaderCore:
             if canonical_json(w.attempt_requests[aid]) != canonical_json(request):
                 raise CoreError("conflict", "conflict", "this attempt id was used with a different request")
             return SendResult(w.attempts[aid], created=False)
+        # A foreign or missing identity and an out-of-scope target get one answer: no existence oracle.
         ident = w.name_of("identities", request["identity_id"])
         if ident is None or ident not in u.identities or not w.identities[ident].get("can_send"):
-            raise CoreError("forbidden", "forbidden", "this identity cannot send for the caller")
+            raise CoreError("not_found")
         target = request["target"]
         if target["kind"] == "contact":
             tname = w.name_of("contacts", target["id"])
             if tname is None or tname not in w.visible_contacts(u):
-                raise CoreError("invalid", "validation_failed", "unknown target")
+                raise CoreError("not_found")
         else:
             tname = w.name_of("channels", target["id"])
             if tname is None or tname not in w.visible_channels(u):
-                raise CoreError("invalid", "validation_failed", "unknown target")
+                raise CoreError("not_found")
         conv_key = (target["kind"], ident, tname)
         if conv_key not in w.conversations:
             w.conversations[conv_key] = Conversation(conv_key, now())  # first send creates it, once

@@ -1,5 +1,5 @@
 {
- "contract": "mecon-reader-core/1.0.0-draft.1",
+ "contract": "mecon-reader-core/1.0.0-draft.2",
  "synthetic": true,
  "group": "send",
  "cases": [
@@ -978,7 +978,7 @@
   },
   {
    "id": "send-06",
-   "title": "Another user's identity is forbidden; a target outside the caller's scope is validation_failed",
+   "title": "Another user's identity, a missing identity and an out-of-scope target answer the identical 404",
    "world": "two-fleets",
    "steps": [
     {
@@ -1165,10 +1165,10 @@
       }
      },
      "expect": {
-      "status": 403,
+      "status": 404,
       "schema": "Refusal",
       "body": {
-       "/code": "forbidden",
+       "/code": "not_found",
        "/retryable": false
       }
      }
@@ -1184,6 +1184,38 @@
        "request": {
         "client_draft_id": "drf_synthetic_s06b",
         "client_attempt_id": "cat_synthetic_s06b",
+        "identity_id": "idn_synthetic_missing",
+        "target": {
+         "kind": "contact",
+         "id": "${a_peer}"
+        },
+        "content": {
+         "kind": "text",
+         "text": "hello (synthetic)"
+        }
+       }
+      }
+     },
+     "expect": {
+      "status": 404,
+      "schema": "Refusal",
+      "body": {
+       "/code": "not_found",
+       "/retryable": false
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "createSendAttempt",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       },
+       "request": {
+        "client_draft_id": "drf_synthetic_s06c",
+        "client_attempt_id": "cat_synthetic_s06c",
         "identity_id": "${a_idn}",
         "target": {
          "kind": "contact",
@@ -1197,19 +1229,79 @@
       }
      },
      "expect": {
-      "status": 422,
+      "status": 404,
       "schema": "Refusal",
       "body": {
-       "/code": "validation_failed",
+       "/code": "not_found",
        "/retryable": false
       }
+     }
+    },
+    {
+     "request": {
+      "operation": "createSendAttempt",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       },
+       "request": {
+        "client_draft_id": "drf_synthetic_s06d",
+        "client_attempt_id": "cat_synthetic_s06d",
+        "identity_id": "${a_idn}",
+        "target": {
+         "kind": "channel",
+         "id": "chn_synthetic_missing"
+        },
+        "content": {
+         "kind": "text",
+         "text": "hello (synthetic)"
+        }
+       }
+      }
+     },
+     "expect": {
+      "status": 404,
+      "schema": "Refusal",
+      "body": {
+       "/code": "not_found",
+       "/retryable": false
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "createSendAttempt",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       },
+       "request": {
+        "client_draft_id": "drf_synthetic_s06a",
+        "client_attempt_id": "cat_synthetic_s06a",
+        "identity_id": "${a_idn}",
+        "target": {
+         "kind": "contact",
+         "id": "${a_peer}"
+        },
+        "content": {
+         "kind": "text",
+         "text": "hello (synthetic)"
+        }
+       }
+      }
+     },
+     "expect": {
+      "status": 201,
+      "schema": "SendAttempt"
      }
     }
    ]
   },
   {
    "id": "send-07",
-   "title": "A first send to the shared channel creates the caller's conversation for it",
+   "title": "A send to the shared channel is accepted",
    "world": "two-fleets",
    "steps": [
     {
@@ -1317,12 +1409,36 @@
      },
      "expect": {
       "status": 201,
-      "schema": "SendAttempt"
+      "schema": "SendAttempt",
+      "body": {
+       "/client_attempt_id": "cat_synthetic_s07"
+      }
      }
+    }
+   ]
+  },
+  {
+   "id": "send-08",
+   "title": "Content or a target kind the core refuses is 422 invalid; a broken envelope is 422 malformed_request",
+   "world": "two-fleets",
+   "steps": [
+    {
+     "action": "issue-session",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "a_ref"
+    },
+    {
+     "action": "user-id",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "a_uid"
     },
     {
      "request": {
-      "operation": "listConversations",
+      "operation": "listIdentities",
       "body": {
        "caller": {
         "user_id": "${a_uid}",
@@ -1332,17 +1448,248 @@
      },
      "expect": {
       "status": 200,
-      "schema": "ConversationList",
-      "match": [
-       {
-        "at": "/items",
-        "where": {
-         "/target/id": "${a_public}",
-         "/target/kind": "channel"
-        },
-        "count": 1
+      "schema": "IdentityList"
+     },
+     "capture": {
+      "a_idn": "/items/0/id"
+     }
+    },
+    {
+     "request": {
+      "operation": "listContacts",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
        }
-      ]
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "ContactList"
+     },
+     "capture": {
+      "a_peer": {
+       "at": "/items",
+       "where": {
+        "/display_name": "Bob (synthetic)"
+       },
+       "field": "/id"
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "listChannels",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       }
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "ChannelList"
+     },
+     "capture": {
+      "a_public": {
+       "at": "/items",
+       "where": {
+        "/name": "Public (synthetic)"
+       },
+       "field": "/id"
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "createSendAttempt",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       },
+       "request": {
+        "client_draft_id": "drf_synthetic_s08",
+        "client_attempt_id": "cat_synthetic_s08",
+        "identity_id": "${a_idn}",
+        "target": {
+         "kind": "contact",
+         "id": "${a_peer}"
+        },
+        "content": {
+         "kind": "text",
+         "text": ""
+        }
+       }
+      },
+      "invalid": true
+     },
+     "expect": {
+      "status": 422,
+      "schema": "SendInvalid",
+      "body": {
+       "/code": "invalid",
+       "/retryable": false
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "createSendAttempt",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       },
+       "request": {
+        "client_draft_id": "drf_synthetic_s08",
+        "client_attempt_id": "cat_synthetic_s08",
+        "identity_id": "${a_idn}",
+        "target": {
+         "kind": "contact",
+         "id": "${a_peer}"
+        },
+        "content": {
+         "kind": "image",
+         "text": "x"
+        }
+       }
+      },
+      "invalid": true
+     },
+     "expect": {
+      "status": 422,
+      "schema": "SendInvalid",
+      "body": {
+       "/code": "invalid",
+       "/retryable": false
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "createSendAttempt",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       },
+       "request": {
+        "client_draft_id": "drf_synthetic_s08",
+        "client_attempt_id": "cat_synthetic_s08",
+        "identity_id": "${a_idn}",
+        "target": {
+         "kind": "room",
+         "id": "${a_peer}"
+        },
+        "content": {
+         "kind": "text",
+         "text": "hello (synthetic)"
+        }
+       }
+      },
+      "invalid": true
+     },
+     "expect": {
+      "status": 422,
+      "schema": "SendInvalid",
+      "body": {
+       "/code": "invalid",
+       "/retryable": false
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "createSendAttempt",
+      "body": {
+       "request": {
+        "client_draft_id": "drf_synthetic_s08",
+        "client_attempt_id": "cat_synthetic_s08",
+        "identity_id": "${a_idn}",
+        "target": {
+         "kind": "contact",
+         "id": "${a_peer}"
+        },
+        "content": {
+         "kind": "text",
+         "text": "hello (synthetic)"
+        }
+       }
+      },
+      "invalid": true
+     },
+     "expect": {
+      "status": 422,
+      "schema": "SendInvalid",
+      "body": {
+       "/code": "malformed_request",
+       "/retryable": false
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "createSendAttempt",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       },
+       "request": {
+        "client_draft_id": "drf_synthetic_s08",
+        "client_attempt_id": "cat_synthetic_s08",
+        "identity_id": "${a_idn}",
+        "target": {
+         "kind": "contact",
+         "id": "${a_peer}"
+        },
+        "content": {
+         "kind": "text",
+         "text": "hello (synthetic)"
+        }
+       },
+       "extra": 1
+      },
+      "invalid": true
+     },
+     "expect": {
+      "status": 422,
+      "schema": "SendInvalid",
+      "body": {
+       "/code": "malformed_request",
+       "/retryable": false
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "createSendAttempt",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       },
+       "request": {
+        "client_draft_id": "drf_synthetic_s08",
+        "client_attempt_id": "cat_synthetic_s08",
+        "identity_id": "${a_idn}",
+        "target": {
+         "kind": "contact",
+         "id": "${a_peer}"
+        },
+        "content": {
+         "kind": "text",
+         "text": "hello (synthetic)"
+        }
+       }
+      }
+     },
+     "expect": {
+      "status": 201,
+      "schema": "SendAttempt"
      }
     }
    ]

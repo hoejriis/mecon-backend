@@ -93,6 +93,8 @@ class CoreReplay:
             self.session(args["session_ref"]).expires_at = now() - timedelta(seconds=1)
         elif name == "approve-login":
             self.core.approve_login(args["request_id"])
+        elif name == "exhaust-login-limit":
+            self.core.exhaust_login_limit(args["client_address"])
         elif name == "set-switch":
             if args["switch"] not in ("sending", "lease_signing"):
                 raise NotApplicable(f"unknown switch {args['switch']}")

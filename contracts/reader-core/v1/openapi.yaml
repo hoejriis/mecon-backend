@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: MECON Reader Core (facade to core)
-  version: 1.0.0-draft.1
+  version: 1.0.0-draft.2
   summary: The calls the public Reader facade makes into the core behind its ReaderCore port.
   description: |
     Target specification, not a claim that any core serves it today. This
@@ -40,10 +40,14 @@ info:
        is not the deployment's token. Nothing else is read.
     2. **422 `malformed_request`**: the body is not JSON or breaks the
        operation's request schema (a missing or extra member, a `limit` outside
-       1 to 200, a `cursor` over 512 characters, a `wait_s` over 25). The body
-       is fixed, `{"code":"malformed_request","retryable":false}`, and echoes
-       nothing from the request. It is a facade bug, never an answer about the
-       caller.
+       1 to 200, a `cursor` over 512 characters, a `wait_s` over 25, a
+       `client_address` that is not an IP literal). The body is fixed,
+       `{"code":"malformed_request","retryable":false}`, and echoes nothing
+       from the request. It is a facade bug, never an answer about the caller.
+       One exception: on `createSendAttempt`, a well-formed body whose
+       `request` member breaks `SendRequest` (empty, too long or non-text
+       content, an unknown target kind) answers 422 `invalid`, the code the
+       Reader API answers for the same refusal.
     3. **503 `core_unavailable`** (`retryable: true`): the core cannot answer
        now.
     4. **403 `session_ended`**: the call carries a `caller` whose session is not
@@ -84,7 +88,7 @@ info:
     answers the Reader API's list shape: `items`, `next_cursor` (null on the
     last page) and `as_of`. History cursors never expire. A `limit` or
     `cursor` outside the schema is 422 `malformed_request`; a well-formed
-    cursor the core did not issue for that list is 422 `invalid`. Neither is
+    cursor the core cannot decode for that list is 422 `invalid`. Neither is
     clamped or read from the start.
 
     ## Sends
@@ -96,7 +100,18 @@ info:
     use the same id without meeting. When the operator has switched Reader
     sending off the answer is 403 `sending_disabled`, before anything is
     recorded. The facade checks `Idempotency-Key` against `client_attempt_id`
-    before it calls.
+    before it calls (the Reader API answers a mismatch 422 `invalid`; the core
+    never sees one).
+
+    **No existence oracle.** An identity that is not the caller's, an identity
+    that does not exist and a target the caller cannot address all answer the
+    identical 404 `{"code":"not_found","retryable":false}`. Content the core
+    refuses (empty, too long or not text, an unknown target kind) answers 422
+    `invalid`.
+
+    **Conversations.** The core lists a channel or contact conversation once
+    it holds a message in it. A send attempt alone does not guarantee that:
+    the attempt is recorded at once, the message when the core holds it.
 
     ## Events
 
@@ -104,12 +119,32 @@ info:
     events held after `cursor` that the caller may see, or waits up to
     `wait_s` (at most **25** seconds, the Reader API's heartbeat interval) for
     one, then answers with an empty list. A null `cursor` starts from now.
-    The answer's `cursor` is where the next read continues. A cursor that is
-    unknown, outside retention or not issued for this caller answers **410
-    `cursor_expired`**. Envelopes are the Reader API's `EventEnvelope`. The
+    The answer's `cursor` is where the next read continues. Cursors are
+    global positions in the core's event log, not per caller: delivery is
+    filtered per caller, and a cursor reveals only a position, so any caller
+    may present any cursor. A cursor that is unknown or outside retention
+    answers **410 `cursor_expired`**. A caller with no device and no identity
+    is not refused: as on the Reader API's `GET /events`, it is served
+    batches holding only what it may see, usually none. Envelopes are the Reader API's `EventEnvelope`. The
     core does not send `session_revoked` in a batch: a read for an ended
     session is 403 `session_ended`, and the facade frames `session_revoked`
     itself.
+
+    **Stream cap.** The facade holds the browser streams and enforces the
+    per-user cap on concurrent streams; the core sees only reads and keeps no
+    stream count.
+
+    ## Login rate limits
+
+    `startLogin` and `pollLogin` carry `client_address`, the browser's IP
+    address as the facade derives it from its own trusted-proxy
+    configuration. Every browser reaches the core through the facade's one
+    address, so the core keys its per-client login limits on
+    `client_address`, and trusts it because the call carries the service
+    token. Over a limit the core answers **429 `rate_limited`** with
+    `retry_after_s`. The facade never shows that to the browser: the Reader
+    API answers the same 202 on login start and `pending` on a poll, so a
+    limit reveals nothing about which addresses have accounts.
 
     ## Errors
 
@@ -169,8 +204,10 @@ paths:
         against its own allow-list: `origin` with one trailing `/` removed is
         listed, **or** `sec_fetch_site` is `same-origin`; otherwise 403
         `origin_rejected`. A facade pre-check is never the only check. The
-        answer is the same 202 whether or not the address has an account, and
-        over a rate limit (no account oracle, no throttling oracle).
+        answer is the same 202 whether or not the address has an account (no
+        account oracle). Over the limit for `client_address` it is 429
+        `rate_limited`, which the facade turns into the Reader API's
+        indistinguishable 202.
       requestBody:
         required: true
         content:
@@ -195,6 +232,13 @@ paths:
               examples:
                 originRejected: { externalValue: fixtures/refusal-origin-rejected.json }
         '422': { $ref: '#/components/responses/Malformed' }
+        '429':
+          description: Over the login limit for `client_address` (code `rate_limited`, with `retry_after_s`)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RateLimited' }
+              examples:
+                rateLimited: { externalValue: fixtures/refusal-rate-limited.json }
         '503': { $ref: '#/components/responses/CoreUnavailable' }
 
   /reader/login/poll:
@@ -206,8 +250,10 @@ paths:
         `approved` is answered exactly once and carries the new session's
         cookie value (`credential`) and `expires_at`; the facade sets the
         cookie and never stores the value. Later polls answer `delivered`. An
-        unknown or expired id reads `expired` (a decoy id reads like a real
-        one). Pre-session, so no caller.
+        unknown id reads as the Reader API's `GET /login/{request_id}`
+        describes; an expired one reads `expired`. Over the limit for
+        `client_address` it is 429 `rate_limited`, which the facade answers as
+        `pending`. Pre-session, so no caller.
       requestBody:
         required: true
         content:
@@ -224,6 +270,11 @@ paths:
                 approved: { externalValue: fixtures/login-poll-approved.json }
         '401': { $ref: '#/components/responses/ServiceUnauthorized' }
         '422': { $ref: '#/components/responses/Malformed' }
+        '429':
+          description: Over the login limit for `client_address` (code `rate_limited`, with `retry_after_s`)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RateLimited' }
         '503': { $ref: '#/components/responses/CoreUnavailable' }
 
   /reader/logout:
@@ -363,7 +414,7 @@ paths:
           description: Malformed (`malformed_request`) or `up_to` is not a message of this conversation (`validation_failed`)
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Refusal' }
+              schema: { $ref: '#/components/schemas/MarkReadInvalid' }
         '503': { $ref: '#/components/responses/CoreUnavailable' }
 
   /reader/messages/list:
@@ -436,11 +487,12 @@ paths:
       operationId: createSendAttempt
       summary: Create a send attempt, idempotent by client_attempt_id
       description: |
-        See "Sends" above. 403 is `session_ended`, `sending_disabled` or
-        `forbidden` (the identity cannot send for the caller). 422 is
-        `malformed_request`, or `validation_failed` for a target the caller
-        cannot address. A 5xx is ambiguous: the facade re-sends the same
-        request, never a new one.
+        See "Sends" above. 403 is `session_ended` or `sending_disabled`. 404
+        `not_found` is one answer for an identity that is not the caller's or
+        does not exist and for a target the caller cannot address. 422 is
+        `malformed_request` for a broken envelope, or `invalid` for a
+        `request` that breaks `SendRequest`. A 5xx is ambiguous: the facade
+        re-sends the same request, never a new one.
       requestBody:
         required: true
         content:
@@ -463,7 +515,7 @@ paths:
               schema: { $ref: '#/components/schemas/SendAttempt' }
         '401': { $ref: '#/components/responses/ServiceUnauthorized' }
         '403':
-          description: '`session_ended`, `sending_disabled` or `forbidden`'
+          description: '`session_ended` or `sending_disabled`'
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Refusal' }
@@ -476,11 +528,14 @@ paths:
               schema: { $ref: '#/components/schemas/Refusal' }
               examples:
                 conflict: { externalValue: fixtures/refusal-conflict.json }
+        '404': { $ref: '#/components/responses/NotFound' }
         '422':
-          description: '`malformed_request`, or `validation_failed` for a target the caller cannot address'
+          description: '`malformed_request` for a broken envelope; `invalid` for content or a target kind the core refuses'
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Refusal' }
+              schema: { $ref: '#/components/schemas/SendInvalid' }
+              examples:
+                invalidContent: { externalValue: fixtures/refusal-invalid-content.json }
         '429':
           description: Rate limited (code `throttled`, with `retry_after_s`)
           content:
@@ -536,7 +591,7 @@ paths:
         '401': { $ref: '#/components/responses/ServiceUnauthorized' }
         '403': { $ref: '#/components/responses/SessionEnded' }
         '410':
-          description: The cursor is unknown, outside retention or not this caller's (code `cursor_expired`)
+          description: The cursor is unknown or outside retention (code `cursor_expired`)
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Refusal' }
@@ -637,7 +692,7 @@ components:
       description: |
         `malformed_request` for a body outside the schema (a `limit` outside 1
         to 200, a `cursor` over 512 characters), or `invalid` for a well-formed
-        cursor the core did not issue for this list.
+        cursor the core cannot decode for this list.
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Refusal' }
@@ -780,7 +835,7 @@ components:
 
     LoginStartRequest:
       type: object
-      required: [email, origin, sec_fetch_site]
+      required: [email, origin, sec_fetch_site, client_address]
       additionalProperties: false
       properties:
         email: { type: string, format: email, maxLength: 254 }
@@ -792,13 +847,25 @@ components:
           type: [string, 'null']
           maxLength: 32
           description: The browser request's Sec-Fetch-Site header, or null when it had none.
+        client_address:
+          type: string
+          minLength: 1
+          maxLength: 64
+          anyOf: [{ format: ipv4 }, { format: ipv6 }]
+          description: The browser's IP address, an IP literal, as the facade derives it behind its trusted proxies. The core keys its login limits on it.
 
     LoginPollRequest:
       type: object
-      required: [request_id]
+      required: [request_id, client_address]
       additionalProperties: false
       properties:
         request_id: { type: string, minLength: 16, maxLength: 128 }
+        client_address:
+          type: string
+          minLength: 1
+          maxLength: 64
+          anyOf: [{ format: ipv4 }, { format: ipv6 }]
+          description: The browser's IP address, an IP literal, as the facade derives it behind its trusted proxies. The core keys its login limits on it.
 
     LoginPoll:
       type: object
@@ -829,9 +896,31 @@ components:
         code:
           type: string
           enum: [malformed_request, core_unavailable, session_ended, not_found, origin_rejected, sending_disabled,
-                 forbidden, conflict, invalid, validation_failed, cursor_expired, throttled, lease_signing_unavailable]
+                 conflict, invalid, validation_failed, cursor_expired, throttled, rate_limited,
+                 lease_signing_unavailable]
         retryable: { type: boolean }
         retry_after_s: { type: integer, minimum: 1, description: 'Only on a 429.' }
+
+    SendInvalid:
+      description: createSendAttempt's 422. `invalid` is the Reader API's code for the same refusal.
+      allOf:
+        - $ref: '#/components/schemas/Refusal'
+        - properties: { code: { enum: [malformed_request, invalid] } }
+
+    MarkReadInvalid:
+      description: markConversationRead's 422. `validation_failed` is for `up_to` only.
+      allOf:
+        - $ref: '#/components/schemas/Refusal'
+        - properties: { code: { enum: [malformed_request, validation_failed] } }
+
+    RateLimited:
+      description: Over the login limit for `client_address`.
+      allOf:
+        - $ref: '#/components/schemas/Refusal'
+        - required: [retry_after_s]
+          properties:
+            code: { const: rate_limited }
+            retryable: { const: true }
 
     ServiceError:
       type: object

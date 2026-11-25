@@ -1,5 +1,5 @@
 {
- "contract": "mecon-reader-core/1.0.0-draft.1",
+ "contract": "mecon-reader-core/1.0.0-draft.2",
  "synthetic": true,
  "group": "reads",
  "cases": [
@@ -701,7 +701,7 @@
      },
      "expect": {
       "status": 422,
-      "schema": "Refusal",
+      "schema": "MarkReadInvalid",
       "body": {
        "/code": "validation_failed",
        "/retryable": false

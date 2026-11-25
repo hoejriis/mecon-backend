@@ -2,11 +2,13 @@
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import json
 import logging
 import secrets
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+import weakref
+from datetime import datetime, timedelta, timezone
 from typing import Any, Awaitable, Callable
 
 from starlette.applications import Starlette
@@ -15,7 +17,8 @@ from starlette.responses import JSONResponse, Response, StreamingResponse
 from starlette.routing import Route
 
 from . import validation as v
-from .ports import Caller, CoreError, Denied, ObservationScope, Page, ReaderCore, ReceptionStore, SessionLookup
+from .ports import (Caller, CoreError, Denied, LoginPoll, ObservationScope, Page, ReaderCore, ReceptionStore,
+                    SessionLookup)
 from .sessions import SessionResolver
 from .sse import event_stream
 
@@ -66,6 +69,11 @@ class FacadeConfig:
     feed_down_close_s: float = 30.0  # open streams close once the revocation feed is down this long
     feed_retry_s: float = 1.0
     cookie_secure: bool = True  # never off outside a local test
+    # Proxies (addresses or CIDR networks) whose X-Forwarded-For the facade believes, to derive the browser's
+    # address for the core's per-client login limits. Empty: the connection's peer address is the client's.
+    trusted_proxies: tuple[str, ...] = ()
+    login_decoy_lifetime_s: int = 900  # the expires_at of the 202 answered when the core says rate_limited
+    max_streams_per_user: int = 5  # concurrent GET /events streams one user may hold (the facade holds them)
     extra: dict[str, Any] = field(default_factory=dict)
 
 
@@ -112,6 +120,35 @@ def login_origin_allowed(origin: str | None, sec_fetch_site: str | None, allow: 
     return (origin is not None and origin.rstrip("/") in allow) or sec_fetch_site == "same-origin"
 
 
+def _ip(s: str | None):
+    try:
+        return ipaddress.ip_address(s.strip()) if s else None
+    except ValueError:
+        return None
+
+
+def client_address(peer: str | None, forwarded_for: str | None, trusted: tuple) -> str:
+    """The browser's IP address. The peer is the client unless it is a trusted proxy; then X-Forwarded-For is read
+    from the right, past trusted proxies, and the first other address is the client. A hop that is not an IP
+    literal stops the walk at the last address known good. With no usable peer the answer is 0.0.0.0, so such
+    clients share one login limit rather than escape it."""
+    def is_trusted(a) -> bool:
+        return any(a in net for net in trusted)
+    addr = _ip(peer)
+    if addr is None:
+        return "0.0.0.0"
+    if not is_trusted(addr) or not forwarded_for:
+        return str(addr)
+    for hop in reversed(forwarded_for.split(",")):
+        a = _ip(hop)
+        if a is None:
+            break
+        addr = a
+        if not is_trusted(a):
+            break
+    return str(addr)
+
+
 def _page(p: Page) -> dict[str, Any]:
     return {"items": p.items, "next_cursor": p.next_cursor, "as_of": iso(p.as_of)}
 
@@ -121,6 +158,8 @@ def create_app(lookup: SessionLookup, core: ReaderCore, config: FacadeConfig | N
                reception_store: ReceptionStore | None = None) -> Starlette:
     """The Reader API app. Given both observation ports it also serves contracts/observations/v1."""
     cfg = config or FacadeConfig()
+    trusted = tuple(ipaddress.ip_network(n, strict=False) for n in cfg.trusted_proxies)
+    open_streams: dict[str, int] = {}  # user_id -> GET /events streams held open
     sessions = SessionResolver(lookup, cache_s=cfg.lookup_cache_s, cache_max=cfg.lookup_cache_max, timeout_s=cfg.lookup_timeout_s,
                                feed_retry_s=cfg.feed_retry_s)
 
@@ -163,6 +202,9 @@ def create_app(lookup: SessionLookup, core: ReaderCore, config: FacadeConfig | N
                 raise Refusal(401, "unauthenticated", "no valid session", clear_cookie=True) from None
             if e.code == "core_unavailable":
                 raise Refusal(503, "unavailable", "core unavailable", retryable=True) from None
+            if e.kind == "not_found" and 404 not in DECLARED[op] and 403 in DECLARED[op]:
+                # A send to an identity or target the caller cannot use: refused, never an existence oracle.
+                raise Refusal(403, "forbidden", "not permitted") from None
             status = KIND_STATUS[e.kind]
             if status not in DECLARED[op]:
                 if e.kind in ("forbidden", "not_found") and 404 in DECLARED[op]:
@@ -194,6 +236,37 @@ def create_app(lookup: SessionLookup, core: ReaderCore, config: FacadeConfig | N
         handler.__name__ = op
         return handler
 
+    def address_of(request: Request) -> str:
+        return client_address(request.client.host if request.client else None,
+                              request.headers.get("x-forwarded-for"), trusted)
+
+    def reserve_stream(user_id: str) -> Callable[[], None]:
+        """Count one GET /events stream against the user's cap; the returned release is idempotent."""
+        n = open_streams.get(user_id, 0)
+        if n >= cfg.max_streams_per_user:
+            raise Refusal(503, "too_many_streams", "too many open event streams for this user", retryable=True)
+        open_streams[user_id] = n + 1
+        done = False
+
+        def release() -> None:
+            nonlocal done
+            if done:
+                return
+            done = True
+            left = open_streams.get(user_id, 1) - 1
+            if left > 0:
+                open_streams[user_id] = left
+            else:
+                open_streams.pop(user_id, None)
+        return release
+
+    async def capped(gen, release):
+        try:
+            async for chunk in gen:
+                yield chunk
+        finally:
+            release()
+
     def ok(body: Any, status: int = 200) -> Response:
         return JSONResponse(body, status_code=status)
 
@@ -222,15 +295,32 @@ def create_app(lookup: SessionLookup, core: ReaderCore, config: FacadeConfig | N
                 request.headers.get("origin"), request.headers.get("sec-fetch-site"), cfg.reader_origins):
             raise Refusal(403, "origin_rejected", "origin not allowed")
         body = v.login_request(await json_body(request))
-        started = await call_core("startLogin", core.start_login(
-            body["email"], origin=request.headers.get("origin"), sec_fetch_site=request.headers.get("sec-fetch-site")))
-        return ok(started, 202)
+
+        async def start() -> dict[str, Any]:
+            try:
+                return await core.start_login(body["email"], origin=request.headers.get("origin"),
+                                              sec_fetch_site=request.headers.get("sec-fetch-site"),
+                                              client_address=address_of(request))
+            except CoreError as e:
+                if e.kind != "throttled":
+                    raise
+                # Over the core's limit for this address: the same 202, no mail (no throttling oracle).
+                expires = datetime.now(timezone.utc) + timedelta(seconds=cfg.login_decoy_lifetime_s)
+                return {"request_id": secrets.token_urlsafe(24), "poll_after_ms": 2000, "expires_at": iso(expires)}
+        return ok(await call_core("startLogin", start()), 202)
 
     async def poll_login(request: Request) -> Response:
         rid = request.path_params["request_id"]
         if not v.login_request_id(rid):
             return ok({"state": "expired"})  # malformed ids read expired at once
-        poll = await call_core("pollLogin", core.poll_login(rid))
+        async def poll_once():
+            try:
+                return await core.poll_login(rid, client_address=address_of(request))
+            except CoreError as e:
+                if e.kind != "throttled":
+                    raise
+                return LoginPoll("pending", poll_after_ms=2000)  # over the limit reads pending (no oracle)
+        poll = await call_core("pollLogin", poll_once())
         body: dict[str, Any] = {"state": poll.state}
         if poll.poll_after_ms is not None:
             body["poll_after_ms"] = poll.poll_after_ms
@@ -316,9 +406,15 @@ def create_app(lookup: SessionLookup, core: ReaderCore, config: FacadeConfig | N
         header = request.headers.get("last-event-id")
         cursor = header if header is not None else request.query_params.get("cursor")
         v.cursor_param(cursor)
-        first = await call_core("streamEvents", core.read_events(c, cursor, 0.0))
-        gen = event_stream(core, sessions, c, first, heartbeat_s=cfg.heartbeat_s,
-                           feed_down_close_s=cfg.feed_down_close_s)
+        release = reserve_stream(c.user_id)
+        try:
+            first = await call_core("streamEvents", core.read_events(c, cursor, 0.0))
+        except BaseException:
+            release()
+            raise
+        gen = capped(event_stream(core, sessions, c, first, heartbeat_s=cfg.heartbeat_s,
+                                  feed_down_close_s=cfg.feed_down_close_s), release)
+        weakref.finalize(gen, release)  # a stream whose body never started still frees its place
         return StreamingResponse(gen, media_type="text/event-stream",
                                  headers=_base_headers() | {"X-Accel-Buffering": "no"})
 

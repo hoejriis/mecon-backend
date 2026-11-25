@@ -21,7 +21,8 @@ CASE_IDS = [c["id"] for _, c in CASES]
 NOT_APPLICABLE = {
     "http": {},
     "fake": {"transport-01": FAKE_NO_TOKEN, "transport-02": FAKE_NO_TOKEN, "transport-03": FAKE_NO_SCHEMA,
-             "transport-04": FAKE_NO_TOKEN, "transport-05": FAKE_NO_SCHEMA},
+             "transport-04": FAKE_NO_TOKEN, "transport-05": FAKE_NO_SCHEMA,
+             "send-08": FAKE_NO_SCHEMA},
 }
 
 

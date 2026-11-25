@@ -17,6 +17,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--name", default="two-fleets", help="which world of the file")
     p.add_argument("--port", type=int, default=8787)
     p.add_argument("--origin", default="http://127.0.0.1:8787", help="the Reader origin to allow")
+    p.add_argument("--trusted-proxy", action="append", default=[],
+                   help="an address or CIDR whose X-Forwarded-For is believed (repeatable)")
     args = p.parse_args(argv)
 
     import uvicorn
@@ -28,7 +30,8 @@ def main(argv: list[str] | None = None) -> int:
         desc = json.load(f)["worlds"][args.name]
     world, lookup, core = build(desc)
     world.reader_origins = (args.origin,)
-    app = create_app(lookup, core, FacadeConfig(reader_origins=(args.origin,)))
+    app = create_app(lookup, core, FacadeConfig(reader_origins=(args.origin,),
+                                                  trusted_proxies=tuple(args.trusted_proxy)))
     print(f"fake world {args.name!r}: synthetic data only; logins are approved out of band", file=sys.stderr)
     uvicorn.run(app, host="127.0.0.1", port=args.port, log_level="info")
     return 0

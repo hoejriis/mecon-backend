@@ -1,5 +1,5 @@
 {
- "contract": "mecon-reader-core/1.0.0-draft.1",
+ "contract": "mecon-reader-core/1.0.0-draft.2",
  "synthetic": true,
  "actions": {
   "issue-session": {
@@ -32,6 +32,12 @@
    ],
    "description": "Open the login link of this pending request, as its recipient would (out of band)."
   },
+  "exhaust-login-limit": {
+   "args": [
+    "client_address"
+   ],
+   "description": "Use up the core's login limit for this client address, as many login starts and polls from it would, so the next login start or poll from it is over the limit."
+  },
   "set-switch": {
    "args": [
     "switch",
@@ -58,7 +64,7 @@
    "origin_allow_list": [
     "https://reader.example.test"
    ],
-   "description": "Two users in two fleets that share nothing private: a device and an identity each, private direct messages each, one channel shared by both fleets and one private channel per fleet. Every name, key prefix, origin and address is made up. Each case starts from a fresh copy with both switches on. Ids (users, sessions, devices, conversations, attempts) are the core's own: a case captures every id it uses and assumes none.",
+   "description": "Two users in two fleets that share nothing private (alice and carol: a device and an identity each, private direct messages each, one channel shared by both fleets and one private channel per fleet), and dora, in alice's fleet, with no device and no identity. Every name, key prefix, origin and address is made up. Each case starts from a fresh copy with both switches on. Ids (users, sessions, devices, conversations, attempts) are the core's own: a case captures every id it uses and assumes none.",
    "fleets": [
     "north",
     "south"
@@ -85,6 +91,13 @@
      "identities": [
       "carol_id"
      ]
+    },
+    "dora": {
+     "email": "dora@example.test",
+     "display_name": "Dora (synthetic)",
+     "fleet": "north",
+     "devices": [],
+     "identities": []
     }
    },
    "devices": {

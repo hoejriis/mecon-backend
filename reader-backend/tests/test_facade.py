@@ -1,5 +1,6 @@
 """The facade's own rules, tested apart from the published cases."""
 import asyncio
+import json
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 
@@ -552,7 +553,8 @@ def test_the_core_applies_the_login_origin_rule_on_its_own(origin, sfs, accepted
     async def go():
         rig, calls = _login_rig(precheck=False)
         r = await _post_login(rig, origin, sfs)
-        assert calls == [{"origin": origin, "sec_fetch_site": sfs}]  # every request reached the core
+        # every request reached the core, with the client's address (the test transport's peer)
+        assert calls == [{"origin": origin, "sec_fetch_site": sfs, "client_address": "127.0.0.1"}]
         if accepted:
             assert r.status_code == 202 and len(rig.world.logins) == 1
         else:
@@ -568,7 +570,7 @@ def test_the_facade_precheck_applies_the_same_rule(origin, sfs, accepted):
         r = await _post_login(rig, origin, sfs)
         if accepted:
             assert r.status_code == 202, r.text  # the pre-check never refuses what the core accepts
-            assert calls == [{"origin": origin, "sec_fetch_site": sfs}]
+            assert calls == [{"origin": origin, "sec_fetch_site": sfs, "client_address": "127.0.0.1"}]
         else:
             assert_error(r, 403, "origin_rejected", False)
             assert calls == []  # refused by the facade, before the core
@@ -656,3 +658,119 @@ def test_a_feed_revocation_closes_the_stream_while_the_core_still_answers():
         frames = parse_sse(raw)
         assert frames and frames[-1]["kind"] == "session_revoked"
     run(go())
+
+
+# ---- login limits per client address (contracts/reader-core/v1: client_address, 429 rate_limited) ----
+
+@pytest.mark.parametrize("peer,xff,trusted,want", [
+    ("198.51.100.7", None, (), "198.51.100.7"),
+    ("198.51.100.7", "203.0.113.9", (), "198.51.100.7"),  # an untrusted peer's header is ignored
+    ("10.0.0.2", "203.0.113.9", ("10.0.0.0/8",), "203.0.113.9"),
+    ("10.0.0.2", "192.0.2.66, 203.0.113.9, 10.0.0.5", ("10.0.0.0/8",), "203.0.113.9"),  # rightmost untrusted
+    ("10.0.0.2", "10.0.0.7, 10.0.0.5", ("10.0.0.0/8",), "10.0.0.7"),  # all trusted: the leftmost seen
+    ("10.0.0.2", "203.0.113.9, junk", ("10.0.0.0/8",), "10.0.0.2"),  # a hop that is no IP stops the walk
+    ("2001:db8::2", "2001:db8:1::9", ("2001:db8::/48",), "2001:db8:1::9"),
+    ("testclient", "203.0.113.9", ("10.0.0.0/8",), "0.0.0.0"),
+    (None, None, (), "0.0.0.0"),
+])
+def test_the_client_address_believes_only_trusted_proxies(peer, xff, trusted, want):
+    import ipaddress
+    from mecon_reader_backend.app import client_address
+    nets = tuple(ipaddress.ip_network(n) for n in trusted)
+    assert client_address(peer, xff, nets) == want
+
+
+def _recording_login(rig):
+    calls = []
+    start, poll = rig.core.start_login, rig.core.poll_login
+
+    async def rec_start(email, **kw):
+        calls.append(("start", kw["client_address"]))
+        return await start(email, **kw)
+
+    async def rec_poll(rid, **kw):
+        calls.append(("poll", kw["client_address"]))
+        return await poll(rid, **kw)
+    rig.core.start_login, rig.core.poll_login = rec_start, rec_poll
+    return calls
+
+
+@pytest.mark.parametrize("trusted,want", [((), "127.0.0.1"), (("127.0.0.1",), "203.0.113.9")])
+def test_login_passes_the_derived_client_address(trusted, want):
+    async def go():
+        rig = Rig(trusted_proxies=trusted)
+        calls = _recording_login(rig)
+        async with rig.client() as c:
+            r = await c.post(PREFIX + "/login", json={"email": "alice@example.test"},
+                             headers={"X-Forwarded-For": "203.0.113.9"})
+            assert r.status_code == 202
+            await c.get(PREFIX + "/login/" + r.json()["request_id"], headers={"X-Forwarded-For": "203.0.113.9"})
+        assert calls == [("start", want), ("poll", want)]
+    run(go())
+
+
+def test_a_core_login_limit_is_answered_as_an_ordinary_202_and_pending():
+    async def go():
+        rig = Rig()
+        async with rig.client() as c:
+            r = await c.post(PREFIX + "/login", json={"email": "alice@example.test"})
+            assert r.status_code == 202
+            rid = r.json()["request_id"]
+            rig.core.exhaust_login_limit("127.0.0.1")
+            r2 = await c.post(PREFIX + "/login", json={"email": "alice@example.test"})
+            assert r2.status_code == 202, r2.text  # no throttling oracle
+            assert not list(schema_validator("LoginStarted").iter_errors(r2.json()))
+            assert set(r2.json()) == set(r.json())
+            assert r2.json()["request_id"] not in rig.world.logins  # nothing started, no mail
+            p = await c.get(PREFIX + "/login/" + rid)
+            assert p.status_code == 200 and p.json()["state"] == "pending"
+    run(go())
+
+
+def test_a_send_to_an_identity_the_core_does_not_show_is_403_forbidden():
+    """The core answers one 404 for a foreign or missing identity; the browser gets a definite 403, never 503."""
+    async def go():
+        rig = Rig()
+        async with rig.client("alice") as c:
+            token = await rig.csrf(c)
+            body = {"client_draft_id": "drf_x", "client_attempt_id": "att_x", "identity_id": "idn_synthetic_missing",
+                    "target": {"kind": "contact", "id": "cnt_synthetic_missing"},
+                    "content": {"kind": "text", "text": "x"}}
+            r = await c.post(PREFIX + "/send-attempts", json=body,
+                             headers={"X-CSRF-Token": token, "Idempotency-Key": "att_x"})
+            assert_error(r, 403, "forbidden", False)
+    run(go())
+
+
+# ---- the per-user cap on concurrent event streams (the facade's, since it holds them) ----
+
+def test_the_stream_cap_is_per_user_and_frees_on_close():
+    async def go():
+        rig = Rig(heartbeat_s=0.2, max_streams_per_user=2)
+        async with rig.client("carol"):
+            pass
+        carol = await _open_stream(rig)
+        async with rig.client("alice") as c:
+            alice = await _open_stream(rig)
+            held = [asyncio.ensure_future(asgi_get_stream(rig.app, PREFIX + "/events", alice, bound_s=1.0,
+                                                          until_heartbeat=False)) for _ in range(2)]
+            await asyncio.sleep(0.3)
+            # Bounded, so a missing cap fails here instead of hanging on an endless stream.
+            status, hdrs, raw, _ = await asgi_get_stream(rig.app, PREFIX + "/events", alice, bound_s=1.0,
+                                                         until_heartbeat=False)
+            assert status == 503, (status, raw[:200])
+            body = json.loads(raw)
+            assert body["code"] == "too_many_streams" and body["retryable"] is True
+            status, _, _ = await asgi_get_stream(rig.app, PREFIX + "/events", carol, bound_s=1.0,
+                                                 until_heartbeat=True)
+            assert status == 200  # another user's streams do not count
+            for h in held:
+                assert (await h)[0] == 200
+            status, _, _ = await asgi_get_stream(rig.app, PREFIX + "/events", alice, bound_s=1.0,
+                                                 until_heartbeat=True)
+            assert status == 200  # the closed streams freed their places
+    run(go())
+
+
+def test_the_stream_cap_defaults_to_five():
+    assert FacadeConfig().max_streams_per_user == 5

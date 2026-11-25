@@ -232,4 +232,35 @@ test.describe('offline cache and lease (Backend simulated)', () => {
     await expect(page.getByText(SECRET_TEXT)).toHaveCount(0);
     expect(apiResponses).toBe(0);
   });
+
+  // Cold start: the tab is closed and a NEW page opens while offline (as a closed and reopened browser tab),
+  // instead of reloading the same page. The session cookie stays in the context; GET /session fails as a network error.
+  for (const start of ['/', '/chats', '/settings', '/index.html']) {
+    test(`cold start offline at ${start}: a new page in the same context shows "Unlock with passkey"`, async ({ page, context }) => {
+      const be = await signedInAndCached(page, context);
+      // The worker controlled the page that set the lease up (it claims on activation), and holds the shell.
+      expect(await page.evaluate(() => navigator.serviceWorker.controller !== null)).toBe(true);
+      await page.close();
+      be.down = true;
+      await context.setOffline(true);
+      const fresh = await context.newPage();
+      const resp = await fresh.goto(`${ORIGIN}${start}`);
+      expect(resp?.fromServiceWorker()).toBe(true); // the navigation was answered by the worker, not the network
+      await expect(fresh.getByRole('button', { name: 'Unlock with passkey' })).toBeVisible({ timeout: 10_000 });
+      await expect(fresh.getByText('Demo Peer')).toHaveCount(0);
+    });
+  }
+
+  // A hung request: the Backend read never answers (no route, half-up network), so fetch neither fails nor succeeds.
+  for (const onLine of [false, true]) {
+    test(`cold start where GET /session never answers (navigator.onLine ${onLine}): "Unlock with passkey" is visible within 12 s`, async ({ page, context }) => {
+      await signedInAndCached(page, context);
+      await page.close();
+      const fresh = await context.newPage();
+      await fresh.addInitScript((v) => Object.defineProperty(Navigator.prototype, 'onLine', { get: () => v, configurable: true }), onLine);
+      await fresh.route('**/api/reader/v1/session', () => undefined); // held open, never answered
+      await fresh.goto(`${ORIGIN}/`);
+      await expect(fresh.getByRole('button', { name: 'Unlock with passkey' })).toBeVisible({ timeout: 12_000 });
+    });
+  }
 });

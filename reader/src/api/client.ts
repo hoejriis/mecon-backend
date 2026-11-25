@@ -98,7 +98,7 @@ export interface ApiClient {
   getHealth(): Promise<Health>;
   startLogin(email: string): Promise<LoginStarted>;
   pollLogin(requestId: string): Promise<LoginState>;
-  getSession(): Promise<Session>;
+  getSession(opts?: { signal?: AbortSignal }): Promise<Session>;
   logout(): Promise<void>;
   listDevices(): Promise<DeviceList>;
   // M2 (draft) operations. Each throws CapabilityError without a request unless
@@ -205,11 +205,12 @@ export function createApiClient(opts: ApiClientOptions = {}): ApiClient {
     return (await res.json()) as T;
   }
 
-  async function getSession(): Promise<Session> {
+  async function getSession(o: { signal?: AbortSignal } = {}): Promise<Session> {
     const session = await json<Session>('/session', {
       method: 'GET',
       headers: { Accept: 'application/json' },
       cache: 'no-store',
+      ...(o.signal ? { signal: o.signal } : {}),
     });
     csrfToken = session.csrf_token;
     capabilities = session.capabilities;

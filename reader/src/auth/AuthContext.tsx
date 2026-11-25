@@ -29,6 +29,8 @@ export const SESSION_RETRY_FIRST_MS = 5000;
 export const SESSION_RETRY_MAX_MS = 60_000;
 export const sessionRetryDelay = (failures: number): number =>
   Math.min(SESSION_RETRY_FIRST_MS * 2 ** Math.max(failures - 1, 0), SESSION_RETRY_MAX_MS);
+/** The app-start session read gives up after this long: a request that hangs (no route, half-up network) counts as unreachable. */
+export const SESSION_READ_TIMEOUT_MS = 8000;
 const UNREACHABLE_COPY = 'Could not reach the Backend. Check your connection and reload.';
 
 export interface AuthValue {
@@ -106,7 +108,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // A logout still owed: never adopt the session that cookie names; the logout effect settles it.
       for (; !logoutPendingRef.current; ) {
         try {
-          const s = await api.getSession();
+          const readCtl = new AbortController();
+          const timer = setTimeout(() => readCtl.abort(), SESSION_READ_TIMEOUT_MS);
+          let s: Session;
+          try {
+            s = await api.getSession({ signal: readCtl.signal });
+          } finally {
+            clearTimeout(timer);
+          }
           if (signal.aborted) return;
           if (logoutPendingRef.current) break;
           clearPending();

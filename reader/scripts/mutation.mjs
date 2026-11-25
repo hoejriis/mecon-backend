@@ -27,6 +27,7 @@ const T = {
   gate: ['src/offline', 'src/device', 'src/messaging'],
   probe: ['src/device'],
   ble: ['src/ble/adapter.test.ts'],
+  cold: ['src/test/coldStart.test.tsx'],
 };
 
 /** @type {Array<{id:string, description:string, file:string, edits:Array<[string,string]>, tests:string[]}>} */
@@ -153,6 +154,11 @@ const MUTANTS = [
       ["      timer = setTimeout(() => {\n        console.warn(`[reader] response_timeout: no answer to ${op} within ${timeoutMs} ms`);\n        fail(new BleError('response_timeout', `no answer to ${op}`));\n      }, timeoutMs);\n      return await answer;", "      return await answer;"]] },
   { id: 'tmr7', description: 'request() does not bound its writes', file: 'src/device/session.ts', tests: T.device,
     edits: [["              wt = setTimeout(() => {\n                console.warn(`[reader] write_timeout during", "              wt = setTimeout(() => {\n                if (true as boolean) return;\n                console.warn(`[reader] write_timeout during"]] },
+  // Cold start with a hung session read
+  { id: 'cold1', description: 'the app-start session read has no timeout', file: 'src/auth/AuthContext.tsx', tests: T.cold,
+    edits: [["setTimeout(() => readCtl.abort(), SESSION_READ_TIMEOUT_MS)", "setTimeout(() => undefined, SESSION_READ_TIMEOUT_MS)"]] },
+  { id: 'cold2', description: 'offline at start waits for the session read instead of showing the offline screen', file: 'src/App.tsx', tests: T.cold,
+    edits: [["const offlineAtStart = status === 'loading' && !navigator.onLine;", "const offlineAtStart = false as boolean;"]] },
 ];
 
 // ---------------------------------------------------------------------------------------------

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: MECON Session Lookup (facade to core)
-  version: 1.0.0-draft.1
+  version: 1.0.0-draft.2
   summary: How a public facade asks the private core who a caller is and what it may do.
   description: |
     Target specification, not a claim that any core serves it today. This
@@ -79,6 +79,12 @@ info:
     for each session that ended, with its `session_ref` and `reason` (`expired`
     or `revoked`).
 
+    A core sends only well-formed items. A facade that receives one it cannot
+    read (not JSON, an unknown `type`, a missing or invalid member) treats the
+    feed as broken: it ends the subscription, stops caching as for a feed that is
+    down, and subscribes again. It never skips the item and carries on, since a
+    skipped item could be a revocation.
+
     The facade, on a revocation for a session that holds an open stream, sends
     that API's revocation frame and closes the stream. The frame is per API:
     `session_revoked` on the Reader API, `access_revoked` on the observation API.
@@ -119,8 +125,9 @@ paths:
       description: |
         Returns the `Caller` when the credential is a live session and, for a
         `write`, the origin and CSRF checks pass. Otherwise it returns a `Denied`
-        with the reason. Order of checks: the service token, then the session,
-        then (for `write`) the origin, then the CSRF token.
+        with the reason. Order of checks: the service token (401), then whether
+        the core can answer at all (503), then the session, then (for `write`)
+        the origin, then the CSRF token.
       requestBody:
         required: true
         content:
@@ -239,6 +246,7 @@ components:
         user_id:
           type: string
           minLength: 1
+          maxLength: 128
           description: Opaque.
         session_ref:
           type: string
@@ -266,8 +274,9 @@ components:
           format: date-time
         csrf_token:
           type: string
-          minLength: 1
-          description: 'Present only on a lookup with `purpose: session`; absent otherwise.'
+          minLength: 16
+          maxLength: 512
+          description: 'Present only on a lookup with `purpose: session`; absent otherwise. At least 16 characters: it guards writes.'
 
     Denied:
       type: object

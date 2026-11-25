@@ -148,6 +148,9 @@ const MUTANTS = [
     edits: [["this.writeTimeoutMs, 'write_timeout',", "this.writeTimeoutMs, 'response_timeout',"]] },
   { id: 'tmr5', description: 'the response timeout logs nothing', file: 'src/ble/adapter.ts', tests: T.ble,
     edits: [["          console.warn(`[reader] response_timeout: no answer to ${op} within ${this.responseTimeoutMs} ms`);\n", ""]] },
+  { id: 'tmr6', description: 'request() starts its reply timer before the writes (the old behaviour)', file: 'src/device/session.ts', tests: T.device,
+    edits: [["    try {\n      for (const f of encodeMeconFrames(1, buildRequest(id, op as 'hello', args))) await t.write(f);", "    timer = setTimeout(() => fail(new BleError('response_timeout', `no answer to ${op}`)), timeoutMs);\n    try {\n      for (const f of encodeMeconFrames(1, buildRequest(id, op as 'hello', args))) await t.write(f);"],
+      ["      timer = setTimeout(() => {\n        console.warn(`[reader] response_timeout: no answer to ${op} within ${timeoutMs} ms`);\n        fail(new BleError('response_timeout', `no answer to ${op}`));\n      }, timeoutMs);\n      return await answer;", "      return await answer;"]] },
 ];
 
 // ---------------------------------------------------------------------------------------------

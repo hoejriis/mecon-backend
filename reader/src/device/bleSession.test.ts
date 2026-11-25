@@ -191,6 +191,33 @@ describe(`${S}: link trust (read-only on an unknown link)`, () => {
     expect(ifaceOps(r.mock)).toEqual(['hello', 'hello', 'status.get']);
   });
 
+  /** Replaces the session's transport write: it resolves after writeMs, and the device sees the frame replyAfterMs after that. */
+  const slowWrite = (r: ReturnType<typeof bleRig>, writeMs: number, replyAfterMs: number) => {
+    const t = (r.session as unknown as { adapterTransport: { write(f: Uint8Array): Promise<void> } }).adapterTransport;
+    const real = t.write.bind(t);
+    t.write = async (f: Uint8Array) => {
+      await new Promise((res) => setTimeout(res, writeMs));
+      setTimeout(() => void real(f), replyAfterMs);
+    };
+  };
+
+  it('request: a write that takes longer than the request timeout, then a prompt reply, succeeds', async () => {
+    const r = bleRig(MECON);
+    await r.session.connect();
+    slowWrite(r, 250, 5);
+    expect(await r.session.request('status.get', 100)).toMatchObject({ status: 'ok' });
+  });
+
+  it('request: a reply later than the timeout after the write fails, naming the op', async () => {
+    const r = bleRig(MECON);
+    await r.session.connect();
+    slowWrite(r, 20, 400);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    await expect(r.session.request('status.get', 100)).rejects.toMatchObject({ code: 'response_timeout', message: 'no answer to status.get' });
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+  });
+
   it('a read the device did not list is gated on capabilities, not sent', async () => {
     const r = bleRig({ ...MECON, capabilities: ['hello'] });
     await r.session.connect();

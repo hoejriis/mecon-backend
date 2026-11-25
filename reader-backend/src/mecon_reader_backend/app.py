@@ -138,12 +138,11 @@ def create_app(lookup: SessionLookup, core: ReaderCore, config: FacadeConfig | N
         credential = request.cookies.get(COOKIE)
         if not credential:
             raise Refusal(401, "unauthenticated", "no session")
-        if purpose == "write":
-            answer = await sessions.resolve(credential, "write",
-                                            csrf_token=request.headers.get("x-csrf-token"),
-                                            origin=request.headers.get("origin"))
-        else:
-            answer = await sessions.resolve(credential, purpose)
+        # Every lookup carries the request's Origin and Sec-Fetch-Site; a write also carries its CSRF token.
+        answer = await sessions.resolve(credential, purpose,
+                                        csrf_token=request.headers.get("x-csrf-token") if purpose == "write" else None,
+                                        origin=request.headers.get("origin"),
+                                        sec_fetch_site=request.headers.get("sec-fetch-site"))
         if isinstance(answer, Denied):
             raise refuse_denial(answer)
         return answer
@@ -232,7 +231,7 @@ def create_app(lookup: SessionLookup, core: ReaderCore, config: FacadeConfig | N
         return resp
 
     async def get_session(request: Request) -> Response:
-        c = await authenticate(request, "read")
+        c = await authenticate(request, "session")
         return ok({"user": {"id": c.user_id, "display_name": c.display_name},
                    "capabilities": dict(c.capabilities), "contract_version": cfg.contract_version,
                    "csrf_token": c.csrf_token, "expires_at": iso(c.expires_at)})

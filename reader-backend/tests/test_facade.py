@@ -55,13 +55,13 @@ class Recording:
     """Wraps a lookup and records every resolve call."""
 
     def __init__(self, inner):
-        self.inner, self.calls = inner, []
+        self.inner, self.calls, self.extra = inner, [], []
 
-    async def resolve(self, credential, purpose, *, csrf_token=None, origin=None):
+    async def resolve(self, credential, purpose, *, csrf_token=None, origin=None, sec_fetch_site=None):
         self.calls.append({"purpose": purpose, "csrf_token": csrf_token, "origin": origin})
-        if purpose == "write":
-            return await self.inner.resolve(credential, purpose, csrf_token=csrf_token, origin=origin)
-        return await self.inner.resolve(credential, purpose)
+        self.extra.append({"purpose": purpose, "sec_fetch_site": sec_fetch_site, "origin": origin})
+        return await self.inner.resolve(credential, purpose, csrf_token=csrf_token, origin=origin,
+                                        sec_fetch_site=sec_fetch_site)
 
     def revocations(self):
         return self.inner.revocations()
@@ -207,6 +207,8 @@ def test_reads_are_cached_briefly_and_dropped_on_logout():
             assert len(reads) == 1  # the second read came from the cache
             assert (await c.post(PREFIX + "/logout", headers={"X-CSRF-Token": token})).status_code == 204
             c.cookies.set(COOKIE, rig.session.credential, domain="reader.example.test", path="/")
+            # A plain read goes through the read cache: only a dropped entry makes it ask the lookup and get 401.
+            assert_error(await c.get(PREFIX + "/devices"), 401, "unauthenticated")
             assert_error(await c.get(PREFIX + "/session"), 401, "unauthenticated")
     run(go())
 

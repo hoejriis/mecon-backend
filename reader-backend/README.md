@@ -22,7 +22,7 @@ A public implementation of the Reader API ([`contracts/reader-api/v1`](../contra
 
 [`ports.py`](src/mecon_reader_backend/ports.py) defines both ports as `typing.Protocol`s.
 
-- **`SessionLookup.resolve(credential, purpose, csrf_token=, origin=)`** returns a `Caller` or a `Denied`. `purpose` is `read`, `write` or `stream`. On a write the lookup checks the CSRF token and the Origin and may deny with `csrf_failed` or `origin_rejected` (both 403). A `Caller` carries:
+- **`SessionLookup.resolve(credential, purpose, csrf_token=, origin=, sec_fetch_site=)`** returns a `Caller` or a `Denied`, as the session lookup contract's `POST /lookup` does. `purpose` is `read`, `write`, `stream` or `session` (the read that serves `GET /session`). Every lookup carries the request's Origin and Sec-Fetch-Site. On a write the lookup checks the CSRF token and the Origin rule (an allow-listed Origin, or `Sec-Fetch-Site: same-origin`) and may deny with `csrf_failed` or `origin_rejected` (both 403). The `Caller` carries the CSRF token only on a `session` lookup; that lookup fails closed (503) if the token does not come back, and never answers from a cached `Caller` without one. A `Caller` carries:
   - `session_ref` (the core's stored session reference, a hash, never the cookie value), `user_id` and `display_name`;
   - `role` (`instance_admin` or `user`) and `break_glass`;
   - `capabilities`, which the facade passes through as `GET /session` reports them;

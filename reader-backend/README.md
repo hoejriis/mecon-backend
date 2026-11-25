@@ -1,6 +1,6 @@
 # MECON Reader backend (facade)
 
-A public implementation of the Reader API ([`contracts/reader-api/v1`](../contracts/reader-api/v1/openapi.yaml)): a Starlette app that serves the HTTP side of the contract and hands everything else to a core through two ports. It also serves the authorized observation projection ([`contracts/observations/v1`](../contracts/observations/v1/openapi.yaml), see below). It is groundwork. There are no real adapters for the session and core ports yet, it is not deployed anywhere, and nothing in production depends on it.
+A public implementation of the Reader API ([`contracts/reader-api/v1`](../contracts/reader-api/v1/openapi.yaml)): a Starlette app that serves the HTTP side of the contract and hands everything else to a core through two ports. It also serves the authorized observation projection ([`contracts/observations/v1`](../contracts/observations/v1/openapi.yaml), see below). It is groundwork. The session port has one real adapter, an HTTP client for the session lookup contract ([`contracts/session-lookup/v1`](../contracts/session-lookup/v1/openapi.yaml), see below), which no run command wires in yet. The core port has no real adapter. The facade is not deployed anywhere, and nothing in production depends on it.
 
 ## What the facade owns
 
@@ -52,6 +52,23 @@ Read answers are cached for at most `lookup_cache_s` (5 s), never past the calle
 - **The stream** sends `id:` = `event_id` and one `ObservationEvent` per `data:` line, the held backlog first, then a heartbeat comment at least every `heartbeat_s` (25 s by default) while idle. `Last-Event-ID` wins over `?cursor=`. A malformed, foreign or out-of-retention cursor is 410 `cursor_expired` before the stream starts. When the session is revoked it sends one `access_revoked` and closes; when a read finds the cursor gone it sends `resync_required` and closes. The control events' ids are never cursors, so resuming from one is a 410.
 - List and snapshot answers carry `Cache-Control: no-store`.
 
+## HTTP session lookup adapter
+
+[`http_lookup.py`](src/mecon_reader_backend/http_lookup.py) implements the `SessionLookup` port over HTTP, as the session lookup contract describes it: `HttpSessionLookup(base_url, token_file, timeout_s=, feed_silence_s=50)`.
+
+- **The service token** is read from `token_file` (the deployment's mode-600 file) by path, again whenever the file changes, and sent as `Authorization: Bearer` on every request. It is never logged and never shown in a repr. A missing or empty file makes every lookup `core_unavailable` without a request.
+- **`resolve`** sends `POST {base}/lookup` with `credential`, `purpose`, `origin` and `sec_fetch_site`, plus `csrf_token` on a write. A value past its schema bound is never sent: an over-long Origin or Sec-Fetch-Site goes as absent, which never accepts what the core would refuse, and an over-long CSRF token is left out (`csrf_failed`). A credential that is empty or longer than 4096 characters is `unknown` without asking.
+- **The answer** is mapped by status:
+  - 200 is a `Caller` only if it matches the contract's schema exactly: every required member, no extra member (so no scope can slip in), and an RFC 3339 `expires_at` with an offset.
+  - 403 is a `Denied` only with one of its five reasons and `retryable: false`.
+  - Everything else is `core_unavailable`, so the cookie is kept: 503, 401 `service_unauthorized`, any other status, a redirect (never followed), a timeout (`timeout_s` bounds the whole lookup), a refused connection, a body that is not JSON or breaks the schema, or one over 64 KiB.
+- **`revocations`** reads `GET {base}/revocations` as server-sent events. It yields `Subscribed` and `Revocation(session_ref, reason)` and skips comment lines (the heartbeat) and item types it does not know. It ends, so the resolver counts the feed down, caches nothing and reconnects after `feed_retry_s`, in these cases:
+  - no bytes for `feed_silence_s`, heartbeats included;
+  - any status but 200, or a body that is not an event stream;
+  - a malformed item or an over-long line;
+  - any transport error.
+- **The client** is httpx with explicit timeouts. It ignores proxy settings from the environment, because the core is on the deployment's private network, over plain HTTP.
+
 ## Fake adapters
 
 [`fakes/`](src/mecon_reader_backend/fakes/) builds an in-memory world from a `worlds.json` description and implements both ports over it: users, fleets, devices, identities, contacts, channels, messages, read marks, the two switches, send attempts, events and their retention, and Ed25519 lease keys that can be rotated and revoked. A lease is signed as `LeaseToken` describes. The fakes exist for the tests and for poking at the API locally. They are not an implementation of the core.
@@ -61,8 +78,8 @@ Read answers are cached for at most `lookup_cache_s` (5 s), never past the calle
 ```sh
 cd reader-backend
 pip install --require-hashes --no-deps -r requirements-dev.lock
-python -m pytest -q                 # Reader API and observation cases, facade rules, SQLite store, guards, validator cross-check
-python scripts/mutation.py          # mutants on the facade's own rules and the observation scope filters; every one must be killed
+python -m pytest -q                 # Reader API, observation and session lookup cases, facade and adapter rules, SQLite store, guards
+python scripts/mutation.py          # mutants on the facade's own rules, the observation scope filters and the HTTP lookup adapter; every one must be killed
 PYTHONPATH=src python -m mecon_reader_backend --world ../contracts/reader-api/v1/cases/worlds.json --port 8787 --origin http://127.0.0.1:8787
 ```
 
@@ -77,6 +94,22 @@ The `reader-backend` workflow replays every published case from `contracts/reade
 - a cross-check of the hand-written validators against the OpenAPI schemas;
 - a self-test showing that the runner fails a case whose expectation is not met;
 - the mutation check.
+
+It also replays every session lookup case from `contracts/session-lookup/v1/cases`, read in place, on two targets. One pytest item runs per case and target. A case that does not apply is skipped with its reason, never counted as passed, and a guard fails if a case is skipped without being listed or listed and then run.
+
+- **`http`**: a stub core ([`tests/stub_core.py`](tests/stub_core.py)) on a loopback socket, which serves the contract over the fake world. Each request is sent raw, as the case writes it, and the answer is checked against the case. Each lookup is then sent through `HttpSessionLookup`, which must send exactly the case's body with the service token and map the answer to the same meaning. With an absent or wrong token, the adapter must answer `core_unavailable` and its feed must end with no item. All 20 cases run here.
+- **`fake`**: `FakeSessionLookup` called directly, so the fake the facade's own tests use is known to follow the contract. The three service token cases are not applicable, because the fake has no HTTP surface.
+
+The adapter's own tests ([`tests/test_http_lookup.py`](tests/test_http_lookup.py)) cover:
+
+- every status;
+- malformed, oversized and schema-breaking bodies, with the hand-written `Caller` and `Denied` checks cross-checked against the document;
+- a redirect, a timeout and a refused connection;
+- the request body and the token header, a token file that changes, and no token;
+- the feed: comments, unknown types, split frames, silence past the bound, heartbeats that keep it up, every non-200 status, malformed items, and the resolver marking it down;
+- that neither the token nor the cookie value appears in the logs.
+
+This proves the adapter against a stub that serves the contract, not against a real core. No real core has served these cases to this adapter, so CI does not prove the adapter and a core agree on anything the cases leave open, and it does not prove the adapter's behaviour under real network faults beyond a loopback socket.
 
 The observation cases do not cover a stream's `access_revoked` while open, `resync_required`, the heartbeat or the freshness states; this package's own tests do, but the cases do not pin them for another implementation.
 

@@ -1,6 +1,7 @@
 """Local run with the fake adapters only: `python -m mecon_reader_backend --world <worlds.json>`.
 
-There are no real adapters yet, so this serves a synthetic in-memory world on the loopback address.
+It wires in no real adapter (the HTTP session lookup adapter is not used here), so it serves a synthetic
+in-memory world on the loopback address.
 It is for poking at the API by hand, never for deployment.
 """
 from __future__ import annotations

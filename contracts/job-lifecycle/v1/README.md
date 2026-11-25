@@ -203,3 +203,13 @@ A Backend replaying these fixtures supplies its own storage, transport and clock
 - **A `duplicate` is treated as done** instead of read.
 - **The posture change.** One settings op is signed again after a `replay` even when it may have run.
 - **`unknown-job` for a confirmed job.** A job the device had confirmed is failed only after two `unknown-job` answers; the contract ends it `unknown` on the first.
+- **Late results after it gave up.** A device event for a job it already abandoned as unanswered still moves that job, where the contract ignores and counts it.
+- **An `unknown-job` answer leaves the request open.** With one open request per device as its only exclusion, the device then takes no other signed request until the abandon deadline.
+- **No expiry bound.** A job that cannot be dispatched has no `expires_at`, so it ends `failed` at the abandon deadline instead of `refused` or `expired`.
+- **Answers a job cannot have are applied.** A message state on a job op, or `acked` on a channel message, is recorded where the contract ignores and counts it.
+- **Events from a device that left the fleet are dropped.** The contract keeps them for the creator, without their data.
+- **A cancel while another request is open** is refused outright, where the contract records it and sends it once the device is free.
+- **Dispositions.** It keeps the first transmission time but not a count of transmissions, and a returning broker session resends every pending request, so a request never stays unaccepted by the broker.
+- **Late transmissions of a stopped origin.** In a multi-gateway send, a Repeater's `transmitted` reported more than 300 s after the acknowledgement stopped scheduling, or a Companion's after it was given up at 120 s, is not counted.
+
+These gaps are replayed as expected failures in that Backend's own CI, each held per fixture case, so a fix shows up there.

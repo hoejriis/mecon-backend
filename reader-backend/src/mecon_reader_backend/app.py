@@ -202,6 +202,12 @@ def create_app(lookup: SessionLookup, core: ReaderCore, config: FacadeConfig | N
                 body["status"] = "degraded"
         except Exception:  # noqa: BLE001 - the facade is up; the core is not
             body = {"status": "degraded", "commit": None}
+        # A lookup adapter that tracks its state (HttpSessionLookup) reports it; Health allows extra members.
+        # /health is unauthenticated, so only unknown, ok or unavailable: a refused service token (a configuration
+        # fault, logged at ERROR by the adapter) shows here as unavailable and is never named.
+        lookup_state = getattr(lookup, "health_state", None)
+        if isinstance(lookup_state, str):
+            body["session_lookup"] = lookup_state if lookup_state in ("unknown", "ok") else "unavailable"
         return ok(body)
 
     async def start_login(request: Request) -> Response:

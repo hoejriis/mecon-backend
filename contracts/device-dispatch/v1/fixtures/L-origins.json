@@ -1,0 +1,1765 @@
+{
+ "fixture": "L",
+ "title": "Origin rules for a multi-gateway send of a packet with fixed bytes",
+ "kind": "origin",
+ "contract_version": "1.0.0-draft.1",
+ "runs": [
+  {
+   "note": "The Companion first; no transmission within 120 s, so a Repeater; rounds continue until every eligible gateway has heard or transmitted the packet",
+   "setup": {
+    "start": "2026-01-01T00:00:00Z",
+    "message_kind": "direct",
+    "packet_fixed": true,
+    "window_s": 12,
+    "companion_timeout_s": 120,
+    "lifetime_s": 600,
+    "order": [
+     "comp",
+     "rep_2",
+     "rep_1",
+     "rep_3"
+    ],
+    "gateways": {
+     "comp": {
+      "kind": "companion",
+      "connected": true,
+      "capable": true,
+      "eligible": true,
+      "reachable": true,
+      "authorized": true,
+      "heard": false
+     },
+     "rep_1": {
+      "kind": "repeater",
+      "connected": false,
+      "capable": false,
+      "eligible": true,
+      "reachable": true,
+      "authorized": true,
+      "heard": false
+     },
+     "rep_2": {
+      "kind": "repeater",
+      "connected": false,
+      "capable": false,
+      "eligible": true,
+      "reachable": true,
+      "authorized": true,
+      "heard": false
+     },
+     "rep_3": {
+      "kind": "repeater",
+      "connected": false,
+      "capable": false,
+      "eligible": true,
+      "reachable": true,
+      "authorized": true,
+      "heard": false
+     }
+    }
+   },
+   "steps": [
+    {
+     "step": "start",
+     "t": 0,
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": null,
+        "transmitted_at": null
+       }
+      ],
+      "next_round_at": "2026-01-01T00:02:00Z",
+      "scheduled": [
+       "comp"
+      ],
+      "cancel_sent": [],
+      "cancel_given_up": [],
+      "closed": null,
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "result",
+     "t": 1,
+     "gateway": "comp",
+     "status": "queued",
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": "queued",
+        "transmitted_at": null
+       }
+      ],
+      "next_round_at": "2026-01-01T00:02:00Z",
+      "scheduled": [],
+      "cancel_sent": [],
+      "cancel_given_up": [],
+      "closed": null,
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "result",
+     "t": 5,
+     "gateway": "comp",
+     "status": "duty-held",
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": "duty-held",
+        "transmitted_at": null
+       }
+      ],
+      "next_round_at": "2026-01-01T00:02:00Z",
+      "scheduled": [],
+      "cancel_sent": [],
+      "cancel_given_up": [],
+      "closed": null,
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "tick",
+     "t": 119,
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": "duty-held",
+        "transmitted_at": null
+       }
+      ],
+      "next_round_at": "2026-01-01T00:02:00Z",
+      "scheduled": [],
+      "cancel_sent": [],
+      "cancel_given_up": [],
+      "closed": null,
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "tick",
+     "t": 120,
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": "duty-held",
+        "transmitted_at": null
+       },
+       {
+        "gateway": "rep_2",
+        "result": null,
+        "transmitted_at": null
+       }
+      ],
+      "next_round_at": null,
+      "scheduled": [
+       "rep_2"
+      ],
+      "cancel_sent": [],
+      "cancel_given_up": [],
+      "closed": null,
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "result",
+     "t": 130,
+     "gateway": "rep_2",
+     "status": "transmitted",
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": "duty-held",
+        "transmitted_at": null
+       },
+       {
+        "gateway": "rep_2",
+        "result": "transmitted",
+        "transmitted_at": "2026-01-01T00:02:10Z"
+       }
+      ],
+      "next_round_at": "2026-01-01T00:02:22Z",
+      "scheduled": [],
+      "cancel_sent": [],
+      "cancel_given_up": [],
+      "closed": null,
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "heard",
+     "t": 135,
+     "gateway": "rep_1",
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": "duty-held",
+        "transmitted_at": null
+       },
+       {
+        "gateway": "rep_2",
+        "result": "transmitted",
+        "transmitted_at": "2026-01-01T00:02:10Z"
+       }
+      ],
+      "next_round_at": "2026-01-01T00:02:22Z",
+      "scheduled": [],
+      "cancel_sent": [],
+      "cancel_given_up": [],
+      "closed": null,
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "tick",
+     "t": 141,
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": "duty-held",
+        "transmitted_at": null
+       },
+       {
+        "gateway": "rep_2",
+        "result": "transmitted",
+        "transmitted_at": "2026-01-01T00:02:10Z"
+       }
+      ],
+      "next_round_at": "2026-01-01T00:02:22Z",
+      "scheduled": [],
+      "cancel_sent": [],
+      "cancel_given_up": [],
+      "closed": null,
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "tick",
+     "t": 142,
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": "duty-held",
+        "transmitted_at": null
+       },
+       {
+        "gateway": "rep_2",
+        "result": "transmitted",
+        "transmitted_at": "2026-01-01T00:02:10Z"
+       },
+       {
+        "gateway": "rep_3",
+        "result": null,
+        "transmitted_at": null
+       }
+      ],
+      "next_round_at": null,
+      "scheduled": [
+       "rep_3"
+      ],
+      "cancel_sent": [],
+      "cancel_given_up": [],
+      "closed": null,
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "result",
+     "t": 150,
+     "gateway": "rep_3",
+     "status": "transmitted",
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": "duty-held",
+        "transmitted_at": null
+       },
+       {
+        "gateway": "rep_2",
+        "result": "transmitted",
+        "transmitted_at": "2026-01-01T00:02:10Z"
+       },
+       {
+        "gateway": "rep_3",
+        "result": "transmitted",
+        "transmitted_at": "2026-01-01T00:02:30Z"
+       }
+      ],
+      "next_round_at": "2026-01-01T00:02:42Z",
+      "scheduled": [],
+      "cancel_sent": [],
+      "cancel_given_up": [],
+      "closed": null,
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "tick",
+     "t": 162,
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": "duty-held",
+        "transmitted_at": null
+       },
+       {
+        "gateway": "rep_2",
+        "result": "transmitted",
+        "transmitted_at": "2026-01-01T00:02:10Z"
+       },
+       {
+        "gateway": "rep_3",
+        "result": "transmitted",
+        "transmitted_at": "2026-01-01T00:02:30Z"
+       }
+      ],
+      "next_round_at": null,
+      "scheduled": [],
+      "cancel_sent": [],
+      "cancel_given_up": [],
+      "closed": "no_candidates",
+      "ignored_results": 0
+     }
+    }
+   ]
+  },
+  {
+   "note": "The Companion transmits: the window opens and the next round picks a gateway; a native ACK stops scheduling and cancels only Repeater origins still dispatched; a refused cancel is retried for up to 300 s and then given up",
+   "setup": {
+    "start": "2026-01-01T00:00:00Z",
+    "message_kind": "direct",
+    "packet_fixed": true,
+    "window_s": 12,
+    "companion_timeout_s": 120,
+    "lifetime_s": 600,
+    "order": [
+     "comp",
+     "rep_1",
+     "rep_2",
+     "rep_3"
+    ],
+    "gateways": {
+     "comp": {
+      "kind": "companion",
+      "connected": true,
+      "capable": true,
+      "eligible": true,
+      "reachable": true,
+      "authorized": true,
+      "heard": false
+     },
+     "rep_1": {
+      "kind": "repeater",
+      "connected": false,
+      "capable": false,
+      "eligible": true,
+      "reachable": true,
+      "authorized": true,
+      "heard": false
+     },
+     "rep_2": {
+      "kind": "repeater",
+      "connected": false,
+      "capable": false,
+      "eligible": true,
+      "reachable": true,
+      "authorized": true,
+      "heard": false
+     },
+     "rep_3": {
+      "kind": "repeater",
+      "connected": false,
+      "capable": false,
+      "eligible": true,
+      "reachable": true,
+      "authorized": true,
+      "heard": false
+     }
+    }
+   },
+   "steps": [
+    {
+     "step": "start",
+     "t": 0,
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": null,
+        "transmitted_at": null
+       }
+      ],
+      "next_round_at": "2026-01-01T00:02:00Z",
+      "scheduled": [
+       "comp"
+      ],
+      "cancel_sent": [],
+      "cancel_given_up": [],
+      "closed": null,
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "result",
+     "t": 2,
+     "gateway": "comp",
+     "status": "transmitted",
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": "transmitted",
+        "transmitted_at": "2026-01-01T00:00:02Z"
+       }
+      ],
+      "next_round_at": "2026-01-01T00:00:14Z",
+      "scheduled": [],
+      "cancel_sent": [],
+      "cancel_given_up": [],
+      "closed": null,
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "tick",
+     "t": 13,
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": "transmitted",
+        "transmitted_at": "2026-01-01T00:00:02Z"
+       }
+      ],
+      "next_round_at": "2026-01-01T00:00:14Z",
+      "scheduled": [],
+      "cancel_sent": [],
+      "cancel_given_up": [],
+      "closed": null,
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "tick",
+     "t": 14,
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": "transmitted",
+        "transmitted_at": "2026-01-01T00:00:02Z"
+       },
+       {
+        "gateway": "rep_1",
+        "result": null,
+        "transmitted_at": null
+       }
+      ],
+      "next_round_at": null,
+      "scheduled": [
+       "rep_1"
+      ],
+      "cancel_sent": [],
+      "cancel_given_up": [],
+      "closed": null,
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "result",
+     "t": 15,
+     "gateway": "rep_1",
+     "status": "queued",
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": "transmitted",
+        "transmitted_at": "2026-01-01T00:00:02Z"
+       },
+       {
+        "gateway": "rep_1",
+        "result": "queued",
+        "transmitted_at": null
+       }
+      ],
+      "next_round_at": null,
+      "scheduled": [],
+      "cancel_sent": [],
+      "cancel_given_up": [],
+      "closed": null,
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "native_ack",
+     "t": 16,
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": "transmitted",
+        "transmitted_at": "2026-01-01T00:00:02Z"
+       },
+       {
+        "gateway": "rep_1",
+        "result": "queued",
+        "transmitted_at": null
+       }
+      ],
+      "next_round_at": null,
+      "scheduled": [],
+      "cancel_sent": [
+       "rep_1"
+      ],
+      "cancel_given_up": [],
+      "closed": "native_ack",
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "cancel_result",
+     "t": 20,
+     "gateway": "rep_1",
+     "accepted": false,
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": "transmitted",
+        "transmitted_at": "2026-01-01T00:00:02Z"
+       },
+       {
+        "gateway": "rep_1",
+        "result": "queued",
+        "transmitted_at": null
+       }
+      ],
+      "next_round_at": null,
+      "scheduled": [],
+      "cancel_sent": [
+       "rep_1"
+      ],
+      "cancel_given_up": [],
+      "closed": "native_ack",
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "cancel_result",
+     "t": 317,
+     "gateway": "rep_1",
+     "accepted": false,
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": "transmitted",
+        "transmitted_at": "2026-01-01T00:00:02Z"
+       },
+       {
+        "gateway": "rep_1",
+        "result": "queued",
+        "transmitted_at": null
+       }
+      ],
+      "next_round_at": null,
+      "scheduled": [],
+      "cancel_sent": [],
+      "cancel_given_up": [
+       "rep_1"
+      ],
+      "closed": "native_ack",
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "result",
+     "t": 330,
+     "gateway": "rep_1",
+     "status": "transmitted",
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": "transmitted",
+        "transmitted_at": "2026-01-01T00:00:02Z"
+       },
+       {
+        "gateway": "rep_1",
+        "result": "transmitted",
+        "transmitted_at": "2026-01-01T00:05:30Z"
+       }
+      ],
+      "next_round_at": null,
+      "scheduled": [],
+      "cancel_sent": [],
+      "cancel_given_up": [],
+      "closed": "native_ack",
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "tick",
+     "t": 340,
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": "transmitted",
+        "transmitted_at": "2026-01-01T00:00:02Z"
+       },
+       {
+        "gateway": "rep_1",
+        "result": "transmitted",
+        "transmitted_at": "2026-01-01T00:05:30Z"
+       }
+      ],
+      "next_round_at": null,
+      "scheduled": [],
+      "cancel_sent": [],
+      "cancel_given_up": [],
+      "closed": "native_ack",
+      "ignored_results": 0
+     }
+    }
+   ]
+  },
+  {
+   "note": "The Companion is never cancelled; a Repeater whose cancel was accepted and which then reports transmitted counts as transmitted",
+   "setup": {
+    "start": "2026-01-01T00:00:00Z",
+    "message_kind": "direct",
+    "packet_fixed": true,
+    "window_s": 12,
+    "companion_timeout_s": 120,
+    "lifetime_s": 600,
+    "order": [
+     "comp",
+     "rep_1",
+     "rep_2",
+     "rep_3"
+    ],
+    "gateways": {
+     "comp": {
+      "kind": "companion",
+      "connected": true,
+      "capable": true,
+      "eligible": true,
+      "reachable": true,
+      "authorized": true,
+      "heard": false
+     },
+     "rep_1": {
+      "kind": "repeater",
+      "connected": false,
+      "capable": false,
+      "eligible": true,
+      "reachable": true,
+      "authorized": true,
+      "heard": false
+     },
+     "rep_2": {
+      "kind": "repeater",
+      "connected": false,
+      "capable": false,
+      "eligible": true,
+      "reachable": true,
+      "authorized": true,
+      "heard": false
+     },
+     "rep_3": {
+      "kind": "repeater",
+      "connected": false,
+      "capable": false,
+      "eligible": true,
+      "reachable": true,
+      "authorized": true,
+      "heard": false
+     }
+    }
+   },
+   "steps": [
+    {
+     "step": "start",
+     "t": 0,
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": null,
+        "transmitted_at": null
+       }
+      ],
+      "next_round_at": "2026-01-01T00:02:00Z",
+      "scheduled": [
+       "comp"
+      ],
+      "cancel_sent": [],
+      "cancel_given_up": [],
+      "closed": null,
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "result",
+     "t": 1,
+     "gateway": "comp",
+     "status": "queued",
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": "queued",
+        "transmitted_at": null
+       }
+      ],
+      "next_round_at": "2026-01-01T00:02:00Z",
+      "scheduled": [],
+      "cancel_sent": [],
+      "cancel_given_up": [],
+      "closed": null,
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "tick",
+     "t": 120,
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": "queued",
+        "transmitted_at": null
+       },
+       {
+        "gateway": "rep_1",
+        "result": null,
+        "transmitted_at": null
+       }
+      ],
+      "next_round_at": null,
+      "scheduled": [
+       "rep_1"
+      ],
+      "cancel_sent": [],
+      "cancel_given_up": [],
+      "closed": null,
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "result",
+     "t": 121,
+     "gateway": "rep_1",
+     "status": "queued",
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": "queued",
+        "transmitted_at": null
+       },
+       {
+        "gateway": "rep_1",
+        "result": "queued",
+        "transmitted_at": null
+       }
+      ],
+      "next_round_at": null,
+      "scheduled": [],
+      "cancel_sent": [],
+      "cancel_given_up": [],
+      "closed": null,
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "native_ack",
+     "t": 125,
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": "queued",
+        "transmitted_at": null
+       },
+       {
+        "gateway": "rep_1",
+        "result": "queued",
+        "transmitted_at": null
+       }
+      ],
+      "next_round_at": null,
+      "scheduled": [],
+      "cancel_sent": [
+       "rep_1"
+      ],
+      "cancel_given_up": [],
+      "closed": "native_ack",
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "cancel_result",
+     "t": 126,
+     "gateway": "rep_1",
+     "accepted": true,
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": "queued",
+        "transmitted_at": null
+       },
+       {
+        "gateway": "rep_1",
+        "result": "cancelled",
+        "transmitted_at": null
+       }
+      ],
+      "next_round_at": null,
+      "scheduled": [],
+      "cancel_sent": [],
+      "cancel_given_up": [],
+      "closed": "native_ack",
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "result",
+     "t": 130,
+     "gateway": "rep_1",
+     "status": "transmitted",
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": "queued",
+        "transmitted_at": null
+       },
+       {
+        "gateway": "rep_1",
+        "result": "transmitted",
+        "transmitted_at": "2026-01-01T00:02:10Z"
+       }
+      ],
+      "next_round_at": null,
+      "scheduled": [],
+      "cancel_sent": [],
+      "cancel_given_up": [],
+      "closed": "native_ack",
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "result",
+     "t": 131,
+     "gateway": "comp",
+     "status": "transmitted",
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": "transmitted",
+        "transmitted_at": "2026-01-01T00:02:11Z"
+       },
+       {
+        "gateway": "rep_1",
+        "result": "transmitted",
+        "transmitted_at": "2026-01-01T00:02:10Z"
+       }
+      ],
+      "next_round_at": null,
+      "scheduled": [],
+      "cancel_sent": [],
+      "cancel_given_up": [],
+      "closed": "native_ack",
+      "ignored_results": 0
+     }
+    }
+   ]
+  },
+  {
+   "note": "A Repeater that expires its own hold after 60 s reports expired, and the next round starts at once",
+   "setup": {
+    "start": "2026-01-01T00:00:00Z",
+    "message_kind": "channel",
+    "packet_fixed": true,
+    "window_s": 12,
+    "companion_timeout_s": 120,
+    "lifetime_s": 600,
+    "order": [
+     "comp",
+     "rep_1",
+     "rep_2"
+    ],
+    "gateways": {
+     "comp": {
+      "kind": "companion",
+      "connected": false,
+      "capable": true,
+      "eligible": true,
+      "reachable": true,
+      "authorized": true,
+      "heard": false
+     },
+     "rep_1": {
+      "kind": "repeater",
+      "connected": false,
+      "capable": false,
+      "eligible": true,
+      "reachable": true,
+      "authorized": true,
+      "heard": false
+     },
+     "rep_2": {
+      "kind": "repeater",
+      "connected": false,
+      "capable": false,
+      "eligible": true,
+      "reachable": true,
+      "authorized": true,
+      "heard": false
+     }
+    }
+   },
+   "steps": [
+    {
+     "step": "start",
+     "t": 0,
+     "expect": {
+      "origins": [
+       {
+        "gateway": "rep_1",
+        "result": null,
+        "transmitted_at": null
+       }
+      ],
+      "next_round_at": null,
+      "scheduled": [
+       "rep_1"
+      ],
+      "cancel_sent": [],
+      "cancel_given_up": [],
+      "closed": null,
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "result",
+     "t": 1,
+     "gateway": "rep_1",
+     "status": "queued",
+     "expect": {
+      "origins": [
+       {
+        "gateway": "rep_1",
+        "result": "queued",
+        "transmitted_at": null
+       }
+      ],
+      "next_round_at": null,
+      "scheduled": [],
+      "cancel_sent": [],
+      "cancel_given_up": [],
+      "closed": null,
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "tick",
+     "t": 59,
+     "expect": {
+      "origins": [
+       {
+        "gateway": "rep_1",
+        "result": "queued",
+        "transmitted_at": null
+       }
+      ],
+      "next_round_at": null,
+      "scheduled": [],
+      "cancel_sent": [],
+      "cancel_given_up": [],
+      "closed": null,
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "result",
+     "t": 61,
+     "gateway": "rep_1",
+     "status": "expired",
+     "expect": {
+      "origins": [
+       {
+        "gateway": "rep_1",
+        "result": "expired",
+        "transmitted_at": null
+       },
+       {
+        "gateway": "rep_2",
+        "result": null,
+        "transmitted_at": null
+       }
+      ],
+      "next_round_at": null,
+      "scheduled": [
+       "rep_2"
+      ],
+      "cancel_sent": [],
+      "cancel_given_up": [],
+      "closed": null,
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "result",
+     "t": 70,
+     "gateway": "rep_2",
+     "status": "transmitted",
+     "expect": {
+      "origins": [
+       {
+        "gateway": "rep_1",
+        "result": "expired",
+        "transmitted_at": null
+       },
+       {
+        "gateway": "rep_2",
+        "result": "transmitted",
+        "transmitted_at": "2026-01-01T00:01:10Z"
+       }
+      ],
+      "next_round_at": "2026-01-01T00:01:22Z",
+      "scheduled": [],
+      "cancel_sent": [],
+      "cancel_given_up": [],
+      "closed": null,
+      "ignored_results": 0
+     }
+    }
+   ]
+  },
+  {
+   "note": "A channel message: no Companion connected, so a Repeater; an ACK on a channel is ignored; an origin that is not an origin is ignored; a gateway no longer authorised is skipped",
+   "setup": {
+    "start": "2026-01-01T00:00:00Z",
+    "message_kind": "channel",
+    "packet_fixed": true,
+    "window_s": 12,
+    "companion_timeout_s": 120,
+    "lifetime_s": 600,
+    "order": [
+     "comp",
+     "rep_2",
+     "rep_1",
+     "rep_3"
+    ],
+    "gateways": {
+     "comp": {
+      "kind": "companion",
+      "connected": false,
+      "capable": true,
+      "eligible": true,
+      "reachable": true,
+      "authorized": true,
+      "heard": false
+     },
+     "rep_1": {
+      "kind": "repeater",
+      "connected": false,
+      "capable": false,
+      "eligible": true,
+      "reachable": true,
+      "authorized": true,
+      "heard": false
+     },
+     "rep_2": {
+      "kind": "repeater",
+      "connected": false,
+      "capable": false,
+      "eligible": true,
+      "reachable": true,
+      "authorized": true,
+      "heard": false
+     },
+     "rep_3": {
+      "kind": "repeater",
+      "connected": false,
+      "capable": false,
+      "eligible": true,
+      "reachable": true,
+      "authorized": true,
+      "heard": false
+     }
+    }
+   },
+   "steps": [
+    {
+     "step": "start",
+     "t": 0,
+     "expect": {
+      "origins": [
+       {
+        "gateway": "rep_2",
+        "result": null,
+        "transmitted_at": null
+       }
+      ],
+      "next_round_at": null,
+      "scheduled": [
+       "rep_2"
+      ],
+      "cancel_sent": [],
+      "cancel_given_up": [],
+      "closed": null,
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "result",
+     "t": 3,
+     "gateway": "rep_2",
+     "status": "transmitted",
+     "expect": {
+      "origins": [
+       {
+        "gateway": "rep_2",
+        "result": "transmitted",
+        "transmitted_at": "2026-01-01T00:00:03Z"
+       }
+      ],
+      "next_round_at": "2026-01-01T00:00:15Z",
+      "scheduled": [],
+      "cancel_sent": [],
+      "cancel_given_up": [],
+      "closed": null,
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "native_ack",
+     "t": 5,
+     "expect": {
+      "origins": [
+       {
+        "gateway": "rep_2",
+        "result": "transmitted",
+        "transmitted_at": "2026-01-01T00:00:03Z"
+       }
+      ],
+      "next_round_at": "2026-01-01T00:00:15Z",
+      "scheduled": [],
+      "cancel_sent": [],
+      "cancel_given_up": [],
+      "closed": null,
+      "ignored_results": 1
+     }
+    },
+    {
+     "step": "authority",
+     "t": 8,
+     "gateway": "rep_1",
+     "authorized": false,
+     "expect": {
+      "origins": [
+       {
+        "gateway": "rep_2",
+        "result": "transmitted",
+        "transmitted_at": "2026-01-01T00:00:03Z"
+       }
+      ],
+      "next_round_at": "2026-01-01T00:00:15Z",
+      "scheduled": [],
+      "cancel_sent": [],
+      "cancel_given_up": [],
+      "closed": null,
+      "ignored_results": 1
+     }
+    },
+    {
+     "step": "result",
+     "t": 9,
+     "gateway": "rep_9",
+     "status": "transmitted",
+     "expect": {
+      "origins": [
+       {
+        "gateway": "rep_2",
+        "result": "transmitted",
+        "transmitted_at": "2026-01-01T00:00:03Z"
+       }
+      ],
+      "next_round_at": "2026-01-01T00:00:15Z",
+      "scheduled": [],
+      "cancel_sent": [],
+      "cancel_given_up": [],
+      "closed": null,
+      "ignored_results": 2
+     }
+    },
+    {
+     "step": "tick",
+     "t": 15,
+     "expect": {
+      "origins": [
+       {
+        "gateway": "rep_2",
+        "result": "transmitted",
+        "transmitted_at": "2026-01-01T00:00:03Z"
+       },
+       {
+        "gateway": "rep_3",
+        "result": null,
+        "transmitted_at": null
+       }
+      ],
+      "next_round_at": null,
+      "scheduled": [
+       "rep_3"
+      ],
+      "cancel_sent": [],
+      "cancel_given_up": [],
+      "closed": null,
+      "ignored_results": 2
+     }
+    }
+   ]
+  },
+  {
+   "note": "An origin that ends unknown, failed, refused or expired is not resent: the next round picks another origin, each gateway at most once, until none is left",
+   "setup": {
+    "start": "2026-01-01T00:00:00Z",
+    "message_kind": "direct",
+    "packet_fixed": true,
+    "window_s": 12,
+    "companion_timeout_s": 120,
+    "lifetime_s": 600,
+    "order": [
+     "comp",
+     "rep_1",
+     "rep_2",
+     "rep_3",
+     "rep_4"
+    ],
+    "gateways": {
+     "comp": {
+      "kind": "companion",
+      "connected": true,
+      "capable": true,
+      "eligible": true,
+      "reachable": true,
+      "authorized": true,
+      "heard": false
+     },
+     "rep_1": {
+      "kind": "repeater",
+      "connected": false,
+      "capable": false,
+      "eligible": true,
+      "reachable": true,
+      "authorized": true,
+      "heard": false
+     },
+     "rep_2": {
+      "kind": "repeater",
+      "connected": false,
+      "capable": false,
+      "eligible": true,
+      "reachable": true,
+      "authorized": true,
+      "heard": false
+     },
+     "rep_3": {
+      "kind": "repeater",
+      "connected": false,
+      "capable": false,
+      "eligible": true,
+      "reachable": true,
+      "authorized": true,
+      "heard": false
+     },
+     "rep_4": {
+      "kind": "repeater",
+      "connected": false,
+      "capable": false,
+      "eligible": true,
+      "reachable": true,
+      "authorized": true,
+      "heard": false
+     }
+    }
+   },
+   "steps": [
+    {
+     "step": "start",
+     "t": 0,
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": null,
+        "transmitted_at": null
+       }
+      ],
+      "next_round_at": "2026-01-01T00:02:00Z",
+      "scheduled": [
+       "comp"
+      ],
+      "cancel_sent": [],
+      "cancel_given_up": [],
+      "closed": null,
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "result",
+     "t": 4,
+     "gateway": "comp",
+     "status": "unknown",
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": "unknown",
+        "transmitted_at": null
+       },
+       {
+        "gateway": "rep_1",
+        "result": null,
+        "transmitted_at": null
+       }
+      ],
+      "next_round_at": null,
+      "scheduled": [
+       "rep_1"
+      ],
+      "cancel_sent": [],
+      "cancel_given_up": [],
+      "closed": null,
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "result",
+     "t": 6,
+     "gateway": "rep_1",
+     "status": "failed",
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": "unknown",
+        "transmitted_at": null
+       },
+       {
+        "gateway": "rep_1",
+        "result": "failed",
+        "transmitted_at": null
+       },
+       {
+        "gateway": "rep_2",
+        "result": null,
+        "transmitted_at": null
+       }
+      ],
+      "next_round_at": null,
+      "scheduled": [
+       "rep_2"
+      ],
+      "cancel_sent": [],
+      "cancel_given_up": [],
+      "closed": null,
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "result",
+     "t": 8,
+     "gateway": "rep_2",
+     "status": "refused",
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": "unknown",
+        "transmitted_at": null
+       },
+       {
+        "gateway": "rep_1",
+        "result": "failed",
+        "transmitted_at": null
+       },
+       {
+        "gateway": "rep_2",
+        "result": "refused",
+        "transmitted_at": null
+       },
+       {
+        "gateway": "rep_3",
+        "result": null,
+        "transmitted_at": null
+       }
+      ],
+      "next_round_at": null,
+      "scheduled": [
+       "rep_3"
+      ],
+      "cancel_sent": [],
+      "cancel_given_up": [],
+      "closed": null,
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "result",
+     "t": 9,
+     "gateway": "rep_3",
+     "status": "expired",
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": "unknown",
+        "transmitted_at": null
+       },
+       {
+        "gateway": "rep_1",
+        "result": "failed",
+        "transmitted_at": null
+       },
+       {
+        "gateway": "rep_2",
+        "result": "refused",
+        "transmitted_at": null
+       },
+       {
+        "gateway": "rep_3",
+        "result": "expired",
+        "transmitted_at": null
+       },
+       {
+        "gateway": "rep_4",
+        "result": null,
+        "transmitted_at": null
+       }
+      ],
+      "next_round_at": null,
+      "scheduled": [
+       "rep_4"
+      ],
+      "cancel_sent": [],
+      "cancel_given_up": [],
+      "closed": null,
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "result",
+     "t": 10,
+     "gateway": "rep_3",
+     "status": "transmitted",
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": "unknown",
+        "transmitted_at": null
+       },
+       {
+        "gateway": "rep_1",
+        "result": "failed",
+        "transmitted_at": null
+       },
+       {
+        "gateway": "rep_2",
+        "result": "refused",
+        "transmitted_at": null
+       },
+       {
+        "gateway": "rep_3",
+        "result": "expired",
+        "transmitted_at": null
+       },
+       {
+        "gateway": "rep_4",
+        "result": null,
+        "transmitted_at": null
+       }
+      ],
+      "next_round_at": null,
+      "scheduled": [],
+      "cancel_sent": [],
+      "cancel_given_up": [],
+      "closed": null,
+      "ignored_results": 1
+     }
+    },
+    {
+     "step": "result",
+     "t": 11,
+     "gateway": "rep_4",
+     "status": "transmitted",
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": "unknown",
+        "transmitted_at": null
+       },
+       {
+        "gateway": "rep_1",
+        "result": "failed",
+        "transmitted_at": null
+       },
+       {
+        "gateway": "rep_2",
+        "result": "refused",
+        "transmitted_at": null
+       },
+       {
+        "gateway": "rep_3",
+        "result": "expired",
+        "transmitted_at": null
+       },
+       {
+        "gateway": "rep_4",
+        "result": "transmitted",
+        "transmitted_at": "2026-01-01T00:00:11Z"
+       }
+      ],
+      "next_round_at": "2026-01-01T00:00:23Z",
+      "scheduled": [],
+      "cancel_sent": [],
+      "cancel_given_up": [],
+      "closed": null,
+      "ignored_results": 1
+     }
+    },
+    {
+     "step": "tick",
+     "t": 30,
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": "unknown",
+        "transmitted_at": null
+       },
+       {
+        "gateway": "rep_1",
+        "result": "failed",
+        "transmitted_at": null
+       },
+       {
+        "gateway": "rep_2",
+        "result": "refused",
+        "transmitted_at": null
+       },
+       {
+        "gateway": "rep_3",
+        "result": "expired",
+        "transmitted_at": null
+       },
+       {
+        "gateway": "rep_4",
+        "result": "transmitted",
+        "transmitted_at": "2026-01-01T00:00:11Z"
+       }
+      ],
+      "next_round_at": null,
+      "scheduled": [],
+      "cancel_sent": [],
+      "cancel_given_up": [],
+      "closed": "no_candidates",
+      "ignored_results": 1
+     }
+    }
+   ]
+  },
+  {
+   "note": "No eligible origin",
+   "setup": {
+    "start": "2026-01-01T00:00:00Z",
+    "message_kind": "direct",
+    "packet_fixed": true,
+    "window_s": 12,
+    "companion_timeout_s": 120,
+    "lifetime_s": 600,
+    "order": [
+     "comp",
+     "rep_1"
+    ],
+    "gateways": {
+     "comp": {
+      "kind": "companion",
+      "connected": true,
+      "capable": false,
+      "eligible": true,
+      "reachable": true,
+      "authorized": true,
+      "heard": false
+     },
+     "rep_1": {
+      "kind": "repeater",
+      "connected": false,
+      "capable": false,
+      "eligible": true,
+      "reachable": false,
+      "authorized": true,
+      "heard": false
+     }
+    }
+   },
+   "steps": [
+    {
+     "step": "start",
+     "t": 0,
+     "expect": {
+      "origins": [],
+      "next_round_at": null,
+      "scheduled": [],
+      "cancel_sent": [],
+      "cancel_given_up": [],
+      "closed": "no_origin",
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "tick",
+     "t": 50,
+     "expect": {
+      "origins": [],
+      "next_round_at": null,
+      "scheduled": [],
+      "cancel_sent": [],
+      "cancel_given_up": [],
+      "closed": "no_origin",
+      "ignored_results": 0
+     }
+    }
+   ]
+  },
+  {
+   "note": "A send that never transmits ends with its lifetime of 600 s",
+   "setup": {
+    "start": "2026-01-01T00:00:00Z",
+    "message_kind": "channel",
+    "packet_fixed": true,
+    "window_s": 12,
+    "companion_timeout_s": 120,
+    "lifetime_s": 600,
+    "order": [
+     "rep_1"
+    ],
+    "gateways": {
+     "rep_1": {
+      "kind": "repeater",
+      "connected": false,
+      "capable": false,
+      "eligible": true,
+      "reachable": true,
+      "authorized": true,
+      "heard": false
+     }
+    }
+   },
+   "steps": [
+    {
+     "step": "start",
+     "t": 0,
+     "expect": {
+      "origins": [
+       {
+        "gateway": "rep_1",
+        "result": null,
+        "transmitted_at": null
+       }
+      ],
+      "next_round_at": null,
+      "scheduled": [
+       "rep_1"
+      ],
+      "cancel_sent": [],
+      "cancel_given_up": [],
+      "closed": null,
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "result",
+     "t": 3,
+     "gateway": "rep_1",
+     "status": "queued",
+     "expect": {
+      "origins": [
+       {
+        "gateway": "rep_1",
+        "result": "queued",
+        "transmitted_at": null
+       }
+      ],
+      "next_round_at": null,
+      "scheduled": [],
+      "cancel_sent": [],
+      "cancel_given_up": [],
+      "closed": null,
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "tick",
+     "t": 599,
+     "expect": {
+      "origins": [
+       {
+        "gateway": "rep_1",
+        "result": "queued",
+        "transmitted_at": null
+       }
+      ],
+      "next_round_at": null,
+      "scheduled": [],
+      "cancel_sent": [],
+      "cancel_given_up": [],
+      "closed": null,
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "tick",
+     "t": 600,
+     "expect": {
+      "origins": [
+       {
+        "gateway": "rep_1",
+        "result": "queued",
+        "transmitted_at": null
+       }
+      ],
+      "next_round_at": null,
+      "scheduled": [],
+      "cancel_sent": [],
+      "cancel_given_up": [],
+      "closed": "lifetime",
+      "ignored_results": 0
+     }
+    }
+   ]
+  }
+ ]
+}

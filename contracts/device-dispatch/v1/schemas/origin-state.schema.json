@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.test/mecon/device-dispatch/v1/origin-state",
+  "title": "Origin scheduling state after one step",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "origins",
+    "next_round_at",
+    "scheduled",
+    "cancel_sent",
+    "closed",
+    "ignored_results",
+    "cancel_given_up"
+  ],
+  "properties": {
+    "origins": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "gateway",
+          "result",
+          "transmitted_at"
+        ],
+        "properties": {
+          "gateway": {
+            "type": "string",
+            "pattern": "^[a-z0-9_-]{1,64}$"
+          },
+          "result": {
+            "enum": [
+              "queued",
+              "duty-held",
+              "transmitted",
+              "refused",
+              "expired",
+              "failed",
+              "unknown",
+              "cancelled",
+              null
+            ]
+          },
+          "transmitted_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+          }
+        }
+      }
+    },
+    "scheduled": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 1
+    },
+    "closed": {
+      "enum": [
+        "native_ack",
+        "no_candidates",
+        "lifetime",
+        "no_origin",
+        null
+      ]
+    },
+    "ignored_results": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "next_round_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "cancel_sent": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "cancel_given_up": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

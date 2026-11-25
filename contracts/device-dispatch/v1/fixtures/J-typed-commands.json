@@ -1,0 +1,359 @@
+{
+ "fixture": "J",
+ "title": "Typed commands: every catalogue op accepted, and invalid commands refused before anything is signed",
+ "kind": "commands",
+ "contract_version": "1.0.0-draft.1",
+ "cases": [
+  {
+   "note": "contact.put by a caller to a companion",
+   "by": "caller",
+   "role": "companion",
+   "command": {
+    "op": "contact.put",
+    "args": {
+     "contact_ref": "ctc_1",
+     "name": "Synthetic One"
+    }
+   },
+   "expect": {
+    "valid": true
+   }
+  },
+  {
+   "note": "contact.remove by a caller to a companion",
+   "by": "caller",
+   "role": "companion",
+   "command": {
+    "op": "contact.remove",
+    "args": {
+     "contact_ref": "ctc_1"
+    }
+   },
+   "expect": {
+    "valid": true
+   }
+  },
+  {
+   "note": "message.send, direct, by a caller to a companion",
+   "by": "caller",
+   "role": "companion",
+   "command": {
+    "op": "message.send",
+    "args": {
+     "kind": "direct",
+     "target": "ctc_2",
+     "text": "synthetic hello"
+    }
+   },
+   "expect": {
+    "valid": true
+   }
+  },
+  {
+   "note": "packet.transmit to a repeater",
+   "by": "caller",
+   "role": "repeater",
+   "command": {
+    "op": "packet.transmit",
+    "args": {
+     "packet_hex": "0a0b0c0d"
+    }
+   },
+   "expect": {
+    "valid": true
+   }
+  },
+  {
+   "note": "config.apply to a repeater",
+   "by": "caller",
+   "role": "repeater",
+   "command": {
+    "op": "config.apply",
+    "args": {
+     "settings": {
+      "tx_power": 14,
+      "repeat": true
+     }
+    }
+   },
+   "expect": {
+    "valid": true
+   }
+  },
+  {
+   "note": "job.cancel signed by the Backend",
+   "by": "backend",
+   "role": "companion",
+   "command": {
+    "op": "job.cancel",
+    "args": {
+     "target_job_number": 4
+    }
+   },
+   "expect": {
+    "valid": true
+   }
+  },
+  {
+   "note": "job.get signed by the Backend",
+   "by": "backend",
+   "role": "repeater",
+   "command": {
+    "op": "job.get",
+    "args": {
+     "target_job_number": 4
+    }
+   },
+   "expect": {
+    "valid": true
+   }
+  },
+  {
+   "note": "message.get signed by the Backend",
+   "by": "backend",
+   "role": "companion",
+   "command": {
+    "op": "message.get",
+    "args": {
+     "message": "msg_4"
+    }
+   },
+   "expect": {
+    "valid": true
+   }
+  },
+  {
+   "note": "message.get requested by a caller",
+   "by": "caller",
+   "role": "companion",
+   "command": {
+    "op": "message.get",
+    "args": {
+     "message": "msg_4"
+    }
+   },
+   "expect": {
+    "valid": false,
+    "reason": "internal_op"
+   }
+  },
+  {
+   "note": "message.get for a repeater",
+   "by": "backend",
+   "role": "repeater",
+   "command": {
+    "op": "message.get",
+    "args": {
+     "message": "msg_4"
+    }
+   },
+   "expect": {
+    "valid": false,
+    "reason": "wrong_role"
+   }
+  },
+  {
+   "note": "an op the catalogue does not list",
+   "by": "caller",
+   "role": "companion",
+   "command": {
+    "op": "device.reboot",
+    "args": {}
+   },
+   "expect": {
+    "valid": false,
+    "reason": "unknown_op"
+   }
+  },
+  {
+   "note": "job.get requested by a caller",
+   "by": "caller",
+   "role": "companion",
+   "command": {
+    "op": "job.get",
+    "args": {
+     "target_job_number": 4
+    }
+   },
+   "expect": {
+    "valid": false,
+    "reason": "internal_op"
+   }
+  },
+  {
+   "note": "contact.put to a repeater: a known op for the wrong role",
+   "by": "caller",
+   "role": "repeater",
+   "command": {
+    "op": "contact.put",
+    "args": {
+     "contact_ref": "ctc_1",
+     "name": "Synthetic One"
+    }
+   },
+   "expect": {
+    "valid": false,
+    "reason": "wrong_role"
+   }
+  },
+  {
+   "note": "message.send to a repeater",
+   "by": "caller",
+   "role": "repeater",
+   "command": {
+    "op": "message.send",
+    "args": {
+     "kind": "direct",
+     "target": "ctc_2",
+     "text": "synthetic hello"
+    }
+   },
+   "expect": {
+    "valid": false,
+    "reason": "wrong_role"
+   }
+  },
+  {
+   "note": "contact.remove with no args",
+   "by": "caller",
+   "role": "companion",
+   "command": {
+    "op": "contact.remove",
+    "args": {}
+   },
+   "expect": {
+    "valid": false,
+    "reason": "invalid_args"
+   }
+  },
+  {
+   "note": "contact.remove with an extra arg",
+   "by": "caller",
+   "role": "companion",
+   "command": {
+    "op": "contact.remove",
+    "args": {
+     "contact_ref": "ctc_1",
+     "force": true
+    }
+   },
+   "expect": {
+    "valid": false,
+    "reason": "invalid_args"
+   }
+  },
+  {
+   "note": "contact.remove with no args key at all",
+   "by": "caller",
+   "role": "companion",
+   "command": {
+    "op": "contact.remove"
+   },
+   "expect": {
+    "valid": false,
+    "reason": "invalid_args"
+   }
+  },
+  {
+   "note": "a command with an extra top-level key",
+   "by": "caller",
+   "role": "companion",
+   "command": {
+    "op": "contact.remove",
+    "args": {
+     "contact_ref": "ctc_1"
+    },
+    "raw": "x"
+   },
+   "expect": {
+    "valid": false,
+    "reason": "invalid_args"
+   }
+  },
+  {
+   "note": "message.send with a kind outside the enum",
+   "by": "caller",
+   "role": "companion",
+   "command": {
+    "op": "message.send",
+    "args": {
+     "kind": "broadcast",
+     "target": "ctc_2",
+     "text": "x"
+    }
+   },
+   "expect": {
+    "valid": false,
+    "reason": "invalid_args"
+   }
+  },
+  {
+   "note": "packet.transmit with an odd number of hex digits",
+   "by": "caller",
+   "role": "repeater",
+   "command": {
+    "op": "packet.transmit",
+    "args": {
+     "packet_hex": "0a0b0c0"
+    }
+   },
+   "expect": {
+    "valid": false,
+    "reason": "invalid_args"
+   }
+  },
+  {
+   "note": "config.apply with no settings",
+   "by": "caller",
+   "role": "repeater",
+   "command": {
+    "op": "config.apply",
+    "args": {
+     "settings": {}
+    }
+   },
+   "expect": {
+    "valid": false,
+    "reason": "invalid_args"
+   }
+  },
+  {
+   "note": "an op that is not a string",
+   "by": "caller",
+   "role": "companion",
+   "command": {
+    "op": 7,
+    "args": {}
+   },
+   "expect": {
+    "valid": false,
+    "reason": "unknown_op"
+   }
+  },
+  {
+   "note": "a command that is not an object",
+   "by": "caller",
+   "role": "companion",
+   "command": "contact.put",
+   "expect": {
+    "valid": false,
+    "reason": "unknown_op"
+   }
+  },
+  {
+   "note": "job.cancel with job number 0, signed by the Backend",
+   "by": "backend",
+   "role": "companion",
+   "command": {
+    "op": "job.cancel",
+    "args": {
+     "target_job_number": 0
+    }
+   },
+   "expect": {
+    "valid": false,
+    "reason": "invalid_args"
+   }
+  }
+ ]
+}

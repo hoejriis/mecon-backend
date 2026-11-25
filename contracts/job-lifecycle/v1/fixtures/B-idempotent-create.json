@@ -1,0 +1,674 @@
+{
+ "fixture": "B",
+ "title": "Idempotent create, a conflicting reuse of the key, and reads scoped to the creator",
+ "kind": "lifecycle",
+ "contract_version": "1.0.0-draft.1",
+ "setup": {
+  "start": "2026-01-01T00:00:00Z",
+  "devices": {
+   "dev_1": {
+    "role": "companion",
+    "member": true,
+    "blocked": false
+   },
+   "dev_2": {
+    "role": "companion",
+    "member": true,
+    "blocked": false
+   }
+  },
+  "rights": {
+   "cal_1": [
+    "dev_1"
+   ],
+   "cal_2": [
+    "dev_2"
+   ]
+  }
+ },
+ "steps": [
+  {
+   "step": "create",
+   "caller": "cal_1",
+   "device": "dev_1",
+   "command": {
+    "op": "contact.remove",
+    "args": {
+     "contact_ref": "ctc_1"
+    }
+   },
+   "idempotency_key": "k1",
+   "expect": {
+    "response": {
+     "outcome": "created",
+     "job_id": "job_1"
+    },
+    "out": [],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.remove",
+       "args": {
+        "contact_ref": "ctc_1"
+       }
+      },
+      "idempotency_key": "k1",
+      "state": "accepted",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [],
+      "controls": [],
+      "events": [],
+      "outcome": null
+     }
+    ]
+   }
+  },
+  {
+   "step": "create",
+   "caller": "cal_1",
+   "device": "dev_1",
+   "command": {
+    "op": "contact.remove",
+    "args": {
+     "contact_ref": "ctc_1"
+    }
+   },
+   "idempotency_key": "k1",
+   "expect": {
+    "response": {
+     "outcome": "replayed",
+     "job_id": "job_1"
+    },
+    "out": [],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.remove",
+       "args": {
+        "contact_ref": "ctc_1"
+       }
+      },
+      "idempotency_key": "k1",
+      "state": "accepted",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [],
+      "controls": [],
+      "events": [],
+      "outcome": null
+     }
+    ]
+   }
+  },
+  {
+   "step": "create",
+   "caller": "cal_1",
+   "device": "dev_1",
+   "command": {
+    "op": "contact.remove",
+    "args": {
+     "contact_ref": "ctc_2"
+    }
+   },
+   "idempotency_key": "k1",
+   "expect": {
+    "response": {
+     "outcome": "error",
+     "error": {
+      "code": "conflict",
+      "message": "The request conflicts with an earlier request."
+     }
+    },
+    "out": [],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.remove",
+       "args": {
+        "contact_ref": "ctc_1"
+       }
+      },
+      "idempotency_key": "k1",
+      "state": "accepted",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [],
+      "controls": [],
+      "events": [],
+      "outcome": null
+     }
+    ]
+   }
+  },
+  {
+   "step": "create",
+   "caller": "cal_2",
+   "device": "dev_2",
+   "command": {
+    "op": "contact.remove",
+    "args": {
+     "contact_ref": "ctc_1"
+    }
+   },
+   "idempotency_key": "k1",
+   "expect": {
+    "response": {
+     "outcome": "created",
+     "job_id": "job_2"
+    },
+    "out": [],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.remove",
+       "args": {
+        "contact_ref": "ctc_1"
+       }
+      },
+      "idempotency_key": "k1",
+      "state": "accepted",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [],
+      "controls": [],
+      "events": [],
+      "outcome": null
+     },
+     {
+      "id": "job_2",
+      "caller": "cal_2",
+      "device": "dev_2",
+      "command": {
+       "op": "contact.remove",
+       "args": {
+        "contact_ref": "ctc_1"
+       }
+      },
+      "idempotency_key": "k1",
+      "state": "accepted",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [],
+      "controls": [],
+      "events": [],
+      "outcome": null
+     }
+    ]
+   }
+  },
+  {
+   "step": "read",
+   "caller": "cal_2",
+   "job_id": "job_1",
+   "expect": {
+    "response": {
+     "outcome": "error",
+     "error": {
+      "code": "not_found",
+      "message": "Not found."
+     }
+    },
+    "out": [],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.remove",
+       "args": {
+        "contact_ref": "ctc_1"
+       }
+      },
+      "idempotency_key": "k1",
+      "state": "accepted",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [],
+      "controls": [],
+      "events": [],
+      "outcome": null
+     },
+     {
+      "id": "job_2",
+      "caller": "cal_2",
+      "device": "dev_2",
+      "command": {
+       "op": "contact.remove",
+       "args": {
+        "contact_ref": "ctc_1"
+       }
+      },
+      "idempotency_key": "k1",
+      "state": "accepted",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [],
+      "controls": [],
+      "events": [],
+      "outcome": null
+     }
+    ]
+   }
+  },
+  {
+   "step": "read",
+   "caller": "cal_1",
+   "job_id": "job_x",
+   "expect": {
+    "response": {
+     "outcome": "error",
+     "error": {
+      "code": "not_found",
+      "message": "Not found."
+     }
+    },
+    "out": [],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.remove",
+       "args": {
+        "contact_ref": "ctc_1"
+       }
+      },
+      "idempotency_key": "k1",
+      "state": "accepted",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [],
+      "controls": [],
+      "events": [],
+      "outcome": null
+     },
+     {
+      "id": "job_2",
+      "caller": "cal_2",
+      "device": "dev_2",
+      "command": {
+       "op": "contact.remove",
+       "args": {
+        "contact_ref": "ctc_1"
+       }
+      },
+      "idempotency_key": "k1",
+      "state": "accepted",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [],
+      "controls": [],
+      "events": [],
+      "outcome": null
+     }
+    ]
+   }
+  },
+  {
+   "step": "read",
+   "caller": "cal_1",
+   "job_id": "job_99",
+   "expect": {
+    "response": {
+     "outcome": "error",
+     "error": {
+      "code": "not_found",
+      "message": "Not found."
+     }
+    },
+    "out": [],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.remove",
+       "args": {
+        "contact_ref": "ctc_1"
+       }
+      },
+      "idempotency_key": "k1",
+      "state": "accepted",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [],
+      "controls": [],
+      "events": [],
+      "outcome": null
+     },
+     {
+      "id": "job_2",
+      "caller": "cal_2",
+      "device": "dev_2",
+      "command": {
+       "op": "contact.remove",
+       "args": {
+        "contact_ref": "ctc_1"
+       }
+      },
+      "idempotency_key": "k1",
+      "state": "accepted",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [],
+      "controls": [],
+      "events": [],
+      "outcome": null
+     }
+    ]
+   }
+  },
+  {
+   "step": "list",
+   "caller": "cal_1",
+   "expect": {
+    "response": {
+     "outcome": "listed",
+     "job_ids": [
+      "job_1"
+     ]
+    },
+    "out": [],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.remove",
+       "args": {
+        "contact_ref": "ctc_1"
+       }
+      },
+      "idempotency_key": "k1",
+      "state": "accepted",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [],
+      "controls": [],
+      "events": [],
+      "outcome": null
+     },
+     {
+      "id": "job_2",
+      "caller": "cal_2",
+      "device": "dev_2",
+      "command": {
+       "op": "contact.remove",
+       "args": {
+        "contact_ref": "ctc_1"
+       }
+      },
+      "idempotency_key": "k1",
+      "state": "accepted",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [],
+      "controls": [],
+      "events": [],
+      "outcome": null
+     }
+    ]
+   }
+  },
+  {
+   "step": "list",
+   "caller": "cal_2",
+   "expect": {
+    "response": {
+     "outcome": "listed",
+     "job_ids": [
+      "job_2"
+     ]
+    },
+    "out": [],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.remove",
+       "args": {
+        "contact_ref": "ctc_1"
+       }
+      },
+      "idempotency_key": "k1",
+      "state": "accepted",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [],
+      "controls": [],
+      "events": [],
+      "outcome": null
+     },
+     {
+      "id": "job_2",
+      "caller": "cal_2",
+      "device": "dev_2",
+      "command": {
+       "op": "contact.remove",
+       "args": {
+        "contact_ref": "ctc_1"
+       }
+      },
+      "idempotency_key": "k1",
+      "state": "accepted",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [],
+      "controls": [],
+      "events": [],
+      "outcome": null
+     }
+    ]
+   }
+  },
+  {
+   "step": "create",
+   "caller": "cal_1",
+   "device": "dev_2",
+   "command": {
+    "op": "contact.remove",
+    "args": {
+     "contact_ref": "ctc_1"
+    }
+   },
+   "expect": {
+    "response": {
+     "outcome": "error",
+     "error": {
+      "code": "not_found",
+      "message": "Not found."
+     }
+    },
+    "out": [],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.remove",
+       "args": {
+        "contact_ref": "ctc_1"
+       }
+      },
+      "idempotency_key": "k1",
+      "state": "accepted",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [],
+      "controls": [],
+      "events": [],
+      "outcome": null
+     },
+     {
+      "id": "job_2",
+      "caller": "cal_2",
+      "device": "dev_2",
+      "command": {
+       "op": "contact.remove",
+       "args": {
+        "contact_ref": "ctc_1"
+       }
+      },
+      "idempotency_key": "k1",
+      "state": "accepted",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [],
+      "controls": [],
+      "events": [],
+      "outcome": null
+     }
+    ]
+   }
+  },
+  {
+   "step": "create",
+   "caller": "cal_1",
+   "device": "dev_1",
+   "command": {
+    "op": "job.get",
+    "args": {
+     "target_job_number": 1
+    }
+   },
+   "expect": {
+    "response": {
+     "outcome": "error",
+     "error": {
+      "code": "invalid",
+      "message": "The request is not valid."
+     }
+    },
+    "out": [],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.remove",
+       "args": {
+        "contact_ref": "ctc_1"
+       }
+      },
+      "idempotency_key": "k1",
+      "state": "accepted",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [],
+      "controls": [],
+      "events": [],
+      "outcome": null
+     },
+     {
+      "id": "job_2",
+      "caller": "cal_2",
+      "device": "dev_2",
+      "command": {
+       "op": "contact.remove",
+       "args": {
+        "contact_ref": "ctc_1"
+       }
+      },
+      "idempotency_key": "k1",
+      "state": "accepted",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [],
+      "controls": [],
+      "events": [],
+      "outcome": null
+     }
+    ]
+   }
+  }
+ ]
+}

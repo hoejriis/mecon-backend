@@ -1,0 +1,696 @@
+{
+ "fixture": "A",
+ "title": "A job runs to succeeded: create, claim, deliver, progress, an event, the final answer",
+ "kind": "lifecycle",
+ "contract_version": "1.0.0-draft.1",
+ "setup": {
+  "start": "2026-01-01T00:00:00Z",
+  "devices": {
+   "dev_1": {
+    "role": "companion",
+    "member": true,
+    "blocked": false
+   },
+   "dev_2": {
+    "role": "companion",
+    "member": true,
+    "blocked": false
+   }
+  },
+  "rights": {
+   "cal_1": [
+    "dev_1"
+   ],
+   "cal_2": [
+    "dev_2"
+   ]
+  }
+ },
+ "steps": [
+  {
+   "step": "create",
+   "caller": "cal_1",
+   "device": "dev_1",
+   "command": {
+    "op": "contact.put",
+    "args": {
+     "contact_ref": "ctc_1",
+     "name": "Synthetic One"
+    }
+   },
+   "idempotency_key": "key-a",
+   "expect": {
+    "response": {
+     "outcome": "created",
+     "job_id": "job_1"
+    },
+    "out": [],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_1",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": "key-a",
+      "state": "accepted",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [],
+      "controls": [],
+      "events": [],
+      "outcome": null
+     }
+    ]
+   }
+  },
+  {
+   "step": "claim",
+   "worker": "worker_1",
+   "job": "job_1",
+   "expect": {
+    "response": {
+     "outcome": "claimed"
+    },
+    "out": [],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_1",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": "key-a",
+      "state": "accepted",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [],
+      "controls": [],
+      "events": [],
+      "outcome": null
+     }
+    ]
+   }
+  },
+  {
+   "step": "deliver",
+   "worker": "worker_1",
+   "job": "job_1",
+   "expect": {
+    "response": {
+     "outcome": "delivered",
+     "attempt": "att_1",
+     "delivery": 1
+    },
+    "out": [
+     {
+      "job": "job_1",
+      "target": "att_1",
+      "kind": "attempt",
+      "op": "contact.put",
+      "job_number": 1,
+      "request_id": "rq_1",
+      "bytes": "signed:rq_1",
+      "delivery": 1
+     }
+    ],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_1",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": "key-a",
+      "state": "dispatched",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_1",
+        "request_id": "rq_1",
+        "job_number": 1,
+        "bytes": "signed:rq_1",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": null,
+         "device_answered": null,
+         "rf_transmitted": null,
+         "acked": null
+        }
+       }
+      ],
+      "controls": [],
+      "events": [],
+      "outcome": null
+     }
+    ]
+   }
+  },
+  {
+   "step": "transport_ack",
+   "job": "job_1",
+   "target": "att_1",
+   "expect": {
+    "response": {
+     "outcome": "recorded"
+    },
+    "out": [],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_1",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": "key-a",
+      "state": "dispatched",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_1",
+        "request_id": "rq_1",
+        "job_number": 1,
+        "bytes": "signed:rq_1",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": "2026-01-01T00:00:00Z",
+         "device_answered": null,
+         "rf_transmitted": null,
+         "acked": null
+        }
+       }
+      ],
+      "controls": [],
+      "events": [],
+      "outcome": null
+     }
+    ]
+   }
+  },
+  {
+   "step": "advance",
+   "seconds": 2,
+   "expect": {
+    "response": {
+     "outcome": "advanced"
+    },
+    "out": [],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_1",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": "key-a",
+      "state": "dispatched",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_1",
+        "request_id": "rq_1",
+        "job_number": 1,
+        "bytes": "signed:rq_1",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": "2026-01-01T00:00:00Z",
+         "device_answered": null,
+         "rf_transmitted": null,
+         "acked": null
+        }
+       }
+      ],
+      "controls": [],
+      "events": [],
+      "outcome": null
+     }
+    ]
+   }
+  },
+  {
+   "step": "device_answer",
+   "result": {
+    "signed_by": "dev_1",
+    "request_id": "rq_1",
+    "job_number": 1,
+    "status": "ok",
+    "state": "progress"
+   },
+   "expect": {
+    "response": {
+     "outcome": "applied"
+    },
+    "out": [],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_1",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": "key-a",
+      "state": "running",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:02Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_1",
+        "request_id": "rq_1",
+        "job_number": 1,
+        "bytes": "signed:rq_1",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": "2026-01-01T00:00:00Z",
+         "device_answered": {
+          "status": "ok",
+          "error": null,
+          "state": "progress",
+          "outcome": null,
+          "duty_held": false,
+          "at": "2026-01-01T00:00:02Z"
+         },
+         "rf_transmitted": null,
+         "acked": null
+        }
+       }
+      ],
+      "controls": [],
+      "events": [],
+      "outcome": null
+     }
+    ]
+   }
+  },
+  {
+   "step": "advance",
+   "seconds": 3,
+   "expect": {
+    "response": {
+     "outcome": "advanced"
+    },
+    "out": [],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_1",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": "key-a",
+      "state": "running",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:02Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_1",
+        "request_id": "rq_1",
+        "job_number": 1,
+        "bytes": "signed:rq_1",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": "2026-01-01T00:00:00Z",
+         "device_answered": {
+          "status": "ok",
+          "error": null,
+          "state": "progress",
+          "outcome": null,
+          "duty_held": false,
+          "at": "2026-01-01T00:00:02Z"
+         },
+         "rf_transmitted": null,
+         "acked": null
+        }
+       }
+      ],
+      "controls": [],
+      "events": [],
+      "outcome": null
+     }
+    ]
+   }
+  },
+  {
+   "step": "device_event",
+   "result": {
+    "signed_by": "dev_1",
+    "request_id": "rq_1",
+    "job_number": 1,
+    "status": "ok",
+    "state": "awaiting-confirm",
+    "data": "synthetic detail"
+   },
+   "expect": {
+    "response": {
+     "outcome": "applied"
+    },
+    "out": [],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_1",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": "key-a",
+      "state": "running",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:05Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_1",
+        "request_id": "rq_1",
+        "job_number": 1,
+        "bytes": "signed:rq_1",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": "2026-01-01T00:00:00Z",
+         "device_answered": {
+          "status": "ok",
+          "error": null,
+          "state": "awaiting-confirm",
+          "outcome": null,
+          "duty_held": false,
+          "at": "2026-01-01T00:00:05Z"
+         },
+         "rf_transmitted": null,
+         "acked": null
+        }
+       }
+      ],
+      "controls": [],
+      "events": [
+       {
+        "at": "2026-01-01T00:00:05Z",
+        "status": "ok",
+        "state": "awaiting-confirm",
+        "data": "synthetic detail"
+       }
+      ],
+      "outcome": null
+     }
+    ]
+   }
+  },
+  {
+   "step": "advance",
+   "seconds": 1,
+   "expect": {
+    "response": {
+     "outcome": "advanced"
+    },
+    "out": [],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_1",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": "key-a",
+      "state": "running",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:05Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_1",
+        "request_id": "rq_1",
+        "job_number": 1,
+        "bytes": "signed:rq_1",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": "2026-01-01T00:00:00Z",
+         "device_answered": {
+          "status": "ok",
+          "error": null,
+          "state": "awaiting-confirm",
+          "outcome": null,
+          "duty_held": false,
+          "at": "2026-01-01T00:00:05Z"
+         },
+         "rf_transmitted": null,
+         "acked": null
+        }
+       }
+      ],
+      "controls": [],
+      "events": [
+       {
+        "at": "2026-01-01T00:00:05Z",
+        "status": "ok",
+        "state": "awaiting-confirm",
+        "data": "synthetic detail"
+       }
+      ],
+      "outcome": null
+     }
+    ]
+   }
+  },
+  {
+   "step": "device_answer",
+   "result": {
+    "signed_by": "dev_1",
+    "request_id": "rq_1",
+    "job_number": 1,
+    "status": "ok",
+    "state": "confirmed"
+   },
+   "expect": {
+    "response": {
+     "outcome": "applied"
+    },
+    "out": [],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_1",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": "key-a",
+      "state": "succeeded",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:06Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_1",
+        "request_id": "rq_1",
+        "job_number": 1,
+        "bytes": "signed:rq_1",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": "2026-01-01T00:00:00Z",
+         "device_answered": {
+          "status": "ok",
+          "error": null,
+          "state": "confirmed",
+          "outcome": null,
+          "duty_held": false,
+          "at": "2026-01-01T00:00:06Z"
+         },
+         "rf_transmitted": null,
+         "acked": null
+        }
+       }
+      ],
+      "controls": [],
+      "events": [
+       {
+        "at": "2026-01-01T00:00:05Z",
+        "status": "ok",
+        "state": "awaiting-confirm",
+        "data": "synthetic detail"
+       }
+      ],
+      "outcome": {
+       "reason": "device_final",
+       "device_status": "confirmed",
+       "at": "2026-01-01T00:00:06Z"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "step": "read",
+   "caller": "cal_1",
+   "job_id": "job_1",
+   "expect": {
+    "response": {
+     "outcome": "read",
+     "job_id": "job_1"
+    },
+    "out": [],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_1",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": "key-a",
+      "state": "succeeded",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:06Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_1",
+        "request_id": "rq_1",
+        "job_number": 1,
+        "bytes": "signed:rq_1",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": "2026-01-01T00:00:00Z",
+         "device_answered": {
+          "status": "ok",
+          "error": null,
+          "state": "confirmed",
+          "outcome": null,
+          "duty_held": false,
+          "at": "2026-01-01T00:00:06Z"
+         },
+         "rf_transmitted": null,
+         "acked": null
+        }
+       }
+      ],
+      "controls": [],
+      "events": [
+       {
+        "at": "2026-01-01T00:00:05Z",
+        "status": "ok",
+        "state": "awaiting-confirm",
+        "data": "synthetic detail"
+       }
+      ],
+      "outcome": {
+       "reason": "device_final",
+       "device_status": "confirmed",
+       "at": "2026-01-01T00:00:06Z"
+      }
+     }
+    ]
+   }
+  }
+ ]
+}

@@ -1,0 +1,1 @@
+{"id":"att_synthetic_0001","client_attempt_id":"cat_synthetic_0001","path":"backend","identity_id":"idn_synthetic_a","status":"queued","status_evidence":{"accepted_at":"2030-01-01T00:00:00Z","first_transmitted_at":null,"transmissions":0,"acked_at":null,"detail":null,"source":"device"},"created_at":"2030-01-01T00:00:00Z","updated_at":"2030-01-01T00:00:00Z"}

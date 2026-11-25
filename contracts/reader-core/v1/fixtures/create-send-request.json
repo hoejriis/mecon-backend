@@ -1,0 +1,1 @@
+{"caller":{"user_id":"usr_synthetic_0001","session_ref":"ses_synthetic_0001"},"request":{"client_draft_id":"drf_synthetic_0001","client_attempt_id":"cat_synthetic_0001","identity_id":"idn_synthetic_a","target":{"kind":"contact","id":"cnt_synthetic_b"},"content":{"kind":"text","text":"hello (synthetic)"}}}

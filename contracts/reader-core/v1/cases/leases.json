@@ -1,0 +1,348 @@
+{
+ "contract": "mecon-reader-core/1.0.0-draft.2",
+ "synthetic": true,
+ "group": "leases",
+ "cases": [
+  {
+   "id": "leases-01",
+   "title": "A lease is issued for the caller and verifies under the served keys",
+   "world": "two-fleets",
+   "steps": [
+    {
+     "action": "issue-session",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "a_ref"
+    },
+    {
+     "action": "user-id",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "a_uid"
+    },
+    {
+     "request": {
+      "operation": "createLease",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       }
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "LeaseIssued"
+     },
+     "capture": {
+      "lease": "/lease"
+     }
+    },
+    {
+     "request": {
+      "operation": "listLeaseKeys",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       }
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "LeaseKeyList",
+      "lease": {
+       "token": "${lease}",
+       "keys": "/keys",
+       "user_id": "${a_uid}",
+       "max_lifetime_s": 604800,
+       "operations_include": [
+        "receive",
+        "send.direct",
+        "send.channel"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "leases-02",
+   "title": "With sending off a lease carries no send operation",
+   "world": "two-fleets",
+   "steps": [
+    {
+     "action": "issue-session",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "a_ref"
+    },
+    {
+     "action": "user-id",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "a_uid"
+    },
+    {
+     "action": "set-switch",
+     "args": {
+      "switch": "sending",
+      "value": "off"
+     }
+    },
+    {
+     "request": {
+      "operation": "createLease",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       }
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "LeaseIssued"
+     },
+     "capture": {
+      "lease": "/lease"
+     }
+    },
+    {
+     "request": {
+      "operation": "listLeaseKeys",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       }
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "LeaseKeyList",
+      "lease": {
+       "token": "${lease}",
+       "keys": "/keys",
+       "user_id": "${a_uid}",
+       "max_lifetime_s": 604800,
+       "operations_include": [
+        "receive"
+       ],
+       "operations_exclude": [
+        "send.direct",
+        "send.channel"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "leases-03",
+   "title": "A core that does not issue leases answers 404 on both lease operations",
+   "world": "two-fleets",
+   "steps": [
+    {
+     "action": "issue-session",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "a_ref"
+    },
+    {
+     "action": "user-id",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "a_uid"
+    },
+    {
+     "action": "set-switch",
+     "args": {
+      "switch": "lease_signing",
+      "value": "absent"
+     }
+    },
+    {
+     "request": {
+      "operation": "createLease",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       }
+      }
+     },
+     "expect": {
+      "status": 404,
+      "schema": "Refusal",
+      "body": {
+       "/code": "not_found",
+       "/retryable": false
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "listLeaseKeys",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       }
+      }
+     },
+     "expect": {
+      "status": 404,
+      "schema": "Refusal",
+      "body": {
+       "/code": "not_found",
+       "/retryable": false
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "leases-04",
+   "title": "A core that cannot sign answers 503 lease_signing_unavailable, not retryable; keys still list",
+   "world": "two-fleets",
+   "steps": [
+    {
+     "action": "issue-session",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "a_ref"
+    },
+    {
+     "action": "user-id",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "a_uid"
+    },
+    {
+     "action": "set-switch",
+     "args": {
+      "switch": "lease_signing",
+      "value": "off"
+     }
+    },
+    {
+     "request": {
+      "operation": "createLease",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       }
+      }
+     },
+     "expect": {
+      "status": 503,
+      "schema": "Refusal",
+      "body": {
+       "/code": "lease_signing_unavailable",
+       "/retryable": false
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "listLeaseKeys",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       }
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "LeaseKeyList",
+      "match": [
+       {
+        "at": "/keys",
+        "where": {
+         "/status": "active"
+        },
+        "at_least": 1
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "leases-05",
+   "title": "Lease operations for an ended session answer session_ended",
+   "world": "two-fleets",
+   "steps": [
+    {
+     "action": "issue-session",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "a_ref"
+    },
+    {
+     "action": "user-id",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "a_uid"
+    },
+    {
+     "action": "end-session",
+     "args": {
+      "session_ref": "${a_ref}"
+     }
+    },
+    {
+     "request": {
+      "operation": "createLease",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       }
+      }
+     },
+     "expect": {
+      "status": 403,
+      "schema": "Refusal",
+      "body": {
+       "/code": "session_ended",
+       "/retryable": false
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "listLeaseKeys",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       }
+      }
+     },
+     "expect": {
+      "status": 403,
+      "schema": "Refusal",
+      "body": {
+       "/code": "session_ended",
+       "/retryable": false
+      }
+     }
+    }
+   ]
+  }
+ ]
+}

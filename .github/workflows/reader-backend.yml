@@ -1,10 +1,10 @@
 name: reader-backend
 on:
   pull_request:
-    paths: ['reader-backend/**', 'contracts/reader-api/**', 'contracts/observations/**', 'contracts/session-lookup/**', '.github/workflows/reader-backend.yml']
+    paths: ['reader-backend/**', 'contracts/reader-api/**', 'contracts/observations/**', 'contracts/session-lookup/**', 'contracts/reader-core/**', '.github/workflows/reader-backend.yml']
   push:
     branches: [main, 'reader-backend/**']
-    paths: ['reader-backend/**', 'contracts/reader-api/**', 'contracts/observations/**', 'contracts/session-lookup/**', '.github/workflows/reader-backend.yml']
+    paths: ['reader-backend/**', 'contracts/reader-api/**', 'contracts/observations/**', 'contracts/session-lookup/**', 'contracts/reader-core/**', '.github/workflows/reader-backend.yml']
 permissions:
   contents: read
 concurrency:
@@ -25,9 +25,9 @@ jobs:
           cache-dependency-path: reader-backend/requirements-dev.lock
       - name: Install dependencies (hash-pinned)
         run: pip install --require-hashes --no-deps -r requirements-dev.lock
-      - name: Reader API, observation and session-lookup cases, facade and adapter rules, guards
+      - name: Reader API, observation, session-lookup and reader-core cases, facade and adapter rules, guards
         run: python -m pytest -q -ra --junitxml=pytest.xml
-      - name: Mutation check (CSRF, Origin, fail-closed lookup, idempotency, no-store, events, HTTP lookup adapter)
+      - name: Mutation check (CSRF, Origin, fail-closed lookup, idempotency, no-store, events, HTTP lookup adapter, reader-core scoping and idempotency)
         run: python scripts/mutation.py
       - uses: actions/upload-artifact@v4
         if: always()

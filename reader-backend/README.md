@@ -1,6 +1,6 @@
 # MECON Reader backend (facade)
 
-A public implementation of the Reader API ([`contracts/reader-api/v1`](../contracts/reader-api/v1/openapi.yaml)): a Starlette app that serves the HTTP side of the contract and hands everything else to a core through two ports. It also serves the authorized observation projection ([`contracts/observations/v1`](../contracts/observations/v1/openapi.yaml), see below). It is groundwork. The session port has one real adapter, an HTTP client for the session lookup contract ([`contracts/session-lookup/v1`](../contracts/session-lookup/v1/openapi.yaml), see below), which no run command wires in yet. The core port has no real adapter. The facade is not deployed anywhere, and nothing in production depends on it.
+A public implementation of the Reader API ([`contracts/reader-api/v1`](../contracts/reader-api/v1/openapi.yaml)): a Starlette app that serves the HTTP side of the contract and hands everything else to a core through two ports. It also serves the authorized observation projection ([`contracts/observations/v1`](../contracts/observations/v1/openapi.yaml), see below). It is groundwork. The session port has one real adapter, an HTTP client for the session lookup contract ([`contracts/session-lookup/v1`](../contracts/session-lookup/v1/openapi.yaml), see below), which no run command wires in yet. The core port has no real adapter; the calls it would make are published as the reader-core contract ([`contracts/reader-core/v1`](../contracts/reader-core/v1/openapi.yaml), see below), which the fake core follows. The facade is not deployed anywhere, and nothing in production depends on it.
 
 ## What the facade owns
 
@@ -81,8 +81,8 @@ Read answers are cached for at most `lookup_cache_s` (5 s), never past the calle
 ```sh
 cd reader-backend
 pip install --require-hashes --no-deps -r requirements-dev.lock
-python -m pytest -q                 # Reader API, observation and session lookup cases, facade and adapter rules, SQLite store, guards
-python scripts/mutation.py          # mutants on the facade's own rules, the observation scope filters and the HTTP lookup adapter; every one must be killed
+python -m pytest -q                 # Reader API, observation, session lookup and reader-core cases, facade and adapter rules, SQLite store, guards
+python scripts/mutation.py          # mutants on the facade's own rules, the observation scope filters, the HTTP lookup adapter and the fake core's scoping and idempotency; every one must be killed
 PYTHONPATH=src python -m mecon_reader_backend --world ../contracts/reader-api/v1/cases/worlds.json --port 8787 --origin http://127.0.0.1:8787
 ```
 
@@ -102,6 +102,13 @@ It also replays every session lookup case from `contracts/session-lookup/v1/case
 
 - **`http`**: a stub core ([`tests/stub_core.py`](tests/stub_core.py)) on a loopback socket, which serves the contract over the fake world. Each request is sent raw, as the case writes it, and the answer is checked against the case. Each lookup is then sent through `HttpSessionLookup`, which must send exactly the case's body with the service token and map the answer to the same meaning. With an absent or wrong token, the adapter must answer `core_unavailable` and its feed must end with no item. All 20 cases run here.
 - **`fake`**: `FakeSessionLookup` called directly, so the fake the facade's own tests use is known to follow the contract. The three service token cases are not applicable, because the fake has no HTTP surface.
+
+It replays every reader-core case from `contracts/reader-core/v1/cases` the same way, on two targets, in [`tests/test_core_cases.py`](tests/test_core_cases.py):
+
+- **`http`**: a stub core ([`tests/stub_reader_core.py`](tests/stub_reader_core.py)) on a loopback socket, which serves every operation over `FakeReaderCore` in the contract's order of checks (service token, request schema, then the fake's answer). Each request is sent raw, as the case writes it, and the answer is checked against the case. All 49 cases run here.
+- **`fake`**: `FakeReaderCore` called directly with the case's arguments and its answer turned into the contract's status and body. The cases about the service token (3) and about a body that breaks the request schema (3) are not applicable, because the fake is a Python port; the other 43 run.
+
+The fake core re-checks the caller reference on every call, as the contract requires: a `Caller` whose session is revoked, expired or another user's gets `CoreError("forbidden", "session_ended")`. The facade answers that as a session that no longer resolves (401, cookie cleared), and an open event stream sends `session_revoked` and closes. The fake answers a send to a foreign or missing identity, or an out-of-scope target, with one `not_found`; the facade answers that 403 `forbidden` (`POST /send-attempts` declares no 404). The core's login calls carry `client_address`: the connection's peer, unless the peer is in `FacadeConfig.trusted_proxies` (addresses or CIDRs, default none), when `X-Forwarded-For` is read from the right past trusted proxies. A core's 429 `rate_limited` reaches the browser as the ordinary 202 on login start and `pending` on a poll. The facade caps each user's concurrent `GET /events` streams at `max_streams_per_user` (5): when the user opens one more, the facade ends that user's oldest stream, cleanly and with no frame, so the newest wins and nothing is refused. There is no HTTP adapter for the core port yet.
 
 The adapter's own tests ([`tests/test_http_lookup.py`](tests/test_http_lookup.py)) cover:
 

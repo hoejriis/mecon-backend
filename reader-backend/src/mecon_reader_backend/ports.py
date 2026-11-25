@@ -134,12 +134,17 @@ class EventBatch:
 class ReaderCore(Protocol):
     async def health(self) -> dict[str, Any]: ...
 
-    async def start_login(self, email: str, *, origin: str | None, sec_fetch_site: str | None) -> dict[str, Any]:
+    async def start_login(self, email: str, *, origin: str | None, sec_fetch_site: str | None,
+                          client_address: str) -> dict[str, Any]:
         """Start a magic-link login. The core checks `origin` (and `Sec-Fetch-Site`, when sent) against
-        its own allow-list and refuses with CoreError("forbidden", "origin_rejected"); None means absent."""
+        its own allow-list and refuses with CoreError("forbidden", "origin_rejected"); None means absent.
+        `client_address` is the browser's IP address as the facade derives it; the core keys its per-client
+        login limits on it and refuses over a limit with CoreError("throttled", "rate_limited", retry_after_s=...)."""
         ...
 
-    async def poll_login(self, request_id: str) -> LoginPoll: ...
+    async def poll_login(self, request_id: str, *, client_address: str) -> LoginPoll:
+        """Poll a login request; over the limit for `client_address`, CoreError("throttled", "rate_limited")."""
+        ...
 
     async def logout(self, caller: Caller) -> None: ...
 

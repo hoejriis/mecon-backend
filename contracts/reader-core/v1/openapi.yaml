@@ -1,0 +1,1365 @@
+openapi: 3.1.0
+info:
+  title: MECON Reader Core (facade to core)
+  version: 1.0.0-draft.2
+  summary: The calls the public Reader facade makes into the core behind its ReaderCore port.
+  description: |
+    Target specification, not a claim that any core serves it today. This
+    document is a draft and may change by pull request until a core implements
+    it and a core implementer has reviewed it.
+
+    The public Reader facade (`reader-backend/`) serves the browser-facing
+    Reader API (`contracts/reader-api/v1`). It owns HTTP towards the browser:
+    cookies, Origin and CSRF plumbing, request validation, status mapping and
+    stream framing. Everything about who may see what is the **core**'s. The
+    facade resolves the session cookie with `contracts/session-lookup/v1` and
+    then makes one call here per Reader API operation, one operation per
+    method of its `ReaderCore` port. The core's answers carry the Reader API's
+    own resource shapes (the schemas below marked "Same as the Reader API"
+    are copies of that document's components, and `contracts/validate.mjs`
+    fails if one drifts), so the facade relays them unchanged.
+
+    **Transport.** As session lookup: plain HTTP on the deployment's private
+    network between the facade and core containers, never routed through the
+    public reverse proxy, never reachable from a browser. The facade sends the
+    per-deployment service token, `Authorization: Bearer <service token>`, read
+    from a mode-600 file mounted read-only into both containers. The base URL,
+    including any path prefix in front of `/reader/`, is the deployer's choice.
+
+    **One shape for every call.** Every operation except `getHealth` is a
+    `POST` with a JSON body. A body is the one place the caller reference and
+    every argument travel, so one schema per operation decides what is
+    well-formed, and nothing about the caller appears in a URL, where access
+    logs and proxies would keep it.
+
+    ## Order of checks
+
+    Every operation answers the first of these that applies:
+
+    1. **401 `service_unauthorized`**: the `Authorization` header is missing or
+       is not the deployment's token. Nothing else is read.
+    2. **422 `malformed_request`**: the body is not JSON or breaks the
+       operation's request schema (a missing or extra member, a `limit` outside
+       1 to 200, a `cursor` over 512 characters, a `wait_s` over 25, a
+       `client_address` that is not an IP literal). The body is fixed,
+       `{"code":"malformed_request","retryable":false}`, and echoes nothing
+       from the request. It is a facade bug, never an answer about the caller.
+       One exception: on `createSendAttempt`, a well-formed body whose
+       `request` member breaks `SendRequest` (empty, too long or non-text
+       content, an unknown target kind) answers 422 `invalid`, the code the
+       Reader API answers for the same refusal.
+    3. **503 `core_unavailable`** (`retryable: true`): the core cannot answer
+       now.
+    4. **403 `session_ended`**: the call carries a `caller` whose session is not
+       live (see "The caller reference").
+    5. The operation's own answer.
+
+    ## The caller reference
+
+    Every caller-scoped operation carries `caller`, `{user_id, session_ref}`,
+    the two members of the `Caller` the session lookup returned, in its body.
+    The facade sends nothing else about the caller, and the core needs nothing
+    else: it derives role, grants and scope from its own records. The core
+    re-checks the reference on every call: the session named by `session_ref`
+    must exist, be neither revoked nor expired, and belong to `user_id`. If
+    not, the answer is **403 `session_ended`** (`retryable: false`), the same
+    body whichever of those failed. The facade may hold a `Caller` for a few
+    seconds (the session-lookup cache), so a session can end between the
+    lookup and this call; the facade then answers the browser as for a
+    session that no longer resolves (401 `unauthenticated`, cookie cleared)
+    and an open event stream sends `session_revoked` and closes.
+
+    `logout` is the one exception: it ends the session if it is live and
+    answers 204 either way, so a repeated or late logout is not an error.
+
+    ## Scope is the core's
+
+    The core scopes every answer to the caller; the facade never filters,
+    widens or merges. A resource that does not exist and one the caller may
+    not see get the **same answer**: 404 with exactly
+    `{"code":"not_found","retryable":false}`, never 403, so no call is an
+    existence oracle. Instance Admin and Fleet Owner grant no access to other
+    users' private messages or keys.
+
+    ## Pagination
+
+    A paged list takes an optional opaque `cursor` (1 to 512 characters, absent
+    for the first page) and an optional `limit` (1 to 200, default 50) and
+    answers the Reader API's list shape: `items`, `next_cursor` (null on the
+    last page) and `as_of`. History cursors never expire. A `limit` or
+    `cursor` outside the schema is 422 `malformed_request`; a well-formed
+    cursor the core cannot decode for that list is 422 `invalid`. Neither is
+    clamped or read from the start.
+
+    ## Sends
+
+    `createSendAttempt` is idempotent by `client_attempt_id`, per caller: the
+    same id with the same request answers **200** with the existing attempt
+    (nothing is sent again); the same id with a different request is **409
+    `conflict`**; a new id answers **201** with the new attempt. Two users may
+    use the same id without meeting. When the operator has switched Reader
+    sending off the answer is 403 `sending_disabled`, before anything is
+    recorded. The facade checks `Idempotency-Key` against `client_attempt_id`
+    before it calls (the Reader API answers a mismatch 422 `invalid`; the core
+    never sees one).
+
+    **No existence oracle.** An identity that is not the caller's, an identity
+    that does not exist and a target the caller cannot address all answer the
+    identical 404 `{"code":"not_found","retryable":false}`. Content the core
+    refuses (empty, too long or not text, an unknown target kind) answers 422
+    `invalid`.
+
+    **Conversations.** The core lists a channel or contact conversation once
+    it holds a message in it. A send attempt alone does not guarantee that:
+    the attempt is recorded at once, the message when the core holds it.
+
+    ## Events
+
+    `readEvents` is a long poll, not a stream: it answers at once with the
+    events held after `cursor` that the caller may see, or waits up to
+    `wait_s` (at most **25** seconds, the Reader API's heartbeat interval) for
+    one, then answers with an empty list. A null `cursor` starts from now.
+    The answer's `cursor` is where the next read continues. Cursors are
+    global positions in the core's event log, not per caller: delivery is
+    filtered per caller, and a cursor reveals only a position, so any caller
+    may present any cursor. A cursor that is unknown or outside retention
+    answers **410 `cursor_expired`**. A caller with no device and no identity
+    is not refused: as on the Reader API's `GET /events`, it is served
+    batches holding only what it may see, usually none. Envelopes are the Reader API's `EventEnvelope`. The
+    core does not send `session_revoked` in a batch: a read for an ended
+    session is 403 `session_ended`, and the facade frames `session_revoked`
+    itself.
+
+    **Stream cap.** The facade holds the browser streams and enforces the
+    per-user cap on concurrent streams; the core sees only reads and keeps no
+    stream count. When a user opens one stream over the cap, the facade ends
+    that user's oldest stream and serves the new one: the newest wins and
+    nothing is refused. The ended stream closes cleanly with no frame (the
+    Reader API has no frame for it; `session_revoked` would sign the user
+    out), and a Reader reconnects it as after any close.
+
+    ## Login rate limits
+
+    `startLogin` and `pollLogin` carry `client_address`, the browser's IP
+    address as the facade derives it from its own trusted-proxy
+    configuration. Every browser reaches the core through the facade's one
+    address, so the core keys its per-client login limits on
+    `client_address`, and trusts it because the call carries the service
+    token. Over a limit the core answers **429 `rate_limited`** with
+    `retry_after_s`. The facade never shows that to the browser: the Reader
+    API answers the same 202 on login start and `pending` on a poll, so a
+    limit reveals nothing about which addresses have accounts.
+
+    ## Errors
+
+    Every refusal other than the 401 is a `Refusal`: `code`, `retryable` and,
+    on a 429, `retry_after_s`. The facade keeps the `code` and maps the
+    status to the Reader API's (`session_ended` to 401 `unauthenticated`,
+    `core_unavailable` to 503 `unavailable`, the others unchanged).
+  license:
+    name: Apache-2.0
+    identifier: Apache-2.0
+servers:
+  - url: http://core.internal
+    description: |
+      The core, on the deployment's private network only. The base URL,
+      including any path prefix in front of `/reader/`, is the deployer's
+      choice; the facade is configured with it.
+security:
+  - serviceToken: []
+tags:
+  - name: session
+    description: Health, login and logout.
+  - name: devices
+    description: Devices assigned to the caller.
+  - name: messaging
+    description: Identities, conversations, messages, contacts, channels and sends.
+  - name: events
+    description: The caller's incremental updates.
+  - name: leases
+    description: Offline leases and their verification keys.
+paths:
+  /reader/health:
+    get:
+      tags: [session]
+      operationId: getHealth
+      summary: Liveness and deployed commit of the core
+      description: |
+        Takes no caller. `degraded` when the core answers but a part it needs
+        is impaired; 503 when it cannot answer at all.
+      responses:
+        '200':
+          description: The core is up
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Health' }
+              examples:
+                ok: { externalValue: fixtures/health.json }
+        '401': { $ref: '#/components/responses/ServiceUnauthorized' }
+        '503': { $ref: '#/components/responses/CoreUnavailable' }
+
+  /reader/login/start:
+    post:
+      tags: [session]
+      operationId: startLogin
+      summary: Start a magic-link login
+      description: |
+        Pre-session, so no caller. The core checks the Origin rule itself
+        against its own allow-list: `origin` with one trailing `/` removed is
+        listed, **or** `sec_fetch_site` is `same-origin`; otherwise 403
+        `origin_rejected`. A facade pre-check is never the only check. The
+        answer is the same 202 whether or not the address has an account (no
+        account oracle). Over the limit for `client_address` it is 429
+        `rate_limited`, which the facade turns into the Reader API's
+        indistinguishable 202.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginStartRequest' }
+            examples:
+              start: { externalValue: fixtures/login-start-request.json }
+      responses:
+        '202':
+          description: Accepted (sent or silently not sent)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LoginStarted' }
+              examples:
+                started: { externalValue: fixtures/login-started.json }
+        '401': { $ref: '#/components/responses/ServiceUnauthorized' }
+        '403':
+          description: The Origin rule refused the request (code `origin_rejected`)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Refusal' }
+              examples:
+                originRejected: { externalValue: fixtures/refusal-origin-rejected.json }
+        '422': { $ref: '#/components/responses/Malformed' }
+        '429':
+          description: Over the login limit for `client_address` (code `rate_limited`, with `retry_after_s`)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RateLimited' }
+              examples:
+                rateLimited: { externalValue: fixtures/refusal-rate-limited.json }
+        '503': { $ref: '#/components/responses/CoreUnavailable' }
+
+  /reader/login/poll:
+    post:
+      tags: [session]
+      operationId: pollLogin
+      summary: Poll a login request by its id
+      description: |
+        `approved` is answered exactly once and carries the new session's
+        cookie value (`credential`) and `expires_at`; the facade sets the
+        cookie and never stores the value. Later polls answer `delivered`. An
+        unknown id reads as the Reader API's `GET /login/{request_id}`
+        describes; an expired one reads `expired`. Over the limit for
+        `client_address` it is 429 `rate_limited`, which the facade answers as
+        `pending`. Pre-session, so no caller.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginPollRequest' }
+      responses:
+        '200':
+          description: The state of the request
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LoginPoll' }
+              examples:
+                pending: { externalValue: fixtures/login-poll-pending.json }
+                approved: { externalValue: fixtures/login-poll-approved.json }
+        '401': { $ref: '#/components/responses/ServiceUnauthorized' }
+        '422': { $ref: '#/components/responses/Malformed' }
+        '429':
+          description: Over the login limit for `client_address` (code `rate_limited`, with `retry_after_s`)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RateLimited' }
+        '503': { $ref: '#/components/responses/CoreUnavailable' }
+
+  /reader/logout:
+    post:
+      tags: [session]
+      operationId: logout
+      summary: End the caller's session
+      description: |
+        Ends the session `caller.session_ref` names when it is live and belongs
+        to `caller.user_id`, and announces it on the revocation feed. Answers
+        204 either way (never `session_ended`), so a repeated logout is not an
+        error and reveals nothing.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CallerRequest' }
+            examples:
+              caller: { externalValue: fixtures/caller-request.json }
+      responses:
+        '204':
+          description: The session is ended
+        '401': { $ref: '#/components/responses/ServiceUnauthorized' }
+        '422': { $ref: '#/components/responses/Malformed' }
+        '503': { $ref: '#/components/responses/CoreUnavailable' }
+
+  /reader/devices/list:
+    post:
+      tags: [devices]
+      operationId: listDevices
+      summary: Devices assigned to the caller (paged)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PageRequest' }
+            examples:
+              firstPage: { externalValue: fixtures/page-request.json }
+      responses:
+        '200':
+          description: One page of devices
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeviceList' }
+              examples:
+                one: { externalValue: fixtures/devices-one.json }
+        '401': { $ref: '#/components/responses/ServiceUnauthorized' }
+        '403': { $ref: '#/components/responses/SessionEnded' }
+        '422': { $ref: '#/components/responses/BadPage' }
+        '503': { $ref: '#/components/responses/CoreUnavailable' }
+
+  /reader/identities/list:
+    post:
+      tags: [messaging]
+      operationId: listIdentities
+      summary: The caller's messaging identities (whole list)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CallerRequest' }
+      responses:
+        '200':
+          description: Every identity, `next_cursor` null
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IdentityList' }
+        '401': { $ref: '#/components/responses/ServiceUnauthorized' }
+        '403': { $ref: '#/components/responses/SessionEnded' }
+        '422': { $ref: '#/components/responses/Malformed' }
+        '503': { $ref: '#/components/responses/CoreUnavailable' }
+
+  /reader/conversations/list:
+    post:
+      tags: [messaging]
+      operationId: listConversations
+      summary: The caller's conversations (paged, newest activity first)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PageRequest' }
+      responses:
+        '200':
+          description: One page of conversations
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ConversationList' }
+        '401': { $ref: '#/components/responses/ServiceUnauthorized' }
+        '403': { $ref: '#/components/responses/SessionEnded' }
+        '422': { $ref: '#/components/responses/BadPage' }
+        '503': { $ref: '#/components/responses/CoreUnavailable' }
+
+  /reader/conversations/get:
+    post:
+      tags: [messaging]
+      operationId: getConversation
+      summary: One conversation the caller may see
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ConversationRequest' }
+      responses:
+        '200':
+          description: The conversation
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Conversation' }
+        '401': { $ref: '#/components/responses/ServiceUnauthorized' }
+        '403': { $ref: '#/components/responses/SessionEnded' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Malformed' }
+        '503': { $ref: '#/components/responses/CoreUnavailable' }
+
+  /reader/conversations/mark-read:
+    post:
+      tags: [messaging]
+      operationId: markConversationRead
+      summary: Mark a conversation read up to a message
+      description: |
+        Idempotent; an `up_to` older than the read mark is a no-op. An `up_to`
+        that is not a message of this conversation is 422 `validation_failed`;
+        404 is only for a conversation the caller cannot see.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MarkReadRequest' }
+      responses:
+        '204':
+          description: Marked read
+        '401': { $ref: '#/components/responses/ServiceUnauthorized' }
+        '403': { $ref: '#/components/responses/SessionEnded' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422':
+          description: Malformed (`malformed_request`) or `up_to` is not a message of this conversation (`validation_failed`)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MarkReadInvalid' }
+        '503': { $ref: '#/components/responses/CoreUnavailable' }
+
+  /reader/messages/list:
+    post:
+      tags: [messaging]
+      operationId: listMessages
+      summary: Messages of one conversation the caller may see (paged, newest first)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MessagePageRequest' }
+      responses:
+        '200':
+          description: One page of messages
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MessageList' }
+        '401': { $ref: '#/components/responses/ServiceUnauthorized' }
+        '403': { $ref: '#/components/responses/SessionEnded' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/BadPage' }
+        '503': { $ref: '#/components/responses/CoreUnavailable' }
+
+  /reader/contacts/list:
+    post:
+      tags: [messaging]
+      operationId: listContacts
+      summary: Contacts the caller may see (paged)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PageRequest' }
+      responses:
+        '200':
+          description: One page of contacts
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ContactList' }
+        '401': { $ref: '#/components/responses/ServiceUnauthorized' }
+        '403': { $ref: '#/components/responses/SessionEnded' }
+        '422': { $ref: '#/components/responses/BadPage' }
+        '503': { $ref: '#/components/responses/CoreUnavailable' }
+
+  /reader/channels/list:
+    post:
+      tags: [messaging]
+      operationId: listChannels
+      summary: Channels the caller may read (whole list)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CallerRequest' }
+      responses:
+        '200':
+          description: Every channel, `next_cursor` null
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChannelList' }
+        '401': { $ref: '#/components/responses/ServiceUnauthorized' }
+        '403': { $ref: '#/components/responses/SessionEnded' }
+        '422': { $ref: '#/components/responses/Malformed' }
+        '503': { $ref: '#/components/responses/CoreUnavailable' }
+
+  /reader/send-attempts/create:
+    post:
+      tags: [messaging]
+      operationId: createSendAttempt
+      summary: Create a send attempt, idempotent by client_attempt_id
+      description: |
+        See "Sends" above. 403 is `session_ended` or `sending_disabled`. 404
+        `not_found` is one answer for an identity that is not the caller's or
+        does not exist and for a target the caller cannot address. 422 is
+        `malformed_request` for a broken envelope, or `invalid` for a
+        `request` that breaks `SendRequest`. A 5xx is ambiguous: the facade
+        re-sends the same request, never a new one.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateSendRequest' }
+            examples:
+              direct: { externalValue: fixtures/create-send-request.json }
+      responses:
+        '201':
+          description: A new attempt
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SendAttempt' }
+              examples:
+                queued: { externalValue: fixtures/send-attempt-queued.json }
+        '200':
+          description: The existing attempt for this client_attempt_id and the same request
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SendAttempt' }
+        '401': { $ref: '#/components/responses/ServiceUnauthorized' }
+        '403':
+          description: '`session_ended` or `sending_disabled`'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Refusal' }
+              examples:
+                sendingDisabled: { externalValue: fixtures/refusal-sending-disabled.json }
+        '409':
+          description: This client_attempt_id was used with a different request (code `conflict`)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Refusal' }
+              examples:
+                conflict: { externalValue: fixtures/refusal-conflict.json }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422':
+          description: '`malformed_request` for a broken envelope; `invalid` for content or a target kind the core refuses'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SendInvalid' }
+              examples:
+                invalidContent: { externalValue: fixtures/refusal-invalid-content.json }
+        '429':
+          description: Rate limited (code `throttled`, with `retry_after_s`)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Refusal' }
+              examples:
+                throttled: { externalValue: fixtures/refusal-throttled.json }
+        '503': { $ref: '#/components/responses/CoreUnavailable' }
+
+  /reader/send-attempts/get:
+    post:
+      tags: [messaging]
+      operationId: getSendAttempt
+      summary: One of the caller's send attempts
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AttemptRequest' }
+      responses:
+        '200':
+          description: The attempt
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SendAttempt' }
+        '401': { $ref: '#/components/responses/ServiceUnauthorized' }
+        '403': { $ref: '#/components/responses/SessionEnded' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Malformed' }
+        '503': { $ref: '#/components/responses/CoreUnavailable' }
+
+  /reader/events/read:
+    post:
+      tags: [events]
+      operationId: readEvents
+      summary: Events after a cursor the caller may see (long poll, at most 25 s)
+      description: See "Events" above.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EventsRequest' }
+            examples:
+              fromNow: { externalValue: fixtures/events-request.json }
+      responses:
+        '200':
+          description: The events held after the cursor (possibly none) and where to continue
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EventBatch' }
+              examples:
+                one: { externalValue: fixtures/event-batch.json }
+        '401': { $ref: '#/components/responses/ServiceUnauthorized' }
+        '403': { $ref: '#/components/responses/SessionEnded' }
+        '410':
+          description: The cursor is unknown or outside retention (code `cursor_expired`)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Refusal' }
+              examples:
+                cursorExpired: { externalValue: fixtures/refusal-cursor-expired.json }
+        '422': { $ref: '#/components/responses/Malformed' }
+        '503': { $ref: '#/components/responses/CoreUnavailable' }
+
+  /reader/leases/create:
+    post:
+      tags: [leases]
+      operationId: createLease
+      summary: Issue or renew the caller's offline lease
+      description: |
+        As the Reader API's `POST /leases`: the core decides every field. 404
+        `not_found` when this core does not issue leases; 503
+        `lease_signing_unavailable` with `retryable: false` when it issues
+        them but cannot sign now. With sending switched off a lease is still
+        issued, without send operations.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CallerRequest' }
+      responses:
+        '200':
+          description: A signed lease
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LeaseIssued' }
+              examples:
+                issued: { externalValue: fixtures/lease-issued.json }
+        '401': { $ref: '#/components/responses/ServiceUnauthorized' }
+        '403': { $ref: '#/components/responses/SessionEnded' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Malformed' }
+        '429':
+          description: Rate limited (code `throttled`, with `retry_after_s`)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Refusal' }
+        '503':
+          description: '`core_unavailable` (retryable), or `lease_signing_unavailable` (not retryable)'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Refusal' }
+              examples:
+                signingUnavailable: { externalValue: fixtures/refusal-lease-signing-unavailable.json }
+
+  /reader/leases/keys:
+    post:
+      tags: [leases]
+      operationId: listLeaseKeys
+      summary: The public keys that verify leases
+      description: As the Reader API's `GET /leases/keys`; 404 when this core does not issue leases.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CallerRequest' }
+      responses:
+        '200':
+          description: Verification keys
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LeaseKeyList' }
+              examples:
+                keys: { externalValue: fixtures/lease-keys.json }
+        '401': { $ref: '#/components/responses/ServiceUnauthorized' }
+        '403': { $ref: '#/components/responses/SessionEnded' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Malformed' }
+        '503': { $ref: '#/components/responses/CoreUnavailable' }
+
+components:
+  securitySchemes:
+    serviceToken:
+      type: http
+      scheme: bearer
+      description: Per-deployment service token, a mode-600 file mounted read-only into the facade and the core.
+
+  responses:
+    ServiceUnauthorized:
+      description: The service token is missing or wrong
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ServiceError' }
+          examples:
+            serviceUnauthorized: { externalValue: fixtures/service-unauthorized.json }
+    Malformed:
+      description: The body breaks the request schema (code `malformed_request`; fixed, echoes nothing)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Refusal' }
+          examples:
+            malformed: { externalValue: fixtures/malformed-request.json }
+    BadPage:
+      description: |
+        `malformed_request` for a body outside the schema (a `limit` outside 1
+        to 200, a `cursor` over 512 characters), or `invalid` for a well-formed
+        cursor the core cannot decode for this list.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Refusal' }
+          examples:
+            invalidCursor: { externalValue: fixtures/refusal-invalid-cursor.json }
+    SessionEnded:
+      description: The caller's session is not live or not the caller's (code `session_ended`)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Refusal' }
+          examples:
+            sessionEnded: { externalValue: fixtures/refusal-session-ended.json }
+    NotFound:
+      description: Missing or not the caller's to see; one answer for both (code `not_found`)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Refusal' }
+          examples:
+            notFound: { externalValue: fixtures/refusal-not-found.json }
+    CoreUnavailable:
+      description: The core cannot answer now (code `core_unavailable`, `retryable` true)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Refusal' }
+          examples:
+            coreUnavailable: { externalValue: fixtures/core-unavailable.json }
+
+  schemas:
+    CallerRef:
+      type: object
+      required: [user_id, session_ref]
+      additionalProperties: false
+      description: The `user_id` and `session_ref` of the session lookup's `Caller`, unchanged.
+      properties:
+        user_id: { type: string, minLength: 1, maxLength: 128 }
+        session_ref: { type: string, minLength: 1, maxLength: 512 }
+
+    CallerRequest:
+      type: object
+      required: [caller]
+      additionalProperties: false
+      properties:
+        caller: { $ref: '#/components/schemas/CallerRef' }
+
+    PageRequest:
+      type: object
+      required: [caller]
+      additionalProperties: false
+      properties:
+        caller: { $ref: '#/components/schemas/CallerRef' }
+        cursor: { $ref: '#/components/schemas/PageCursor' }
+        limit: { $ref: '#/components/schemas/PageLimit' }
+
+    PageCursor:
+      type: string
+      minLength: 1
+      maxLength: 512
+      description: Opaque; absent for the first page. Only a `next_cursor` this list issued.
+
+    PageLimit:
+      type: integer
+      minimum: 1
+      maximum: 200
+      default: 50
+
+    ConversationRequest:
+      type: object
+      required: [caller, conversation_id]
+      additionalProperties: false
+      properties:
+        caller: { $ref: '#/components/schemas/CallerRef' }
+        conversation_id: { $ref: '#/components/schemas/OpaqueId' }
+
+    MarkReadRequest:
+      type: object
+      required: [caller, conversation_id, up_to]
+      additionalProperties: false
+      properties:
+        caller: { $ref: '#/components/schemas/CallerRef' }
+        conversation_id: { $ref: '#/components/schemas/OpaqueId' }
+        up_to: { $ref: '#/components/schemas/OpaqueId' }
+
+    MessagePageRequest:
+      type: object
+      required: [caller, conversation_id]
+      additionalProperties: false
+      properties:
+        caller: { $ref: '#/components/schemas/CallerRef' }
+        conversation_id: { $ref: '#/components/schemas/OpaqueId' }
+        cursor: { $ref: '#/components/schemas/PageCursor' }
+        limit: { $ref: '#/components/schemas/PageLimit' }
+
+    CreateSendRequest:
+      type: object
+      required: [caller, request]
+      additionalProperties: false
+      properties:
+        caller: { $ref: '#/components/schemas/CallerRef' }
+        request: { $ref: '#/components/schemas/SendRequest' }
+
+    AttemptRequest:
+      type: object
+      required: [caller, attempt_id]
+      additionalProperties: false
+      properties:
+        caller: { $ref: '#/components/schemas/CallerRef' }
+        attempt_id: { $ref: '#/components/schemas/OpaqueId' }
+
+    EventsRequest:
+      type: object
+      required: [caller, cursor, wait_s]
+      additionalProperties: false
+      properties:
+        caller: { $ref: '#/components/schemas/CallerRef' }
+        cursor:
+          type: [string, 'null']
+          minLength: 1
+          maxLength: 512
+          description: Null to start from now; else a `cursor` or `event_id` this core issued to this caller.
+        wait_s:
+          type: number
+          minimum: 0
+          maximum: 25
+          description: How long the core may hold the call when nothing is held. 0 answers at once.
+
+    EventBatch:
+      type: object
+      required: [events, cursor]
+      additionalProperties: false
+      properties:
+        events:
+          type: array
+          description: Oldest first. Never a `session_revoked` envelope (the facade frames that itself).
+          items: { $ref: '#/components/schemas/EventEnvelope' }
+        cursor:
+          type: string
+          minLength: 1
+          maxLength: 512
+          description: Where the next read continues.
+
+    LoginStartRequest:
+      type: object
+      required: [email, origin, sec_fetch_site, client_address]
+      additionalProperties: false
+      properties:
+        email: { type: string, format: email, maxLength: 254 }
+        origin:
+          type: [string, 'null']
+          maxLength: 2048
+          description: The browser request's Origin header, or null when it had none.
+        sec_fetch_site:
+          type: [string, 'null']
+          maxLength: 32
+          description: The browser request's Sec-Fetch-Site header, or null when it had none.
+        client_address:
+          type: string
+          minLength: 1
+          maxLength: 64
+          anyOf: [{ format: ipv4 }, { format: ipv6 }]
+          description: The browser's IP address, an IP literal, as the facade derives it behind its trusted proxies. The core keys its login limits on it.
+
+    LoginPollRequest:
+      type: object
+      required: [request_id, client_address]
+      additionalProperties: false
+      properties:
+        request_id: { type: string, minLength: 16, maxLength: 128 }
+        client_address:
+          type: string
+          minLength: 1
+          maxLength: 64
+          anyOf: [{ format: ipv4 }, { format: ipv6 }]
+          description: The browser's IP address, an IP literal, as the facade derives it behind its trusted proxies. The core keys its login limits on it.
+
+    LoginPoll:
+      type: object
+      required: [state]
+      additionalProperties: false
+      description: '`credential` and `expires_at` come with `approved` and only with it.'
+      properties:
+        state: { type: string, enum: [pending, approved, delivered, expired] }
+        poll_after_ms: { type: integer, minimum: 500 }
+        credential:
+          type: string
+          minLength: 1
+          maxLength: 4096
+          description: The new session's cookie value. The facade sets it as the cookie and never stores or logs it.
+        expires_at: { $ref: '#/components/schemas/Timestamp' }
+      oneOf:
+        - properties: { state: { const: approved } }
+          required: [credential, expires_at]
+        - properties: { state: { enum: [pending, delivered, expired] } }
+          not: { anyOf: [{ required: [credential] }, { required: [expires_at] }] }
+
+    Refusal:
+      type: object
+      required: [code, retryable]
+      additionalProperties: false
+      description: Every refusal but the 401. Carries nothing from the request.
+      properties:
+        code:
+          type: string
+          enum: [malformed_request, core_unavailable, session_ended, not_found, origin_rejected, sending_disabled,
+                 conflict, invalid, validation_failed, cursor_expired, throttled, rate_limited,
+                 lease_signing_unavailable]
+        retryable: { type: boolean }
+        retry_after_s: { type: integer, minimum: 1, description: 'Only on a 429.' }
+
+    SendInvalid:
+      description: createSendAttempt's 422. `invalid` is the Reader API's code for the same refusal.
+      allOf:
+        - $ref: '#/components/schemas/Refusal'
+        - properties: { code: { enum: [malformed_request, invalid] } }
+
+    MarkReadInvalid:
+      description: markConversationRead's 422. `validation_failed` is for `up_to` only.
+      allOf:
+        - $ref: '#/components/schemas/Refusal'
+        - properties: { code: { enum: [malformed_request, validation_failed] } }
+
+    RateLimited:
+      description: Over the login limit for `client_address`.
+      allOf:
+        - $ref: '#/components/schemas/Refusal'
+        - required: [retry_after_s]
+          properties:
+            code: { const: rate_limited }
+            retryable: { const: true }
+
+    ServiceError:
+      type: object
+      required: [code]
+      additionalProperties: false
+      description: As session lookup's.
+      properties:
+        code: { type: string, const: service_unauthorized }
+
+    # ---- Same as the Reader API (contracts/reader-api/v1/openapi.yaml): copies, checked equal by validate.mjs ----
+    OpaqueId:
+      type: string
+      minLength: 1
+      maxLength: 128
+      description: Opaque; clients never parse or construct it.
+
+    Timestamp:
+      type: string
+      format: date-time
+      description: UTC, ISO-8601, with `Z`.
+
+    Health:
+      type: object
+      required: [status, commit]
+      properties:
+        status: { type: string, enum: [ok, degraded] }
+        commit:
+          type: [string, 'null']
+          description: Deployed commit, or null for a local build.
+
+    LoginStarted:
+      type: object
+      required: [request_id, poll_after_ms, expires_at]
+      properties:
+        request_id: { type: string }
+        poll_after_ms: { type: integer, minimum: 500 }
+        expires_at: { $ref: '#/components/schemas/Timestamp' }
+
+    ListMeta:
+      type: object
+      required: [next_cursor, as_of]
+      properties:
+        next_cursor: { type: [string, 'null'] }
+        as_of: { $ref: '#/components/schemas/Timestamp' }
+
+    Device:
+      type: object
+      required: [id, role, label, capability_evidence, reachability, observed_at]
+      properties:
+        id: { $ref: '#/components/schemas/OpaqueId' }
+        role: { type: string, enum: [companion, repeater, room_server, unknown] }
+        label: { type: string }
+        capability_evidence:
+          type: object
+          description: From the device's own reported capabilities, never inferred from board model.
+          additionalProperties: { type: boolean }
+        battery_pct: { type: [integer, 'null'], minimum: 0, maximum: 100 }
+        reachability: { type: string, enum: [online, stale, offline, unknown] }
+        observed_at: { $ref: '#/components/schemas/Timestamp' }
+
+    DeviceList:
+      allOf:
+        - $ref: '#/components/schemas/ListMeta'
+        - type: object
+          required: [items]
+          properties:
+            items: { type: array, items: { $ref: '#/components/schemas/Device' } }
+
+    Identity:
+      type: object
+      required: [id, display_name, public_key_prefix, device_id, can_send]
+      properties:
+        id: { $ref: '#/components/schemas/OpaqueId' }
+        display_name: { type: string }
+        public_key_prefix: { type: string, pattern: '^[0-9a-f]{2,16}$' }
+        device_id: { type: [string, 'null'] }
+        can_send: { type: boolean }
+
+    IdentityList:
+      allOf:
+        - $ref: '#/components/schemas/ListMeta'
+        - type: object
+          required: [items]
+          properties:
+            items: { type: array, items: { $ref: '#/components/schemas/Identity' } }
+
+    Target:
+      description: |
+        What a send or a conversation is addressed to. For `kind: contact`,
+        `id` is the `Contact.id` of the peer (the same opaque id `GET
+        /contacts` lists). For `kind: channel`, `id` is the `Channel.id`.
+      type: object
+      required: [kind, id]
+      properties:
+        kind: { type: string, enum: [contact, channel] }
+        id: { $ref: '#/components/schemas/OpaqueId' }
+
+    Conversation:
+      description: |
+        `id` is derived server-side and is opaque: clients never parse or
+        construct it, and it may change only through a resync. Ids are per
+        caller: two callers may see the same thread under different ids. When
+        the same peer is reachable through an enrolled pair of identities that
+        the Backend has merged, the pair is exposed as one conversation (one
+        `id`, one entry in lists), not two.
+
+        `identity_id` is the caller's own identity in this conversation. For a
+        channel conversation it is the caller's identity the Backend uses for
+        that channel; a caller with no identity has no conversations.
+        `unread_count` counts every row of the conversation newer than the
+        caller's read mark; the mark belongs to the caller's own side of the
+        conversation, so marking one conversation read never changes another.
+
+        `target.id` of a contact conversation equals the `Contact.id` of the
+        peer; of a channel conversation, the `Channel.id`.
+      type: object
+      required: [id, identity_id, target, title, unread_count, last_activity_at]
+      properties:
+        id: { $ref: '#/components/schemas/OpaqueId' }
+        identity_id: { $ref: '#/components/schemas/OpaqueId' }
+        target: { $ref: '#/components/schemas/Target' }
+        title: { type: string }
+        unread_count:
+          type: integer
+          minimum: 0
+          description: |
+            Changes when the Backend marks messages read, which a client
+            requests with `POST /conversations/{conversation_id}/read`. A
+            `conversation` event carries the new count.
+        last_activity_at: { $ref: '#/components/schemas/Timestamp' }
+
+    ConversationList:
+      allOf:
+        - $ref: '#/components/schemas/ListMeta'
+        - type: object
+          required: [items]
+          properties:
+            items: { type: array, items: { $ref: '#/components/schemas/Conversation' } }
+
+    Message:
+      type: object
+      required: [message_id, conversation_id, identity_id, direction, source_path, observed_at, content]
+      properties:
+        message_id: { $ref: '#/components/schemas/OpaqueId' }
+        conversation_id: { $ref: '#/components/schemas/OpaqueId' }
+        identity_id:
+          description: |
+            Required (non-null) for the caller's own direct messages. Null on
+            channel traffic, where `sender_label` is the only sender
+            information.
+          oneOf:
+            - $ref: '#/components/schemas/OpaqueId'
+            - type: 'null'
+        direction:
+          type: string
+          enum: [inbound, outbound]
+          description: From the caller's perspective, including on the other party's copy in a merged pair.
+        sender_label: { type: [string, 'null'] }
+        source_path: { type: string, enum: [backend, ble, unknown] }
+        observed_at: { $ref: '#/components/schemas/Timestamp' }
+        content:
+          type: object
+          required: [kind, text]
+          properties:
+            kind: { type: string, enum: [text] }
+            text: { type: string }
+        attempt_id: { type: [string, 'null'] }
+
+    MessageList:
+      allOf:
+        - $ref: '#/components/schemas/ListMeta'
+        - type: object
+          required: [items]
+          properties:
+            items: { type: array, items: { $ref: '#/components/schemas/Message' } }
+
+    Contact:
+      type: object
+      required: [id, display_name, public_key_prefix, last_heard_at]
+      properties:
+        id: { $ref: '#/components/schemas/OpaqueId' }
+        display_name: { type: string }
+        public_key_prefix: { type: string, pattern: '^[0-9a-f]{2,16}$' }
+        kind: { type: string, enum: [companion, repeater, room_server, unknown] }
+        favourite: { type: boolean }
+        last_heard_at: { type: [string, 'null'], format: date-time }
+
+    ContactList:
+      allOf:
+        - $ref: '#/components/schemas/ListMeta'
+        - type: object
+          required: [items]
+          properties:
+            items: { type: array, items: { $ref: '#/components/schemas/Contact' } }
+
+    Channel:
+      type: object
+      required: [id, name, visibility]
+      properties:
+        id: { $ref: '#/components/schemas/OpaqueId' }
+        name: { type: string }
+        visibility: { type: string, enum: [public, private] }
+        favourite: { type: boolean }
+        hash:
+          type: [string, 'null']
+          pattern: '^[0-9a-f]{2}$'
+          description: |
+            The one-byte channel hash: the same value a device's `channel.list`
+            reports for the same channel (the first byte of the SHA-256 of the
+            channel key, as two lowercase hex digits). Non-secret: one byte
+            reveals nothing usable about the key. A client may compare it with
+            the hash a device reports as a cross-check that the device holds
+            the same channel; it is not an identifier (channels can collide on
+            it). `null`, or absent, when the Backend does not know it; a
+            client then has no hash to compare.
+
+    ChannelList:
+      allOf:
+        - $ref: '#/components/schemas/ListMeta'
+        - type: object
+          required: [items]
+          properties:
+            items: { type: array, items: { $ref: '#/components/schemas/Channel' } }
+
+    SendRequest:
+      type: object
+      required: [client_draft_id, client_attempt_id, identity_id, target, content]
+      additionalProperties: false
+      properties:
+        client_draft_id: { $ref: '#/components/schemas/OpaqueId' }
+        client_attempt_id: { $ref: '#/components/schemas/OpaqueId' }
+        identity_id: { $ref: '#/components/schemas/OpaqueId' }
+        target: { $ref: '#/components/schemas/Target' }
+        content:
+          type: object
+          required: [kind, text]
+          additionalProperties: false
+          properties:
+            kind: { type: string, enum: [text] }
+            text: { type: string, minLength: 1 }
+
+    SendStatus:
+      type: string
+      enum: [queued, duty_held, transmitted, acked, timed_out, failed, unknown]
+      description: |
+        `acked` exists only for direct messages (native ACK; not a read
+        receipt). It never appears for a channel target: channel sends have no
+        per-recipient ack, and the Backend never emits it there. A client that
+        nevertheless receives `acked` on a channel attempt treats it as
+        `transmitted`.
+
+        A failed `POST /send-attempts` is definitely not accepted only on a
+        4xx answer. A 5xx answer, 503 included, is ambiguous; the Reader
+        re-POSTs the same attempt and never creates a new one. `unknown` and `timed_out` do not prove non-transmission; the
+        Reader never resends automatically.
+
+        `unknown` and `timed_out` are reported only when the device itself
+        reports them (`status_evidence.source: device`, public-firmware
+        Companions). Legacy gateways (`source: unsupported`) map only to
+        `queued`, `transmitted`, `acked` or `failed`. The Reader must never
+        show `unknown` as failed.
+
+    SendAttempt:
+      description: |
+        For a channel target `status` is never `acked` (see `SendStatus`); a
+        client that receives it anyway shows the attempt as transmitted.
+      type: object
+      required: [id, client_attempt_id, path, identity_id, status, status_evidence, created_at, updated_at]
+      properties:
+        id: { $ref: '#/components/schemas/OpaqueId' }
+        client_attempt_id: { $ref: '#/components/schemas/OpaqueId' }
+        path: { type: string, const: backend }
+        identity_id: { $ref: '#/components/schemas/OpaqueId' }
+        status: { $ref: '#/components/schemas/SendStatus' }
+        status_evidence:
+          type: object
+          required: [accepted_at, source]
+          description: What the Backend has actually seen. No gateway identities or fleet topology.
+          properties:
+            accepted_at: { $ref: '#/components/schemas/Timestamp' }
+            first_transmitted_at: { type: [string, 'null'], format: date-time }
+            transmissions: { type: integer, minimum: 0 }
+            acked_at: { type: [string, 'null'], format: date-time }
+            detail: { type: [string, 'null'] }
+            source:
+              type: string
+              enum: [device, unsupported]
+              description: |
+                `device`: the status was reported by the transmitting device
+                itself. `unsupported`: the origin cannot report device-level
+                status (legacy gateway); only queued, transmitted, acked or
+                failed can occur.
+            per_origin:
+              type: array
+              description: |
+                Optional, absent until the Backend's multi-origin coordination
+                ships. Until then the Backend sends only through the caller's
+                own assigned Companion and the top-level fields describe that
+                single origin. Items never expose gateway identities.
+              items:
+                type: object
+                required: [origin_ordinal, status, transmitted_at]
+                additionalProperties: false
+                properties:
+                  origin_ordinal: { type: integer, minimum: 0, description: 'Position within this attempt only; not a gateway identifier.' }
+                  status: { $ref: '#/components/schemas/SendStatus' }
+                  transmitted_at: { type: [string, 'null'], format: date-time }
+        created_at: { $ref: '#/components/schemas/Timestamp' }
+        updated_at: { $ref: '#/components/schemas/Timestamp' }
+
+    EventEnvelope:
+      description: |
+        `resource_id` by `kind`: the conversation id for `message` and
+        `conversation`; the server attempt `id` for `attempt_status`; the
+        device id for `device_status`, which a client may ignore; null for the
+        control events `authorization_changed`, `resync_required` and
+        `session_revoked` (see `GET /events`). A client may refetch its open
+        attempts when it meets an unknown id.
+      type: object
+      required: [event_id, kind, occurred_at, version]
+      properties:
+        event_id: { type: string }
+        kind:
+          type: string
+          enum: [message, conversation, device_status, attempt_status, authorization_changed, resync_required, session_revoked]
+        occurred_at: { $ref: '#/components/schemas/Timestamp' }
+        resource_id: { type: [string, 'null'] }
+        version: { type: integer, minimum: 1 }
+
+    LeaseOperation:
+      type: string
+      enum: [receive, send.direct, send.channel]
+      description: |
+        `receive`: show incoming traffic a locally connected device exposes.
+        `send.direct`: send a direct message through a local device.
+        `send.channel`: send a channel message through a local device.
+
+    LeasePayload:
+      description: |
+        The signed content of a lease. It carries no secret and no key
+        material: only opaque ids, scopes and times. Everything in it is also
+        visible to the Backend and, by design, to the person it was issued to.
+
+        Offline revocation cannot be faster than expiry: a Reader that cannot
+        reach the Backend learns of a disabled user, a reassigned device or a
+        removed channel only when its lease runs out (`expires_at`, at most 7
+        days after `issued_at`).
+      type: object
+      required: [lease_id, user_id, issued_at, expires_at, key_id, contract_version, identities, devices, channels]
+      properties:
+        lease_id: { $ref: '#/components/schemas/OpaqueId' }
+        user_id:
+          allOf:
+            - $ref: '#/components/schemas/OpaqueId'
+          description: The `user.id` of the session this lease was issued to. A Reader refuses a lease for any other user.
+        issued_at: { $ref: '#/components/schemas/Timestamp' }
+        expires_at:
+          allOf:
+            - $ref: '#/components/schemas/Timestamp'
+          description: At most 7 days (604800 s) after `issued_at`. A verifier refuses a longer lease even when the signature is good.
+        key_id:
+          allOf:
+            - $ref: '#/components/schemas/OpaqueId'
+          description: Names the entry of `GET /leases/keys` that verifies the signature.
+        contract_version:
+          type: string
+          pattern: '^1\.[0-9]+$'
+        identities:
+          type: array
+          description: Identities the user may use offline, and the operations granted per identity.
+          items:
+            type: object
+            required: [identity_id, operations]
+            properties:
+              identity_id: { $ref: '#/components/schemas/OpaqueId' }
+              operations:
+                type: array
+                uniqueItems: true
+                items: { $ref: '#/components/schemas/LeaseOperation' }
+        devices:
+          type: array
+          description: Ids of the devices assigned to the user (as in `GET /devices`). A local operation is permitted only on a listed device.
+          items: { $ref: '#/components/schemas/OpaqueId' }
+        channels:
+          type: array
+          description: Ids of the channels the user may use offline (as in `GET /channels`).
+          items: { $ref: '#/components/schemas/OpaqueId' }
+
+    LeaseToken:
+      type: string
+      maxLength: 16384
+      pattern: '^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$'
+      description: |
+        Compact `payload.signature`, both base64url without padding.
+        `payload` is the UTF-8 canonical JSON of a `LeasePayload`: object keys
+        sorted by code point at every level, no insignificant whitespace.
+        `signature` is an Ed25519 signature over the ASCII bytes
+        `MECON-LEASE-1` followed by one 0x00 byte, then the decoded payload
+        bytes exactly as they appear in the token. The prefix keeps a lease
+        signature from being valid for anything else. A verifier checks the
+        signature over the bytes it received, and only then parses them.
+
+    LeaseIssued:
+      type: object
+      required: [lease, expires_at]
+      properties:
+        lease: { $ref: '#/components/schemas/LeaseToken' }
+        expires_at:
+          allOf:
+            - $ref: '#/components/schemas/Timestamp'
+          description: "A convenience copy of the payload `expires_at`. Never trusted: only the signed payload counts."
+
+    LeaseKey:
+      type: object
+      required: [key_id, algorithm, public_key, status, not_before, not_after]
+      properties:
+        key_id: { $ref: '#/components/schemas/OpaqueId' }
+        algorithm: { type: string, enum: [Ed25519] }
+        public_key:
+          type: string
+          pattern: '^[A-Za-z0-9_-]{43}$'
+          description: The raw 32-byte Ed25519 public key, base64url without padding.
+        status: { type: string, enum: [active, retired] }
+        not_before: { $ref: '#/components/schemas/Timestamp' }
+        not_after:
+          oneOf:
+            - $ref: '#/components/schemas/Timestamp'
+            - type: 'null'
+          description: Null while the key still signs leases.
+
+    LeaseKeyList:
+      type: object
+      required: [keys, as_of]
+      properties:
+        keys:
+          type: array
+          items: { $ref: '#/components/schemas/LeaseKey' }
+        as_of: { $ref: '#/components/schemas/Timestamp' }

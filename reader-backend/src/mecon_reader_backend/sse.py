@@ -38,13 +38,15 @@ async def event_stream(core: ReaderCore | None, sessions: SessionResolver, calle
                        read: Callable[[Caller, str | None, float], Awaitable[EventBatch]] | None = None,
                        revoked_frame_for: Callable[[str], bytes] = revoked_frame,
                        gone_frame_for: Callable[[str], bytes] | None = None,
-                       forbidden_frame_for: Callable[[str], bytes] | None = None) -> AsyncIterator[bytes]:
+                       forbidden_frame_for: Callable[[str], bytes] | None = None,
+                       superseded: asyncio.Event | None = None) -> AsyncIterator[bytes]:
     """Frame `first`, then follow the stream with `read` (default: the Reader core's read_events).
 
     `revoked_frame_for` builds the one frame sent when the session is revoked; `gone_frame_for`, when given,
     builds a frame sent before closing when a read finds the cursor gone (else the stream just closes).
     `forbidden_frame_for`, when given, builds the one frame sent before closing when a read finds the caller's
     rights withdrawn (a read raising CoreError `forbidden`); nothing more is sent after it.
+    `superseded`, when given and set, ends the stream cleanly with no frame (the per-user stream cap ended it).
     """
     if read is None:
         assert core is not None
@@ -60,21 +62,28 @@ async def event_stream(core: ReaderCore | None, sessions: SessionResolver, calle
             if revoked.is_set():
                 yield revoked_frame_for(cursor)
                 return
+            if superseded is not None and superseded.is_set():
+                return
             if caller.expires_at <= datetime.now(timezone.utc):
                 return
             if sessions.feed_down_for() > feed_down_close_s:
                 return
             pending = asyncio.ensure_future(read(caller, cursor, min(tick_s, heartbeat_s)))
-            stop = asyncio.ensure_future(revoked.wait())
-            done, _ = await asyncio.wait({pending, stop}, return_when=asyncio.FIRST_COMPLETED)
+            stops = {asyncio.ensure_future(revoked.wait())}
+            if superseded is not None:
+                stops.add(asyncio.ensure_future(superseded.wait()))
+            done, _ = await asyncio.wait({pending} | stops, return_when=asyncio.FIRST_COMPLETED)
+            for s in stops:
+                s.cancel()
             if pending not in done:
                 pending.cancel()
-                stop.cancel()
-                continue  # revoked: the check at the top closes the stream before anything else is sent
-            stop.cancel()
+                continue  # revoked or superseded: the checks at the top close the stream before anything is sent
             try:
                 batch = pending.result()
             except CoreError as e:
+                if e.code == "session_ended":
+                    yield revoked_frame_for(cursor)  # the core saw the session end before the revocation feed did
+                    return
                 if e.kind == "forbidden" and forbidden_frame_for is not None:
                     yield forbidden_frame_for(cursor)  # rights withdrawn mid-stream: said once, then closed
                     return

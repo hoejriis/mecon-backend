@@ -1,0 +1,212 @@
+{
+ "contract": "mecon-reader-core/1.0.0-draft.2",
+ "synthetic": true,
+ "actions": {
+  "issue-session": {
+   "args": [
+    "user"
+   ],
+   "description": "Give `user` a new live session, by whatever means the core's tests use, and capture its `session_ref` (the non-secret reference the session lookup's Caller carries). No case needs the cookie value."
+  },
+  "user-id": {
+   "args": [
+    "user"
+   ],
+   "description": "Capture `user`'s opaque `user_id`, as the session lookup's Caller would carry it."
+  },
+  "end-session": {
+   "args": [
+    "session_ref"
+   ],
+   "description": "Revoke that session on the core, as signing out elsewhere or an operator would."
+  },
+  "expire-session": {
+   "args": [
+    "session_ref"
+   ],
+   "description": "Move that session's expiry into the past, as time passing would."
+  },
+  "approve-login": {
+   "args": [
+    "request_id"
+   ],
+   "description": "Open the login link of this pending request, as its recipient would (out of band)."
+  },
+  "exhaust-login-limit": {
+   "args": [
+    "client_address"
+   ],
+   "description": "Use up the core's login limit for this client address, as many login starts and polls from it would, so the next login start or poll from it is over the limit."
+  },
+  "set-switch": {
+   "args": [
+    "switch",
+    "value"
+   ],
+   "description": "`sending`: on or off (the operator's Reader sending switch). `lease_signing`: on, off (leases offered, signing key unusable) or absent (leases not offered at all). A core that always offers leases reports the cases that use `absent` as not applicable, never as passed."
+  },
+  "age-out-events": {
+   "args": [],
+   "description": "Move every event cursor issued so far outside retention."
+  },
+  "core-degraded": {
+   "args": [],
+   "description": "Make the core unable to answer any operation until `core-recovered`."
+  },
+  "core-recovered": {
+   "args": [],
+   "description": "Undo `core-degraded`."
+  }
+ },
+ "worlds": {
+  "two-fleets": {
+   "service_token": "a per-deployment secret the runner holds; `valid` sends it, `wrong` sends a different string, `absent` sends no Authorization header",
+   "origin_allow_list": [
+    "https://reader.example.test"
+   ],
+   "description": "Two users in two fleets that share nothing private (alice and carol: a device and an identity each, private direct messages each, one channel shared by both fleets and one private channel per fleet), and dora, in alice's fleet, with no device and no identity. Every name, key prefix, origin and address is made up. Each case starts from a fresh copy with both switches on. Ids (users, sessions, devices, conversations, attempts) are the core's own: a case captures every id it uses and assumes none.",
+   "fleets": [
+    "north",
+    "south"
+   ],
+   "users": {
+    "alice": {
+     "email": "alice@example.test",
+     "display_name": "Alice (synthetic)",
+     "fleet": "north",
+     "devices": [
+      "alice_companion"
+     ],
+     "identities": [
+      "alice_id"
+     ]
+    },
+    "carol": {
+     "email": "carol@example.test",
+     "display_name": "Carol (synthetic)",
+     "fleet": "south",
+     "devices": [
+      "carol_companion"
+     ],
+     "identities": [
+      "carol_id"
+     ]
+    },
+    "dora": {
+     "email": "dora@example.test",
+     "display_name": "Dora (synthetic)",
+     "fleet": "north",
+     "devices": [],
+     "identities": []
+    }
+   },
+   "devices": {
+    "alice_companion": {
+     "role": "companion",
+     "label": "Alice companion (synthetic)",
+     "reachable": true
+    },
+    "carol_companion": {
+     "role": "companion",
+     "label": "Carol companion (synthetic)",
+     "reachable": true
+    }
+   },
+   "identities": {
+    "alice_id": {
+     "display_name": "Alice (synthetic)",
+     "public_key_prefix": "a1a1a1a1",
+     "device": "alice_companion",
+     "can_send": true
+    },
+    "carol_id": {
+     "display_name": "Carol (synthetic)",
+     "public_key_prefix": "c3c3c3c3",
+     "device": "carol_companion",
+     "can_send": true
+    }
+   },
+   "contacts": {
+    "bob": {
+     "display_name": "Bob (synthetic)",
+     "public_key_prefix": "b0b0b0b0",
+     "kind": "companion",
+     "held_by": "alice_companion"
+    },
+    "erin": {
+     "display_name": "Erin (synthetic)",
+     "public_key_prefix": "e5e5e5e5",
+     "kind": "companion",
+     "held_by": "carol_companion"
+    }
+   },
+   "channels": {
+    "public": {
+     "name": "Public (synthetic)",
+     "visibility": "public",
+     "fleets": [
+      "north",
+      "south"
+     ]
+    },
+    "north_ops": {
+     "name": "Ops (synthetic)",
+     "visibility": "private",
+     "fleets": [
+      "north"
+     ]
+    },
+    "south_ops": {
+     "name": "Ops (synthetic)",
+     "visibility": "private",
+     "fleets": [
+      "south"
+     ]
+    }
+   },
+   "messages": [
+    {
+     "identity": "alice_id",
+     "peer": "bob",
+     "direction": "outbound",
+     "text": "hi bob (synthetic)",
+     "read": true
+    },
+    {
+     "identity": "alice_id",
+     "peer": "bob",
+     "direction": "inbound",
+     "text": "hello alice (synthetic)",
+     "read": false
+    },
+    {
+     "identity": "alice_id",
+     "channel": "north_ops",
+     "direction": "inbound",
+     "sender_label": "Bob (synthetic)",
+     "text": "ops note (synthetic)",
+     "read": true
+    },
+    {
+     "identity": "carol_id",
+     "peer": "erin",
+     "direction": "inbound",
+     "text": "hello carol (synthetic)",
+     "read": false
+    },
+    {
+     "identity": "carol_id",
+     "channel": "south_ops",
+     "direction": "inbound",
+     "sender_label": "Erin (synthetic)",
+     "text": "south note (synthetic)",
+     "read": true
+    }
+   ],
+   "switches": {
+    "sending": "on",
+    "lease_signing": "on"
+   }
+  }
+ }
+}

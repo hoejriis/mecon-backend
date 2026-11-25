@@ -77,7 +77,7 @@ A create request (`schemas/create-request.schema.json`) names the device, a comm
 | `accepted` | Committed, before anything is delivered. A signed attempt may exist. |
 | `dispatched` | An attempt was handed to a transport. |
 | `running` | The device answered that the job is open on it: an open state (device dispatch section 3), including a message that is `timed-out`. |
-| `succeeded` | The device's final state is `confirmed`, a packet `applied` with outcome `transmitted`, a direct message `acked`, or a channel message `transmitted`. |
+| `succeeded` | The device's final state is `applied` or `confirmed` (for a packet, `applied` with outcome `transmitted`), a direct message `acked`, or a channel message `transmitted`. |
 | `failed` | The device ran it and it failed: the status `failed` with no error code, or the final state `reverted`, `failed`, or a packet `applied` with outcome `expired` or `failed`. A message in `timed-out` is not failed: it stays `running`. |
 | `refused` | Nothing ran: either the Backend's own check (reason `authority`), or a device answer proving nothing ran (reason `nothing_ran`). |
 | `cancelled` | Before dispatch, or the device confirmed `cancelled`. |
@@ -161,7 +161,7 @@ A job that the device has opened (`running`) is not re-delivered; it is only rea
 
 **Cancel.** The caller's cancel is for the caller's own job; any other job is `not_found`.
 - **Before dispatch** (the job is `accepted`, or only a new attempt is awaited), the job is `cancelled` at once with reason `caller_before_dispatch`, and nothing is sent.
-- **After dispatch,** the request is recorded (`cancel_requested_at`) and the job keeps its state. **A signed `job.cancel` is sent only when** the device has acknowledged the job (it answered `ok`), its latest state is one the op can cancel (device dispatch section 3: `accepted`, `applied` or `awaiting-confirm`; for `packet.transmit` `accepted` only, a duty hold included; a `message.send` has none, so its cancel is only recorded and never sent), **and no other request to that device is open.** Before any device acknowledgement nothing is sent; the cancel is only recorded, and it is sent once the device acknowledges, if the job is still cancellable then. It goes out ahead of any re-delivery.
+- **After dispatch,** the request is recorded (`cancel_requested_at`) and the job keeps its state. **A signed `job.cancel` is sent only when** the device has acknowledged the job (it answered `ok`), its latest state is one the op can cancel (device dispatch section 3: `accepted` or `awaiting-confirm`; for `packet.transmit` `accepted` only, a duty hold included; a `message.send` has none, so its cancel is only recorded and never sent), **and no other request to that device is open.** Before any device acknowledgement nothing is sent; the cancel is only recorded, and it is sent once the device acknowledges, if the job is still cancellable then. It goes out ahead of any re-delivery.
 - The job moves only when the device reports: it may still be `succeeded`, `failed` or `cancelled`.
 - **A second cancel is a `conflict`,** and so is a cancel of a terminal job.
 
@@ -198,7 +198,7 @@ A Backend replaying these fixtures supplies its own storage, transport and clock
 - **Error bodies repeat the reason.** What an error says depends on the request, where the contract's three bodies are fixed.
 - **Scoping.** Co-holders of a device see each other's jobs; a creator who loses access to a device loses its own jobs; and some views show only the newest request per device.
 - **Message reads.** It reads a message's status only once, after a `duplicate` or a `replay`. It never reads a quiet message job on a timer: its quiet sweep covers device jobs only.
-- **Cancel of a packet.** Its cancel check for `packet.transmit` would also accept `applied`; the contract allows `accepted` only.
+- **Cancel check.** Its cancel check accepts `applied`, which the device refuses as not cancellable.
 - **A `replay` with no usable mark** fails the job instead of reading it.
 - **A `duplicate` is treated as done** instead of read.
 - **The posture change.** One settings op is signed again after a `replay` even when it may have run.

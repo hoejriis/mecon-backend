@@ -38,6 +38,7 @@ const refuse = (...a) => ({ step: 'device_answer', result: failure(...a) });
 const put = (n = 'ctc_1') => ({ op: 'contact.put', args: { contact_ref: n, name: 'Synthetic One' } });
 const rm = (n = 'ctc_1') => ({ op: 'contact.remove', args: { contact_ref: n } });
 const chan = { op: 'message.send', args: { kind: 'channel', target: 'chan_1', text: 'synthetic broadcast' } };
+const cfg = { op: 'config.apply', args: { settings: { tx_power: 14 } } };
 const pkt = { op: 'packet.transmit', args: { packet_hex: '0a0b0c0d' } };
 const dm = { op: 'message.send', args: { kind: 'direct', target: 'ctc_2', text: 'synthetic hello' } };
 
@@ -93,6 +94,7 @@ write(LDIR, 'E-nothing-ran', lifecycle('E', 'What each device answer proves: ref
   create({ command: put('ctc_9') }), claim('job_9'), deliver('job_9'), answer('rq_14', 15, 'unknown'),
   create({ command: put('ctc_10') }), claim('job_10'), deliver('job_10'), refuse('rq_15', 16, 'unknown-op'),
   create({ command: put('ctc_11') }), claim('job_11'), deliver('job_11'), refuse('rq_16', 17, 'unsupported-version'),
+  create({ command: put('ctc_12') }), claim('job_12'), deliver('job_12'), answer('rq_17', 18, 'applied'),
 ]));
 
 write(LDIR, 'F-cancel', lifecycle('F', 'Cancel before dispatch; after dispatch only once the device has acknowledged, in a cancellable state and with no other open request (a message never, a packet only while accepted); the outcome may still be succeeded', [
@@ -109,6 +111,8 @@ write(LDIR, 'F-cancel', lifecycle('F', 'Cancel before dispatch; after dispatch o
   answer('rq_10', 10, 'cancelled'),
   create({ command: pkt }), claim('job_8'), deliver('job_8'), answer('rq_11', 11, 'progress'), cancel('job_8'), deliver('job_8'),
   answer('rq_11', 11, 'applied', { outcome: 'transmitted' }),
+  create({ command: cfg }), claim('job_9'), deliver('job_9'), answer('rq_12', 12, 'awaiting-confirm'), cancel('job_9'), deliver('job_9'),
+  answer('rq_13', 13, 'cancelled'),
 ]));
 
 write(LDIR, 'G-authority', lifecycle('G', 'Authority re-checked before every delivery: refused before the first, re-delivery stops after, blocked flag, and events after the device left reach', [

@@ -30,7 +30,6 @@
       },
       "cancellable_states": [
         "accepted",
-        "applied",
         "awaiting-confirm"
       ],
       "status_read": "job.get"
@@ -57,7 +56,6 @@
       },
       "cancellable_states": [
         "accepted",
-        "applied",
         "awaiting-confirm"
       ],
       "status_read": "job.get"
@@ -158,7 +156,6 @@
       },
       "cancellable_states": [
         "accepted",
-        "applied",
         "awaiting-confirm"
       ],
       "status_read": "job.get"

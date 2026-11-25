@@ -18,8 +18,8 @@ export const ERROR_CODES = { replay: 'refused', duplicate: 'failed', 'job-open':
 // states. A packet.transmit is a job: its state `applied` is final and carries the outcome, and a duty hold is the
 // state `accepted` with `duty_held` true.
 export const JOB_STATES = {
-  open: ['accepted', 'progress', 'applied', 'awaiting-confirm'],
-  final_success: ['confirmed'],
+  open: ['accepted', 'progress', 'awaiting-confirm'], // an op that needs confirmation goes to awaiting-confirm
+  final_success: ['applied', 'confirmed'], // applied is terminal on the device
   final_failure: ['reverted', 'failed'],
   cancelled: ['cancelled'],
   unknown: ['unknown'],

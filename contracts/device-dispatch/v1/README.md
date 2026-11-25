@@ -92,21 +92,21 @@ A set `signed`, `transport_accepted` or `acked` never changes, and `rf_transmitt
 | --- | --- | --- |
 | message | open | `queued`, `duty-held`, `transmitted` (direct message), `timed-out` |
 | message | final success | `acked` (direct message), `transmitted` (channel message: a channel has no ACK to wait for) |
-| job | open | `accepted`, `progress`, `applied`, `awaiting-confirm` |
-| job | final success | `confirmed`; for `packet.transmit`, `applied` with the outcome `transmitted` |
+| job | open | `accepted`, `progress`, `awaiting-confirm` |
+| job | final success | `applied` (terminal unless the op needs confirmation, which goes to `awaiting-confirm` instead), `confirmed`; for `packet.transmit`, `applied` with the outcome `transmitted` |
 | job | final failure | `reverted`, `failed`; for `packet.transmit`, `applied` with the outcome `expired` or `failed` |
 | job | cancelled | `cancelled` |
 | either | unknown | `unknown`; for `packet.transmit`, `applied` with the outcome `unknown` |
 
 **`timed-out` is not final.** It does not prove the message was not received, and a late ACK moves it to `acked`. A message in `timed-out` stays `running`, a later `acked` ends it `succeeded`, and at the abandon deadline it ends `unknown`, never `failed`.
 
-**A `packet.transmit` is a device job.** Its state `applied` is final and carries an `outcome` (`transmitted`, `expired`, `failed` or `unknown`) in its result. A duty hold is the state `accepted` with `duty_held` true. The message states do not apply to it (section 4).
+**`applied` is final for every job op** and ends the job `succeeded`; a `job.cancel` on a terminal job is refused by the device as not cancellable. **A `packet.transmit` is a device job.** Its state `applied` carries an `outcome` (`transmitted`, `expired`, `failed` or `unknown`) in its result. A duty hold is the state `accepted` with `duty_held` true. The message states do not apply to it (section 4).
 
 A device state of `unknown` is the device saying it does not know how the job ended. It ends the job `unknown`, never `failed`.
 
 **The answer to a `message.get`** carries the device `epoch`. When the entry is found, `state` is the entry's state, applied like any other state. When it is not found the answer is `ok` with `state` `unknown` and the current epoch: the entry was evicted, lost to a reboot, or never sent, and these cannot be told apart. That answer settles nothing: it is never `refused`, never `failed` and never "nothing ran", so the job stays where it is and is not delivered again. Contrast `unknown-job` from a `job.get` on a job op, which ends the job `unknown` (job lifecycle contract, section 4).
 
-**What can be cancelled.** A `job.cancel` is useful only while the job's latest state is in its op's `cancellable_states`: `accepted`, `applied` (cancelling an applied job reverts it) and `awaiting-confirm` for the data and settings ops; for `packet.transmit` only `accepted` (a duty hold included): `progress` means the packet is handed to the radio and cannot be recalled. `message.send` has none: the device has no cancel for a message (a `job.cancel` looks only in the job table), so a caller's cancel of a dispatched message is recorded and never sent, and the job runs to its device outcome. A `progress` state would be cancellable only for an update op, which the synthetic catalogue does not have.
+**What can be cancelled.** A `job.cancel` is useful only while the job's latest state is in its op's `cancellable_states`: `accepted` and `awaiting-confirm` for the data and settings ops (cancelling an awaiting job reverts it); for `packet.transmit` only `accepted` (a duty hold included): `progress` means the packet is handed to the radio and cannot be recalled. No op lists `applied`, which is terminal. `message.send` has none: the device has no cancel for a message (a `job.cancel` looks only in the job table), so a caller's cancel of a dispatched message is recorded and never sent, and the job runs to its device outcome. A `progress` state would be cancellable only for an update op, which the synthetic catalogue does not have.
 
 ## 4. Which states an op can have
 

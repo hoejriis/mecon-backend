@@ -122,16 +122,25 @@ class HttpSessionLookup:
     `base_url` is the core on the deployment's private network (plain HTTP there, never through the public
     proxy). `token_file` is the mode-600 service token file. `timeout_s` bounds a whole lookup;
     `feed_silence_s` is how long the revocation feed may send no bytes (heartbeats included) before it
-    counts as down. `client` is for tests; without one the adapter makes its own, which ignores proxy
+    counts as down; `subscribe_timeout_s` is how long a connected feed may go without its `subscribed` item
+    (bytes such as heartbeats do not count) before it is ended and resubscribed. `client` is for tests; without one the adapter makes its own, which ignores proxy
     settings from the environment.
+
+    `health_state` is what the facade's health output reports for the lookup: `unknown` before the core
+    has answered, `ok` after a valid answer, `unavailable` after a failed one, and `service_unauthorized`
+    while the core refuses our service token. The last is a configuration fault, not an outage: it is
+    logged at ERROR once when it starts and once when it stops, and is still answered as core_unavailable.
     """
 
     def __init__(self, base_url: str, token_file: str | os.PathLike, *, timeout_s: float,
-                 feed_silence_s: float = 50.0, client: httpx.AsyncClient | None = None):
+                 feed_silence_s: float = 50.0, subscribe_timeout_s: float = 30.0,
+                 client: httpx.AsyncClient | None = None):
         self.base_url = base_url.rstrip("/")
         self._token_file = os.fspath(token_file)
         self.timeout_s = timeout_s
         self.feed_silence_s = feed_silence_s
+        self.subscribe_timeout_s = subscribe_timeout_s
+        self.health_state = "unknown"
         self._timeout = httpx.Timeout(timeout_s)
         self._feed_timeout = httpx.Timeout(timeout_s, read=None)  # the feed's silence bound is ours, below
         self._own_client = client is None
@@ -141,6 +150,17 @@ class HttpSessionLookup:
 
     def __repr__(self) -> str:
         return f"HttpSessionLookup({self.base_url!r}, token_file={self._token_file!r})"
+
+    def _set_state(self, new: str) -> None:
+        old = self.health_state
+        if new == old:
+            return
+        if new == "service_unauthorized":
+            log.error("the core refuses this facade's service token (401 service_unauthorized): check the token "
+                      "file; every lookup answers core_unavailable until it is fixed")
+        elif old == "service_unauthorized":
+            log.error("the core accepts this facade's service token again (now %s)", new)
+        self.health_state = new
 
     async def aclose(self) -> None:
         if self._own_client:
@@ -192,20 +212,30 @@ class HttpSessionLookup:
             raise
         except Exception as exc:  # noqa: BLE001 - a timeout, a refused connection, an unreadable token file
             log.warning("session lookup failed: %s", type(exc).__name__)
+            self._set_state("unavailable")
             return _UNAVAILABLE
         if status == 200:
             caller = parse_caller(_json(raw))
             if caller is None:
                 log.warning("session lookup answered 200 with a body that is not a valid Caller")
+                self._set_state("unavailable")
                 return _UNAVAILABLE
+            self._set_state("ok")
             return caller
         if status == 403:
             denied = parse_denied(_json(raw))
             if denied is None:
                 log.warning("session lookup answered 403 with a body that is not a valid Denied")
+                self._set_state("unavailable")
                 return _UNAVAILABLE
+            self._set_state("ok")
             return denied
-        log.warning("session lookup answered %s", status)  # 503, 401 service_unauthorized, a redirect, anything else
+        if status == 401:
+            # Our own token was refused: a configuration fault, logged at ERROR on each change of state only.
+            self._set_state("service_unauthorized")
+            return _UNAVAILABLE
+        log.warning("session lookup answered %s", status)
+        self._set_state("unavailable")  # 503, a redirect, anything else
         return _UNAVAILABLE
 
     async def _post_lookup(self, body: dict[str, Any]) -> tuple[int, bytes]:
@@ -225,8 +255,9 @@ class HttpSessionLookup:
     # ---- revocations ----
 
     async def revocations(self) -> AsyncIterator[Union[Subscribed, Revocation]]:
-        """The feed. It ends (the facade then counts it down) on silence past `feed_silence_s`, on a refused
-        token, on any status but 200, on a malformed item, and on any transport error."""
+        """The feed. It ends (the facade then counts it down) on silence past `feed_silence_s`, on no `subscribed`
+        within `subscribe_timeout_s`, on a refused token, on any status but 200, on a malformed item, and on any
+        transport error."""
         try:
             req = self._client.build_request("GET", self.base_url + "/revocations",
                                              headers=self._headers("text/event-stream"), timeout=self._feed_timeout)
@@ -238,6 +269,9 @@ class HttpSessionLookup:
             log.warning("revocation feed could not connect: %s", type(exc).__name__)
             return
         try:
+            if resp.status_code == 401:
+                self._set_state("service_unauthorized")
+                return
             if resp.status_code != 200:
                 log.warning("revocation feed answered %s", resp.status_code)
                 return
@@ -257,14 +291,29 @@ class HttpSessionLookup:
         chunks = resp.aiter_bytes()
         buf = b""
         data: list[str] = []
+        loop = asyncio.get_running_loop()
+        subscribe_by = loop.time() + self.subscribe_timeout_s
+        subscribed = False
         while True:
+            wait = self.feed_silence_s
+            if not subscribed:
+                left = subscribe_by - loop.time()
+                if left <= 0:
+                    log.warning("revocation feed sent no subscribed item within %ss: resubscribing",
+                                self.subscribe_timeout_s)
+                    return
+                wait = min(wait, left)
             try:
-                chunk = await asyncio.wait_for(chunks.__anext__(), self.feed_silence_s)
+                chunk = await asyncio.wait_for(chunks.__anext__(), wait)
             except StopAsyncIteration:
                 log.warning("revocation feed ended by the core")
                 return
             except asyncio.TimeoutError:
-                log.warning("revocation feed silent for %ss: down", self.feed_silence_s)
+                if not subscribed and loop.time() >= subscribe_by:
+                    log.warning("revocation feed sent no subscribed item within %ss: resubscribing",
+                                self.subscribe_timeout_s)
+                else:
+                    log.warning("revocation feed silent for %ss: down", self.feed_silence_s)
                 return
             buf += chunk
             while True:
@@ -276,6 +325,9 @@ class HttpSessionLookup:
                     if data:
                         item = parse_revocation_item(_json("\n".join(data).encode(), strict=True))
                         data = []
+                        if isinstance(item, Subscribed):
+                            subscribed = True
+                            self._set_state("ok")
                         if item is not None:
                             yield item
                 elif line.startswith(":"):

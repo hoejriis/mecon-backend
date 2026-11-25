@@ -202,6 +202,10 @@ def create_app(lookup: SessionLookup, core: ReaderCore, config: FacadeConfig | N
                 body["status"] = "degraded"
         except Exception:  # noqa: BLE001 - the facade is up; the core is not
             body = {"status": "degraded", "commit": None}
+        # A lookup adapter that tracks its state (HttpSessionLookup) reports it; Health allows extra members.
+        lookup_state = getattr(lookup, "health_state", None)
+        if isinstance(lookup_state, str):
+            body["session_lookup"] = lookup_state
         return ok(body)
 
     async def start_login(request: Request) -> Response:

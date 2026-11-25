@@ -377,11 +377,12 @@ def feed(chunks, *, then_silent=False, heartbeat_s=None):
     return handler
 
 
-async def collect(tmp_path, handler, *, silence=5.0, bound=5.0):
+async def collect(tmp_path, handler, *, silence=5.0, bound=5.0, subscribe=30.0):
     app = Scripted(handler)
     items = []
     async with serve(app) as base:
-        a = HttpSessionLookup(base, token_file(tmp_path), timeout_s=2.0, feed_silence_s=silence)
+        a = HttpSessionLookup(base, token_file(tmp_path), timeout_s=2.0, feed_silence_s=silence,
+                              subscribe_timeout_s=subscribe)
         t0 = time.monotonic()
 
         async def drain():
@@ -485,4 +486,135 @@ def test_the_resolver_marks_the_feed_down_when_it_goes_silent(tmp_path):
 def test_the_bound_defaults_to_fifty_seconds(tmp_path):
     a = HttpSessionLookup("http://127.0.0.1:9", token_file(tmp_path), timeout_s=1.0)
     assert a.feed_silence_s == 50.0
+    asyncio.run(a.aclose())
+
+
+# ---- a refused service token is a configuration fault ----
+
+def _errors(caplog):
+    return [r for r in caplog.records if r.name == "mecon_reader_backend.http_lookup" and r.levelno == logging.ERROR]
+
+
+def test_a_refused_token_is_logged_at_error_once_per_change_of_state(tmp_path, caplog):
+    caplog.set_level(logging.DEBUG)
+    statuses = [401, 401, 401, 200, 200, 401, 401, 503]
+
+    async def go():
+        pending = list(statuses)
+
+        async def handler(req, receive, send):
+            st = pending.pop(0)
+            body = CALLER if st == 200 else {"code": "service_unauthorized"} if st == 401 else \
+                {"reason": "core_unavailable", "retryable": True}
+            await respond(send, st, json.dumps(body).encode())
+        states, answers = [], []
+        async with serve(Scripted(handler)) as base:
+            a = HttpSessionLookup(base, token_file(tmp_path), timeout_s=2.0)
+            states.append(a.health_state)
+            for _ in statuses:
+                answers.append(await a.resolve(CRED, "read"))
+                states.append(a.health_state)
+            await a.aclose()
+        return states, answers
+    states, answers = run(go())
+    assert states == ["unknown", "service_unauthorized", "service_unauthorized", "service_unauthorized", "ok", "ok",
+                      "service_unauthorized", "service_unauthorized", "unavailable"]
+    assert [x == UNAVAILABLE for x in answers] == [s != 200 for s in statuses], "a 401 still answers core_unavailable"
+    errors = [r.getMessage() for r in _errors(caplog)]
+    assert len(errors) == 4, errors  # starts, stops (ok), starts again, stops (unavailable)
+    assert "refuses" in errors[0] and "again" in errors[1] and "refuses" in errors[2] and "again" in errors[3]
+    warnings = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
+    assert warnings == ["session lookup answered 503"], "the 401s are not logged as an outage, the 503 is"
+
+
+def test_a_feed_refused_its_token_reports_the_state_once(tmp_path, caplog):
+    caplog.set_level(logging.DEBUG)
+
+    async def go():
+        async with serve(Scripted(answer(401, {"code": "service_unauthorized"}))) as base:
+            a = HttpSessionLookup(base, token_file(tmp_path), timeout_s=2.0)
+            for _ in range(3):
+                assert [x async for x in a.revocations()] == []
+            await a.aclose()
+        return a.health_state
+    assert run(go()) == "service_unauthorized"
+    assert len(_errors(caplog)) == 1
+
+
+def test_the_health_output_reports_the_lookup_state(tmp_path):
+    from mecon_reader_backend import FacadeConfig, create_app
+    from mecon_reader_backend.app import PREFIX
+    from mecon_reader_backend.fakes import build
+    import httpx
+    from replay import BASE, WORLDS, schema_validator
+
+    statuses = [401, 200, 503]
+
+    async def go():
+        pending = list(statuses)
+
+        async def handler(req, receive, send):
+            st = pending.pop(0)
+            body = CALLER if st == 200 else {"code": "service_unauthorized"} if st == 401 else {}
+            await respond(send, st, json.dumps(body).encode())
+        bodies = []
+        _, fake_lookup, core = build(WORLDS["worlds"]["two-fleets"])
+        async with serve(Scripted(handler)) as base:
+            a = HttpSessionLookup(base, token_file(tmp_path), timeout_s=2.0)
+            app = create_app(a, core, FacadeConfig())
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url=BASE) as c:
+                bodies.append((await c.get(PREFIX + "/health")).json())
+                for _ in statuses:
+                    await a.resolve(CRED, "read")
+                    bodies.append((await c.get(PREFIX + "/health")).json())
+            await a.aclose()
+        fake_app = create_app(fake_lookup, core, FacadeConfig())
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=fake_app), base_url=BASE) as c:
+            fake_body = (await c.get(PREFIX + "/health")).json()
+        return bodies, fake_body
+    bodies, fake_body = run(go())
+    assert [b["session_lookup"] for b in bodies] == ["unknown", "service_unauthorized", "ok", "unavailable"]
+    val = schema_validator("Health")
+    assert all(val.is_valid(b) for b in bodies + [fake_body])
+    assert "session_lookup" not in fake_body, "a lookup without a state adds nothing"
+
+
+# ---- the wait for subscribed is bounded ----
+
+def test_a_feed_that_heartbeats_but_never_subscribes_ends(tmp_path, caplog):
+    caplog.set_level(logging.DEBUG)
+    items, ended, took, _ = run(collect(tmp_path, feed([], then_silent=True, heartbeat_s=0.05),
+                                        silence=5.0, subscribe=0.3, bound=3.0))
+    assert items == [] and ended, "no subscribed within the bound ends the feed"
+    assert 0.25 <= took < 2.0, took
+    assert any("no subscribed" in r.getMessage() and r.levelno == logging.WARNING for r in caplog.records)
+
+
+def test_a_feed_that_subscribes_in_time_stays_up_past_the_subscribe_bound(tmp_path):
+    rev = sse({"type": "revocation", "session_ref": "ses_synthetic_0005", "reason": "revoked"})
+    chunks = [HEARTBEAT, 0.1, sse({"type": "subscribed"})] + [0.1, HEARTBEAT] * 6 + [rev]
+    items, ended, took, _ = run(collect(tmp_path, feed(chunks), silence=5.0, subscribe=0.3))
+    assert items == [Subscribed(), Revocation("ses_synthetic_0005", "revoked")] and took >= 0.6
+
+
+def test_the_resolver_resubscribes_a_feed_that_never_subscribes(tmp_path):
+    async def go():
+        app = Scripted(feed([], then_silent=True, heartbeat_s=0.05))
+        async with serve(app) as base:
+            a = HttpSessionLookup(base, token_file(tmp_path), timeout_s=2.0, feed_silence_s=5.0,
+                                  subscribe_timeout_s=0.2)
+            r = SessionResolver(a, feed_retry_s=0.05)
+            r.ensure_feed()
+            await asyncio.sleep(1.0)
+            up = r.feed_up
+            r._feed_task.cancel()
+            await a.aclose()
+        return up, sum(1 for s in app.seen if s["path"] == "/revocations")
+    up, subscriptions = run(go())
+    assert not up and subscriptions >= 3, subscriptions
+
+
+def test_the_subscribe_bound_defaults_to_thirty_seconds(tmp_path):
+    a = HttpSessionLookup("http://127.0.0.1:9", token_file(tmp_path), timeout_s=1.0)
+    assert a.subscribe_timeout_s == 30.0 and a.health_state == "unknown"
     asyncio.run(a.aclose())

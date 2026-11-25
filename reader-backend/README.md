@@ -64,9 +64,12 @@ Read answers are cached for at most `lookup_cache_s` (5 s), never past the calle
   - Everything else is `core_unavailable`, so the cookie is kept: 503, 401 `service_unauthorized`, any other status, a redirect (never followed), a timeout (`timeout_s` bounds the whole lookup), a refused connection, a body that is not JSON or breaks the schema, or one over 64 KiB.
 - **`revocations`** reads `GET {base}/revocations` as server-sent events. It yields `Subscribed` and `Revocation(session_ref, reason)` and skips comment lines (the heartbeat) and item types it does not know. It ends, so the resolver counts the feed down, caches nothing and reconnects after `feed_retry_s`, in these cases:
   - no bytes for `feed_silence_s`, heartbeats included;
+  - no `subscribed` item within `subscribe_timeout_s` (30 s) of connecting, whatever other bytes arrive (logged as a warning), so caching cannot stay off unnoticed;
   - any status but 200, or a body that is not an event stream;
   - a malformed item or an over-long line;
   - any transport error.
+- **A refused service token** (401 `service_unauthorized`, on a lookup or on the feed) is a configuration fault, not an outage. It is still answered as `core_unavailable`, so the cookie is kept. It is logged at ERROR once when it starts and once when it stops, never once per request; a 503 is logged as a warning.
+- **`health_state`** is `unknown` until the core first answers, then `ok`, `unavailable` or `service_unauthorized`. `GET /health` reports it as `session_lookup`, a member the Reader API's `Health` schema allows. A lookup without that attribute, such as the fake, adds nothing.
 - **The client** is httpx with explicit timeouts. It ignores proxy settings from the environment, because the core is on the deployment's private network, over plain HTTP.
 
 ## Fake adapters
@@ -106,7 +109,8 @@ The adapter's own tests ([`tests/test_http_lookup.py`](tests/test_http_lookup.py
 - malformed, oversized and schema-breaking bodies, with the hand-written `Caller` and `Denied` checks cross-checked against the document;
 - a redirect, a timeout and a refused connection;
 - the request body and the token header, a token file that changes, and no token;
-- the feed: comments, unknown types, split frames, silence past the bound, heartbeats that keep it up, every non-200 status, malformed items, and the resolver marking it down;
+- the feed: comments, unknown types, split frames, silence past the bound, heartbeats that keep it up, no `subscribed` within its bound and the resolver resubscribing, every non-200 status, malformed items, and the resolver marking it down;
+- the refused-token state: ERROR once per change, and `session_lookup` in the health output;
 - that neither the token nor the cookie value appears in the logs.
 
 This proves the adapter against a stub that serves the contract, not against a real core. No real core has served these cases to this adapter, so CI does not prove the adapter and a core agree on anything the cases leave open, and it does not prove the adapter's behaviour under real network faults beyond a loopback socket.

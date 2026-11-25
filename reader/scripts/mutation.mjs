@@ -26,6 +26,7 @@ const T = {
   device: ['src/device', 'src/messaging'],
   gate: ['src/offline', 'src/device', 'src/messaging'],
   probe: ['src/device'],
+  cold: ['src/test/coldStart.test.tsx'],
 };
 
 /** @type {Array<{id:string, description:string, file:string, edits:Array<[string,string]>, tests:string[]}>} */
@@ -135,6 +136,11 @@ const MUTANTS = [
     edits: [["      const c = classifyProbeFrame(frame);", "      const c = { label: 'unchecked' };"]] },
   { id: 'probe12', description: 'the serial write guard does not classify bytes', file: 'src/device/guard.ts', tests: T.probe,
     edits: [["      const c = classifyProbeWrite(bytes);", "      const c = { label: 'unchecked' };"]] },
+  // Cold start with a hung session read
+  { id: 'cold1', description: 'the app-start session read has no timeout', file: 'src/auth/AuthContext.tsx', tests: T.cold,
+    edits: [["setTimeout(() => readCtl.abort(), SESSION_READ_TIMEOUT_MS)", "setTimeout(() => undefined, SESSION_READ_TIMEOUT_MS)"]] },
+  { id: 'cold2', description: 'offline at start waits for the session read instead of showing the offline screen', file: 'src/App.tsx', tests: T.cold,
+    edits: [["const offlineAtStart = status === 'loading' && !navigator.onLine;", "const offlineAtStart = false as boolean;"]] },
 ];
 
 // ---------------------------------------------------------------------------------------------

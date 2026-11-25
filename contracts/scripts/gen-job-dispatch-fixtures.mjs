@@ -99,7 +99,7 @@ write(LDIR, 'F-cancel', lifecycle('F', 'Cancel before dispatch; after dispatch o
   cancel('job_2'), ack('job_2', 'ctl_1'), answer('rq_1', 1, 'confirmed'), cancel('job_2'),
   create({ command: put('ctc_3') }), claim('job_3'), deliver('job_3'), answer('rq_3', 3, 'accepted'), cancel('job_3'), deliver('job_3'),
   answer('rq_4', 4, 'cancelled'),
-  create({ command: dm }), claim('job_4'), deliver('job_4'), answer('rq_5', 5, 'transmitted'), cancel('job_4'), deliver('job_4'), answer('rq_5', 5, 'acked'),
+  create({ command: dm }), claim('job_4'), deliver('job_4'), answer('rq_5', 5, 'queued'), cancel('job_4'), deliver('job_4'), answer('rq_5', 5, 'transmitted'), answer('rq_5', 5, 'acked'),
   create({ command: put('ctc_5') }), claim('job_5'), deliver('job_5'), answer('rq_6', 6, 'accepted'),
   create({ command: put('ctc_6') }), claim('job_6'), deliver('job_6'), cancel('job_5'), deliver('job_5'), answer('rq_7', 7, 'confirmed'),
   deliver('job_5'), answer('rq_8', 8, 'cancelled'),

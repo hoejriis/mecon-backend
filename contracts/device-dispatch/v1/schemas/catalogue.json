@@ -95,11 +95,7 @@
           }
         }
       },
-      "cancellable_states": [
-        "accepted",
-        "queued",
-        "duty-held"
-      ],
+      "cancellable_states": [],
       "status_read": "message.get"
     },
     {

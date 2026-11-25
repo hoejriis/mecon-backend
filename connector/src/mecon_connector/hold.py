@@ -17,7 +17,9 @@ the application port returns. Without an armed job the bootloader port is never 
 
 Stop rules: a `refused` frame, or a close 1008 (or an HTTP 401 or 403 on the handshake) that came without
 one, is a stop and not a retry. The process then exits with status 3, which the systemd unit does not
-restart. Every other loss reconnects on 1, 2, 4, 8, 15 s (15 s from then on).
+restart. Every other loss reconnects on 1, 2, 4, 8, 15 s (15 s from then on). The one bounded exception
+(section 2.5): a refusal "another agent holds this device" within 30 s of the Connector's own socket closing
+is most likely the Backend still holding that old socket, so it is retried up to 3 times on the same backoff.
 """
 
 from __future__ import annotations
@@ -60,6 +62,10 @@ from .transport import (
 EXIT_HOLD_STOPPED = 3  # a refusal or a rejected token: the operator must act, so systemd must not loop
 
 BACKOFF_S = (1.0, 2.0, 4.0, 8.0, 15.0)  # then 15 s; the counter resets when a socket opens
+# Section 2.5: the one refusal that may be retried, how often, and only within this long of the own close.
+REFUSED_RETRY_REASON = "another agent holds this device"
+REFUSED_RETRY_MAX = 3
+REFUSED_RETRY_WINDOW_S = 30.0
 STREAM_RE = re.compile(r"^[a-z][a-z_]{0,31}$")
 REQ_ID_RE = re.compile(r"^[0-9A-Za-z._:-]{1,32}$")
 GATE_ID_RE = re.compile(r"^cg-(\d+)$")  # ids of the Connector's own deployment.get requests
@@ -183,6 +189,8 @@ class HoldBridge:
         self._ref = 0
         self._pending_refs: dict[int, str] = {}  # ref -> frame type it was sent in
         self._refused: str | None = None
+        self._own_close_at: float | None = None  # when a socket of this process last closed other than by refusal
+        self._refused_retries = 0  # refusals retried since that close
         self.hold_stop: tuple[str, str] | None = None  # (reason, detail) once stopped for good
         self._stopped = False
 
@@ -331,7 +339,36 @@ class HoldBridge:
             self._stop_hold("bad_token", "the Backend closed the hold with 1008 and no refusal")
         else:
             self.log.warn("hold_closed", code=code, close_reason=reason)
+            self._note_own_close(now)
             self._schedule_retry(now)  # the attempt counter was reset when the socket opened: 1 s first
+
+    def _note_own_close(self, now: float) -> None:
+        """A socket this process held closed other than by a refusal (the network, the Backend, or the Connector
+        itself). It was a successful connect, so the refusal retries start again from 0, and the window of
+        section 2.5 runs from now: the Backend may not have noticed this close yet."""
+        self._own_close_at = now
+        self._refused_retries = 0
+
+    def _retry_refusal(self, now: float, reason: str) -> bool:
+        """Section 2.5: a refusal "another agent holds this device" within 30 s of this process's own close may
+        be the Backend still holding that socket. Retried at most REFUSED_RETRY_MAX times, on the normal backoff,
+        each retry due within the window. Any other reason, no own close, or no retry left: False (a stop)."""
+        if reason != REFUSED_RETRY_REASON or self._own_close_at is None:
+            return False
+        if self._refused_retries >= REFUSED_RETRY_MAX:
+            return False
+        delay = BACKOFF_S[min(self._refused_retries, len(BACKOFF_S) - 1)]
+        if now + delay - self._own_close_at > REFUSED_RETRY_WINDOW_S:
+            return False
+        self._refused_retries += 1
+        self.m.inc("hold_refused_retries_total")
+        self.log.warn("hold_refused_retry", reason=reason, attempt=self._refused_retries, of=REFUSED_RETRY_MAX,
+                      retry_in_s=delay)
+        self.transport.close(1000, "refused")  # the Backend closes it 1008 too; that close is of an ended session
+        self._end_session()
+        self._refused = None
+        self._retry_at = now + delay
+        return True
 
     def _schedule_retry(self, now: float) -> None:
         self._end_session()
@@ -371,7 +408,7 @@ class HoldBridge:
         self._queue.clear()
         self.m.inc("downlink_dropped_total", n, "socket_down")
 
-    def _close_hold(self, why: str) -> None:
+    def _close_hold(self, why: str, now: float) -> None:
         """Releases the hold on purpose (the device link dropped, or the device is not enrolled)."""
         if why == "device_link_lost" and self._dfu_keeps_socket():
             return  # the one exception: an armed DFU keeps the socket while the device is in its bootloader
@@ -380,6 +417,8 @@ class HoldBridge:
                 self.m.inc("hold_disconnects_total")
             self.log.info("hold_released", why=why)
             self.transport.close(1000, why)
+            if self._state == "connected":
+                self._note_own_close(now)
             self._end_session()
             self._retry_at = 0.0
 
@@ -396,7 +435,7 @@ class HoldBridge:
         want = want or (keep and self._dfu_phase in DFU_RECONNECT)  # a DFU reports on a new socket without a device
         if self._state == "connected":
             if not keep:
-                self._close_hold("device_link_lost" if self._link is None else "not_enrolled")
+                self._close_hold("device_link_lost" if self._link is None else "not_enrolled", now)
         elif self._state == "connecting":
             if now - self._connect_started >= self.hc.connect_timeout_s + CONNECT_GRACE_S:
                 self.transport.close(1000, "connect timeout")
@@ -440,7 +479,8 @@ class HoldBridge:
         elif typ == "refused":
             reason = obj.get("reason")
             self._refused = reason if isinstance(reason, str) else "refused"
-            self._stop_hold("refused", self._refused)  # never a takeover, never a retry
+            if not self._retry_refusal(now, self._refused):
+                self._stop_hold("refused", self._refused)  # never a takeover; retried only as section 2.5 allows
         elif typ == "iface_req":
             self._on_req(now, obj)
         elif typ == "iface_ack":
@@ -771,7 +811,7 @@ class HoldBridge:
         self._next_open = now + 0.5
         self._dfu_on_link_lost(now)
         # The hold is released with the link, so the Backend never routes to a dead one.
-        self._close_hold("device_link_lost")
+        self._close_hold("device_link_lost", now)
         self._close_gate("serial_lost", now)
         self._slot = None
         self._abandoned.clear()

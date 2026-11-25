@@ -172,6 +172,156 @@ def test_refused_with_a_revoked_token_reason_is_surfaced_and_final(mk):
         server.shutdown()
 
 
+# ---- a refusal right after the agent's own drop (2.5, 27) ------------------------------------------
+
+STALE = "another agent holds this device"
+
+
+def _dropped(r, conn):
+    """The network ends the hold (no close frame: 1006); returns once the Connector has scheduled its reconnect."""
+    conn.drop()
+    r.wait(lambda: r.bridge._state == "idle")
+    assert '"code":1006' in r.logbuf.getvalue()
+
+
+def _due(r):
+    """Moves the fake clock to the scheduled reconnect."""
+    r.clock.advance(max(0.0, r.bridge._retry_at - r.clock()) + 0.001)
+
+
+def _retry_logs(r):
+    return [json.loads(ln) for ln in r.logbuf.getvalue().splitlines() if '"hold_refused_retry"' in ln]
+
+
+def test_conf_27_a_refusal_after_the_own_drop_is_retried_and_the_hold_comes_back(mk):
+    r = mk()
+    c1 = r.up()
+    r.server.refuse_next = 1  # the Backend has not yet noticed that c1 is gone
+    _dropped(r, c1)
+    hs = r.server.handshakes
+    _due(r)
+    r.wait(lambda: r.m("hold_refused_retries_total") == 1)
+    assert r.bridge.hold_stop is None and r.server.refusals == 1 and r.m("hold_stopped") == 0
+    assert round(r.bridge._retry_at - r.clock()) == 1  # the normal backoff, first step
+    (entry,) = _retry_logs(r)
+    assert entry["level"] == "warn" and entry["attempt"] == 1 and entry["of"] == 3 and entry["reason"] == STALE
+    _due(r)
+    c2 = r.up()
+    assert c2 is not c1 and c2.parsed()[0] == {"type": "iface_relay"}
+    assert r.server.handshakes == hs + 2 and r.bridge.hold_stop is None
+
+
+def test_conf_27_three_retries_then_the_fourth_refusal_stops(mk):
+    r = mk()
+    c1 = r.up()
+    r.server.refuse_next = 10
+    _dropped(r, c1)
+    _due(r)
+    delays = []
+    for k in range(3):
+        r.wait(lambda k=k: r.m("hold_refused_retries_total") == k + 1)
+        delays.append(round(r.bridge._retry_at - r.clock()))
+        _due(r)
+    r.wait(lambda: r.bridge.hold_stop is not None)
+    assert delays == [1, 2, 4]
+    assert r.bridge.hold_stop == ("refused", STALE)  # the same stop as any refusal: main() exits 3
+    assert r.server.refusals == 4 and r.m("hold_refused_retries_total") == 3 and r.m("hold_stopped") == 1
+    assert [e["attempt"] for e in _retry_logs(r)] == [1, 2, 3]
+    n = r.server.handshakes
+    for _ in range(5):
+        r.jump(60)
+    assert r.server.handshakes == n  # stopped: no reconnect
+
+
+@pytest.mark.parametrize("reason", ["connector token revoked", "Another agent holds this device",
+                                    "another agent holds this device.", " another agent holds this device", "refused"])
+def test_conf_27_any_other_refusal_after_the_own_drop_stops_at_once(mk, reason):
+    r = mk()
+    c1 = r.up()
+    r.server.refuse_next = 1
+    r.server.refuse_reason = reason
+    _dropped(r, c1)
+    _due(r)
+    r.wait(lambda: r.bridge.hold_stop is not None)
+    assert r.bridge.hold_stop == ("refused", reason)
+    assert r.m("hold_refused_retries_total") == 0 and _retry_logs(r) == []
+    n = r.server.handshakes
+    for _ in range(5):
+        r.jump(60)
+    assert r.server.handshakes == n
+
+
+def test_conf_27_a_token_revoked_on_the_live_socket_after_a_recent_drop_stops_at_once(mk):
+    r = mk()
+    c1 = r.up()
+    _dropped(r, c1)
+    _due(r)
+    c2 = r.up()
+    c2.send({"type": "refused", "reason": "connector token revoked"})
+    c2.close(1008, "")
+    r.wait(lambda: r.bridge.hold_stop is not None)
+    assert r.bridge.hold_stop == ("refused", "connector token revoked")
+    assert r.m("hold_refused_retries_total") == 0
+
+
+def test_conf_27_a_refusal_at_first_start_stops_at_once(mk):
+    r = mk()
+    r.server.refuse_next = 1
+    r.wait(lambda: r.bridge.hold_stop is not None)
+    assert r.bridge.hold_stop == ("refused", STALE)
+    assert r.m("hold_refused_retries_total") == 0 and r.server.handshakes == 1
+    for _ in range(5):
+        r.jump(60)
+    assert r.server.handshakes == 1
+
+
+@pytest.mark.parametrize("late", [31.0, 29.5])  # the reconnect after 30 s; or a retry that would fall after 30 s
+def test_conf_27_a_refusal_outside_the_30_s_window_stops_at_once(mk, late):
+    r = mk()
+    c1 = r.up()
+    r.server.refuse_next = 1
+    _dropped(r, c1)
+    r.clock.advance(late)  # the reconnect starts this long after the drop
+    r.wait(lambda: r.bridge.hold_stop is not None)
+    assert r.bridge.hold_stop == ("refused", STALE)
+    assert r.m("hold_refused_retries_total") == 0 and r.server.refusals == 1
+
+
+def test_conf_27_a_successful_connect_starts_the_count_again(mk):
+    r = mk()
+    c1 = r.up()
+    r.server.refuse_next = 3
+    _dropped(r, c1)
+    _due(r)
+    for k in range(3):
+        r.wait(lambda k=k: r.m("hold_refused_retries_total") == k + 1)
+        _due(r)
+    c2 = r.up()  # the fourth reconnect is let in: the retries are spent
+    assert r.bridge.hold_stop is None
+    r.server.refuse_next = 1
+    _dropped(r, c2)  # a new own drop: three retries again
+    _due(r)
+    r.wait(lambda: r.m("hold_refused_retries_total") == 4)
+    _due(r)
+    c3 = r.up()
+    assert c3 is not c2 and r.bridge.hold_stop is None and r.server.refusals == 4
+
+
+def test_conf_27_the_own_close_on_a_device_link_drop_also_allows_the_retry(mk):
+    r = mk()
+    c1 = r.up()
+    r.opener.unplug()
+    r.wait(lambda: c1.closed.is_set())
+    assert c1.close_code == 1000  # the Connector closed it itself
+    r.server.refuse_next = 1
+    r.dev = r.opener.plug()
+    r.dev.answers_hello = True
+    r.wait(lambda: r.m("hold_refused_retries_total") == 1)
+    _due(r)
+    c2 = r.up()
+    assert c2 is not c1 and r.bridge.hold_stop is None
+
+
 # ---- declaration and hello (4, 18) ------------------------------------------------------------
 
 

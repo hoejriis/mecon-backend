@@ -6,6 +6,7 @@
   "$defs": {
     "contract": { "type": "string", "pattern": "^mecon-connector-hold/\\d+\\.\\d+\\.\\d+(-draft\\.\\d+)?$" },
     "hex": { "type": "string", "pattern": "^([0-9a-f]{2})*$" },
+    "t": { "type": "number", "minimum": 0, "description": "seconds since the scenario started (section 2.5 timing)" },
     "scenario": {
       "type": "object",
       "required": ["contract", "synthetic", "id", "title", "description", "link", "steps"],
@@ -13,7 +14,7 @@
       "properties": {
         "contract": { "$ref": "#/$defs/contract" },
         "synthetic": { "const": true },
-        "id": { "enum": ["A", "B", "C", "D", "E", "F"] },
+        "id": { "enum": ["A", "B", "C", "D", "E", "F", "G", "H"] },
         "title": { "type": "string" },
         "description": { "type": "string" },
         "link": { "enum": ["companion", "console", "none"] },
@@ -28,6 +29,7 @@
       "type": "object", "required": ["step", "presentation", "offered", "selected"], "additionalProperties": false,
       "properties": {
         "step": { "const": "handshake" },
+        "t": { "$ref": "#/$defs/t" },
         "presentation": { "enum": ["header", "subprotocol"] },
         "offered": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
         "selected": { "type": ["string", "null"] }
@@ -63,7 +65,7 @@
     },
     "close": {
       "type": "object", "required": ["step", "by", "code"], "additionalProperties": false,
-      "properties": { "step": { "const": "close" }, "by": { "enum": ["agent", "backend"] }, "code": { "type": "integer" }, "reason": { "type": "string" } }
+      "properties": { "step": { "const": "close" }, "by": { "enum": ["agent", "backend", "network"] }, "code": { "type": "integer" }, "reason": { "type": "string" }, "t": { "$ref": "#/$defs/t" } }
     },
     "packageGet": {
       "type": "object", "required": ["step", "path", "authorization", "status", "size", "sha256", "body_base64"], "additionalProperties": false,

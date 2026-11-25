@@ -2,7 +2,7 @@
 
 How a **connector agent** holds one MECON device for a Backend over a WebSocket, so the Backend can reach a device that has no usable network path of its own (no Wi-Fi, no broker session, or a USB-only link), and the device's uplink can be carried back. The [USB Connector](../../../connector/README.md) implements this contract as its `hold` transport.
 
-**Status: draft, version `1.0.0-draft.2`.** Draft 2 adds bootloader serial DFU through the hold (section 12: the `serial_dfu` declaration, `dfu_job`, the package route, `dfu_state`, and the offer gated on `ready`); nothing in draft 1 changes for an agent that does not declare it. The text is derived from a Backend's implementation and its reference agent (a browser application). Statements marked **(observed)** describe what that reference does and are not guaranteed by a written contract; such behaviour is a SHOULD here, and section 11 lists every gap. The fixtures are synthetic. No live Backend has been tested against this contract yet. Hex fields are case-insensitive.
+**Status: draft, version `1.0.0-draft.3`.** Draft 3 lets an agent retry, a bounded number of times, a refusal that arrives within 30 s of its own socket closing (section 2.5, item 27, fixtures G and H); a refusal is otherwise a stop exactly as before. Draft 2 adds bootloader serial DFU through the hold (section 12: the `serial_dfu` declaration, `dfu_job`, the package route, `dfu_state`, and the offer gated on `ready`); nothing in draft 1 changes for an agent that does not declare it. The text is derived from a Backend's implementation and its reference agent (a browser application). Statements marked **(observed)** describe what that reference does and are not guaranteed by a written contract; such behaviour is a SHOULD here, and section 11 lists every gap. The fixtures are synthetic. No live Backend has been tested against this contract yet. Hex fields are case-insensitive.
 
 Notation: `{base}` is the Backend's base URL. MUST and SHOULD describe what a conforming agent does to interoperate with a Backend that offers the hold.
 
@@ -20,6 +20,8 @@ Notation: `{base}` is the Backend's base URL. MUST and SHOULD describe what a co
 | `fixtures/D-console-request-and-result.json` | Fixture D: the console request and result lines. |
 | `fixtures/E-event-forwarding-ack-outcomes.json` | Fixture E: event forwarding, an accepted event, a duplicate, a refusal, and a stream that is not forwarded. |
 | `fixtures/F-serial-dfu.json` | Fixture F: a bootloader serial DFU on a held device, from `dfu_job` to the resume, with every byte sent to the bootloader. |
+| `fixtures/G-refused-after-own-close-retried.json` | Fixture G: the network ends the hold (1006), the reconnect is refused because the Backend still sees the old socket, and the agent's retry is let in. |
+| `fixtures/H-refused-after-own-close-three-retries-then-stop.json` | Fixture H: as G, but the refusals go on: three retries on the backoff, then the fourth refusal stops the agent. |
 | `fixtures/invalid-frames.json` | Frames the schemas must reject. |
 
 `npm test` in `contracts/` validates every schema and fixture, replays the framing and exactness rules of each fixture, and fails on a schema or fixture file this README does not reference.
@@ -84,9 +86,18 @@ If a socket is already held for that device (by any agent), a new socket is acce
 {"type":"refused","reason":"another agent holds this device"}
 ```
 
-then closes with code **1008**. There is never a takeover. An agent that receives `refused` MUST stop and MUST NOT reconnect automatically; it reports the reason to its operator.
+then closes with code **1008**. There is never a takeover. An agent that receives `refused` MUST stop and MUST NOT reconnect automatically; it reports the reason to its operator. The one exception is the bounded retry below.
 
-An existing hold is released only when its socket closes, and the Backend notices a drop only when the TCP or WebSocket layer does. A restarting agent may therefore be briefly refused while the Backend still sees its old socket (open item 1).
+An existing hold is released only when its socket closes, and the Backend notices a drop only when the TCP or WebSocket layer does. An agent whose socket was just lost may therefore be refused on its reconnect while the Backend still sees that old socket, although no other agent exists (open item 1).
+
+**Retry after the agent's own close.** An agent MAY reconnect after a `refused` only when all of these hold:
+
+- the reason is exactly `another agent holds this device`; any other reason (`connector token revoked`, for example) is a stop;
+- the agent's own previous socket for this device closed, other than by `refused`, at most 30 s before the retry is due, and the agent remembers when. Such a close is a loss of the network (close 1006, or none), a close by the Backend other than 1008 (1000, 1001, 1011 and so on), or a close by the agent itself (section 6). An agent that has just started has no such close, so a refusal at its first start is a stop;
+- the retry waits the normal backoff of section 6, counted afresh from the first refusal: 1 s, then 2 s, then 4 s;
+- at most **3** retries follow one own close.
+
+A refusal that does not meet all four (the fourth one after the same close, or one whose retry would fall more than 30 s after it) is a stop as above. A socket that is accepted and not refused was a successful connect: when it closes, that close starts a new window and the count starts again from 0. An agent logs and counts each retry. A Backend that replaces a stale link held with the same credential (open item 1) never sends this refusal to the agent that held the link, so the retry never happens there; a genuine second agent for the device is still refused, and if it had itself just lost a socket it stops after at most 3 retries within 30 s.
 
 ### 2.6 Encoding
 
@@ -241,7 +252,7 @@ A result that arrives after its request was abandoned is still the device's own 
 - **Socket drop.** When the socket closes for any reason the Backend releases the hold at once (a new socket is then accepted), marks the device offline (a device with an independent broker session keeps its own presence), and forgets `iface_relay`. Requests then go to the broker if the device has one. Requests already sent as `iface_req` and unanswered are not cancelled; its sweeps resend them to the broker or to a new hold after a new `iface_relay`.
 - **Reconnect.** On any close other than `refused`, an agent reconnects with delays of **1, 2, 4, 8, then 15 s** (it stays at 15 s); the attempt counter resets when a socket opens. After reconnecting it sends `iface_relay` again (and `iface_hello`).
 - **Stop, do not retry.**
-  - On `refused`, do not reconnect.
+  - On `refused`, do not reconnect, except the bounded retry of section 2.5 after the agent's own close.
   - On an upgrade answered with HTTP 403 (a token the Backend does not reject by close but by refusing the upgrade), an agent MUST stop and surface it to its operator. It SHOULD do the same for HTTP 401 and for a close 1008 with no `refused` frame. **(observed: the reference retries such a failure like any other, at the 15 s cap; a new agent SHOULD stop instead)**. Retrying cannot help, and a loop only adds load.
   - When the operator stops the agent, do not reconnect.
 - **Agent stop.** Close with code 1000 and a short reason (the reference sends `stopped`).
@@ -253,7 +264,7 @@ A result that arrives after its request was abandoned is still the device's own 
 | where | condition | signal |
 |---|---|---|
 | handshake | token missing, unknown or expired; or `bearer.<token>` without `mecon-bridge` | the upgrade is answered with HTTP 403 before accept; no WebSocket frame, no 1008 |
-| after accept | another agent already holds this device | text frame `{"type":"refused","reason":"another agent holds this device"}`, then close 1008 |
+| after accept | another agent already holds this device (or the Backend has not yet noticed the agent's own previous socket close) | text frame `{"type":"refused","reason":"another agent holds this device"}`, then close 1008; a stop, except the bounded retry of section 2.5 within 30 s of the agent's own close |
 | after accept | the token was revoked while the socket was open | text frame `{"type":"refused","reason":"connector token revoked"}`, then close 1008 |
 | agent close | normal stop, or the device link dropped | close 1000 (reason free text, for example `stopped`) |
 | any | malformed JSON frame from the agent | logged by the Backend, frame skipped, socket stays |
@@ -299,20 +310,26 @@ Items 19 to 26 apply to an agent that runs bootloader serial DFU (section 12). A
 25. When a new socket opens while a DFU is under way or has failed (no device link), the agent sends `iface_relay` (with `serial_dfu`) and then the current `dfu_state` once more, `failed` with its stage and error.
 26. A job that has stayed `failed` with no device link and no new `dfu_job` for the agent's cap (30 minutes by default) is dropped, and the hold is released as on any device link drop.
 
+Item 27 applies to every agent.
+
+27. A `refused` with the reason exactly `another agent holds this device`, arriving within 30 s of the agent's own socket closing other than by `refused`, is retried at most 3 times after that close, on the 1, 2, 4 s backoff, each retry due within 30 s of the close; the agent logs and counts each one. Any other reason, a refusal at first start, a retry that would fall later than 30 s after the close, or the fourth refusal after one close stops the agent as in item 5. A socket that is accepted and not refused starts the count again when it closes.
+
 ## 10. Fixtures
 
-JSON files, one scenario each, validated by `contracts/validate.mjs` against `fixtures.schema.json` and the frame schemas. A scenario is an ordered list of steps: `handshake`, `send` (agent to Backend, a frame), `recv` (Backend to agent), `device_write`, `device_read`, `device_line`, `close`. `<token>`, `<issuer>`, `<sig>`, `<pubkey>` redact secrets and identifiers; every value is synthetic.
+JSON files, one scenario each, validated by `contracts/validate.mjs` against `fixtures.schema.json` and the frame schemas. A scenario is an ordered list of steps: `handshake`, `send` (agent to Backend, a frame), `recv` (Backend to agent), `device_write`, `device_read`, `device_line`, `close` (by the `agent`, the `backend`, or the `network`, which is a lost connection with no close frame). A `handshake` or `close` step may carry `t`, the seconds since the scenario started, which the section 2.5 rules need. `<token>`, `<issuer>`, `<sig>`, `<pubkey>` redact secrets and identifiers; every value is synthetic.
 
 - **A** (Companion): the handshake (subprotocol form, `mecon-bridge` selected); `iface_relay`; `iface_hello`; its `iface_ack`; an `iface_req`; the device frames written; the device's result; `iface_result`; its `iface_ack`.
 - **B**: a second agent: `refused`, then close 1008; no reconnect.
 - **C**: framing a 400-byte wire for a Companion: three frames of 168, 168 and 64 bytes with the same `xid` (the value in the fixture is an example; any single byte, the same for all three frames).
 - **D** (console): the bare CR, then `mecon> ` + wire + CR; the echoed prefix skipped; the result line; `iface_result`.
 - **E**: an event uploaded and accepted; the same event again acknowledged `duplicate` (success); an altered event acknowledged `refused` (not resent); an event whose stream is `result` that is never sent.
+- **G**: the hold is up; at 60 s the network ends it (1006); the reconnect at 61 s (the 1 s backoff) is refused, `another agent holds this device`, then close 1008; the retry at 62 s (1 s after the refusal) is let in, and the agent sends `iface_relay` and `iface_hello` again. The validator checks that a reconnect after a refusal is allowed by section 2.5: the reason, an own close before it, at most 3 retries, the backoff, and the 30 s window.
+- **H**: as G, but every reconnect is refused: retries at 62, 64 and 68 s (1, 2 and 4 s after each refusal), and the fourth refusal, at 68 s, ends the scenario: the agent stops.
 - **F** (serial DFU): `iface_relay` with `serial_dfu`; `dfu_job`; `fetching`; the package fetch (`package_get`: the path, the token presentation, the size, the SHA-256 and the synthetic package itself); `ready`; only then the offer relayed and its answer uploaded; the application port lost (`device_link`); `waiting-bootloader`; the bootloader port opened; `transferring`; every packet written to the bootloader (`bootloader_write`: the packet, its sequence number, the exact bytes on the wire and the bootloader's acknowledgement); `rebooting`; the application port back; `installed-pending-hello`; `iface_relay` and `iface_hello` again on the same socket. The validator decodes each packet (SLIP, header checksum, CRC, opcode, order) and checks that the init packet and the image are the package's own.
 
 ## 11. Not specified / open
 
-1. **Stale-socket refusal.** A restarting agent can be refused while the Backend has not yet noticed that its previous socket closed. No takeover and no timeout for a half-open socket is described.
+1. **Stale-socket refusal.** An agent can be refused while the Backend has not yet noticed that the agent's previous socket closed. Section 2.5 lets an agent that remembers its own close retry such a refusal up to 3 times within 30 s; an agent process that restarted has no such record and still stops on it. No takeover and no timeout for a half-open socket is described here; a Backend that replaces a stale link held with the same credential removes the cause.
 2. **Idle timeouts and WebSocket pings.** No application keepalive exists; whether the server stack or an intermediary sends or enforces control-frame pings or an idle limit is not stated.
 3. *(Resolved.)* A bad, unknown or expired token is rejected before accept: the upgrade is answered with HTTP 403 and no 1008 frame is ever seen. Only the one-agent refusal and a token revoke arrive after accept, as a `refused` frame then close 1008.
 4. **Backend-side request timeout.** The pacing wait (about 8 s) and the resend sweeps are Backend internals; the agent's 15 s device wait is the reference's choice, not a protocol constant.

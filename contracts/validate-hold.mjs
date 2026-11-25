@@ -21,6 +21,11 @@ const DFU_NEXT = {
   failed: ['fetching'],
 };
 const OPCODE = { 3: 'start', 1: 'init', 4: 'data', 5: 'stop' };
+// section 2.5: the one refusal that may be retried, after the agent's own close
+const RETRY_REASON = 'another agent holds this device';
+const RETRY_BACKOFF_S = [1, 2, 4];
+const RETRY_MAX = 3;
+const RETRY_WINDOW_S = 30;
 const STREAM = /^[a-z][a-z_]{0,31}$/;
 const bytes = (s) => Buffer.from(s, 'utf8');
 
@@ -155,10 +160,36 @@ function scenario(doc, file, check, fail) {
   const packets = [];
   let image = Buffer.alloc(0);
   let startSize = null;
+  // section 2.5
+  let ownCloseAt = null; // the time of the agent's own last close (any close but a refusal's 1008)
+  let afterOwnClose = false; // the next handshake is the reconnect after that close
+  let retries = 0; // refusals retried since that close
+  let refusedReason = null; // a refused frame seen, its close not yet
+  let refusal = null; // a refusal closed 1008: only a retried reconnect may follow
+  const retryRefusal = (t) => {
+    if (refusal.reason !== RETRY_REASON) return `the reason ${JSON.stringify(refusal.reason)} is not retried`;
+    if (ownCloseAt === null) return 'there was no own close before it';
+    if (retries >= RETRY_MAX) return `more than ${RETRY_MAX} retries after one own close`;
+    if (typeof t !== 'number' || typeof refusal.t !== 'number' || typeof ownCloseAt !== 'number') return 'the own close, the refusal close and the reconnect need a time (t)';
+    if (t - refusal.t < RETRY_BACKOFF_S[retries]) return `retry ${retries + 1} comes before its ${RETRY_BACKOFF_S[retries]} s backoff`;
+    if (t - ownCloseAt > RETRY_WINDOW_S) return `the retry falls more than ${RETRY_WINDOW_S} s after the own close`;
+    return null;
+  };
   const steps = doc.steps;
   steps.forEach((s, i) => {
+    if (refusal && s.step !== 'handshake') at(i, 'after a refusal only a retried reconnect may follow');
     switch (s.step) {
       case 'handshake':
+        if (refusal) {
+          const why = retryRefusal(s.t);
+          if (why) at(i, `a reconnect after a refusal that is a stop: ${why}`);
+          retries++;
+          refusal = null;
+        } else if (afterOwnClose && typeof s.t === 'number' && typeof ownCloseAt === 'number' && s.t - ownCloseAt < 1) {
+          at(i, 'the reconnect after a close comes before the 1 s backoff');
+        }
+        afterOwnClose = false;
+        sawSend = false; // a new socket: iface_relay first again
         if (s.presentation === 'header') {
           if (JSON.stringify(s.offered) !== JSON.stringify(['Authorization: Bearer <token>']) || s.selected !== null) at(i, 'header form offers only the Authorization header and selects no subprotocol');
         } else if (JSON.stringify(s.offered) !== JSON.stringify(['mecon-bridge', 'bearer.<token>']) || s.selected !== 'mecon-bridge') {
@@ -234,6 +265,7 @@ function scenario(doc, file, check, fail) {
         } else if (s.frame.type === 'refused') {
           const next = steps[i + 1];
           if (!next || next.step !== 'close' || next.code !== 1008) at(i, 'refused must be followed by close 1008');
+          refusedReason = s.frame.reason;
         }
         break;
       }
@@ -340,6 +372,14 @@ function scenario(doc, file, check, fail) {
         break;
       }
       case 'close':
+        if (refusedReason !== null && s.code === 1008) {
+          refusal = { reason: refusedReason, t: s.t };
+          refusedReason = null;
+        } else if (s.code !== 1008) {
+          ownCloseAt = typeof s.t === 'number' ? s.t : undefined; // undefined: a close without a time
+          afterOwnClose = true;
+          retries = 0; // the socket was not refused: a successful connect starts the count again
+        }
         if (s.by === 'backend' && s.code === 1008) {
           const prev = steps[i - 1];
           if (!prev || prev.step !== 'recv' || prev.frame.type !== 'refused') { /* a bare 1008 is the bad-token form: allowed */ }

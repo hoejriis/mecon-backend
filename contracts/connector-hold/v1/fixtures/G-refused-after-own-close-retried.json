@@ -1,0 +1,108 @@
+{
+  "contract": "mecon-connector-hold/1.0.0-draft.3",
+  "synthetic": true,
+  "id": "G",
+  "title": "A refusal right after the agent's own close is retried",
+  "description": "The hold is up. At 60 s the network ends it (no close frame: 1006). The agent reconnects on the normal backoff, 1 s later, and the Backend, which has not yet noticed that the old socket is gone, refuses it: another agent holds this device. The refusal came within 30 s of the agent's own close, so the agent retries on the backoff, 1 s later, and is let in; it declares and says hello again on the new socket. Frames the agent may have sent on a refused socket before the refusal reached it are not shown, so the ref values after it are examples of a ref that grows.",
+  "link": "companion",
+  "steps": [
+    {
+      "step": "handshake",
+      "presentation": "header",
+      "offered": [
+        "Authorization: Bearer <token>"
+      ],
+      "selected": null,
+      "t": 0
+    },
+    {
+      "step": "send",
+      "frame": {
+        "type": "iface_relay"
+      }
+    },
+    {
+      "step": "send",
+      "frame": {
+        "type": "iface_hello",
+        "ref": 1,
+        "hello": {
+          "epoch": 1,
+          "node_public_key_hex": "<pubkey>"
+        }
+      }
+    },
+    {
+      "step": "recv",
+      "frame": {
+        "type": "iface_ack",
+        "of": "iface_hello",
+        "ref": 1,
+        "outcome": "recorded"
+      }
+    },
+    {
+      "step": "close",
+      "by": "network",
+      "code": 1006,
+      "t": 60
+    },
+    {
+      "step": "handshake",
+      "presentation": "header",
+      "offered": [
+        "Authorization: Bearer <token>"
+      ],
+      "selected": null,
+      "t": 61
+    },
+    {
+      "step": "recv",
+      "frame": {
+        "type": "refused",
+        "reason": "another agent holds this device"
+      }
+    },
+    {
+      "step": "close",
+      "by": "backend",
+      "code": 1008,
+      "t": 61
+    },
+    {
+      "step": "handshake",
+      "presentation": "header",
+      "offered": [
+        "Authorization: Bearer <token>"
+      ],
+      "selected": null,
+      "t": 62
+    },
+    {
+      "step": "send",
+      "frame": {
+        "type": "iface_relay"
+      }
+    },
+    {
+      "step": "send",
+      "frame": {
+        "type": "iface_hello",
+        "ref": 2,
+        "hello": {
+          "epoch": 1,
+          "node_public_key_hex": "<pubkey>"
+        }
+      }
+    },
+    {
+      "step": "recv",
+      "frame": {
+        "type": "iface_ack",
+        "of": "iface_hello",
+        "ref": 2,
+        "outcome": "recorded"
+      }
+    }
+  ]
+}

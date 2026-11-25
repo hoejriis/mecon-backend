@@ -207,6 +207,8 @@ def test_reads_are_cached_briefly_and_dropped_on_logout():
             assert len(reads) == 1  # the second read came from the cache
             assert (await c.post(PREFIX + "/logout", headers={"X-CSRF-Token": token})).status_code == 204
             c.cookies.set(COOKIE, rig.session.credential, domain="reader.example.test", path="/")
+            # A plain read goes through the read cache: only a dropped entry makes it ask the lookup and get 401.
+            assert_error(await c.get(PREFIX + "/devices"), 401, "unauthenticated")
             assert_error(await c.get(PREFIX + "/session"), 401, "unauthenticated")
     run(go())
 

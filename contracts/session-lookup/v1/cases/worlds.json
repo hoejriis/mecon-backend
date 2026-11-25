@@ -1,5 +1,5 @@
 {
-  "contract": "mecon-session-lookup/1.0.0-draft.2",
+  "contract": "mecon-session-lookup/1.0.0-draft.3",
   "synthetic": true,
   "actions": {
     "issue-session": {

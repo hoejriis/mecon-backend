@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://example.test/mecon/device-dispatch/v1/result",
   "title": "A device answer as the Backend receives it",
-  "description": "signed_by is the device whose signature verified, or null when the result carries none that verifies. status is the device's answer to the request; state is the device's job state and goes with status ok only; error is an error code under a status (replay under refused, with the device's mark; duplicate and unknown-job under failed; job-open under busy).",
+  "description": "signed_by is the device whose signature verified, or null when the result carries none that verifies. status is the device's answer to the request; state is the device's job state and goes with status ok only; error is an error code under a status (replay under refused, with the device's mark; duplicate and unknown-job under failed; job-open under busy). epoch is the device's current epoch and goes with the answer to a message.get.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -75,6 +75,11 @@
       ]
     },
     "mark": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4294967295
+    },
+    "epoch": {
       "type": "integer",
       "minimum": 0,
       "maximum": 4294967295

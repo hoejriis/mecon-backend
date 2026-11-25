@@ -309,6 +309,22 @@
     "device_status": "OK",
     "at": "2026-01-01T00:00:00Z"
    }
+  },
+  {
+   "schema": "control",
+   "note": "a message.get with a job number of its own",
+   "value": {
+    "id": "ctl_1",
+    "op": "message.get",
+    "request_id": "rq_2",
+    "job_number": 2,
+    "target_job_number": 1,
+    "attempt": "att_1",
+    "bytes": "signed:rq_2",
+    "deliveries": 1,
+    "transport_accepted": null,
+    "device_answered": null
+   }
   }
  ]
 }

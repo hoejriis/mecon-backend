@@ -3,7 +3,7 @@
 // expected outputs. It is a specification aid, not a Backend: no storage, no transport, no signing, and a clock
 // that only the `advance` step moves. Commands, dispositions and correlation come from the device dispatch
 // reference.
-import { validateCommand, newDispositions, applyResult, correlates, classify, cancellable, iso } from './device-dispatch-reference.mjs';
+import { CATALOGUE, validateCommand, newDispositions, applyResult, correlates, classify, cancellable, iso } from './device-dispatch-reference.mjs';
 
 export const DEFAULTS = { lease_s: 30, redeliver_s: 60, read_s: 300, abandon_s: 3600, ttl_s: 600 };
 export const STATES = ['accepted', 'dispatched', 'running', 'succeeded', 'failed', 'refused', 'cancelled', 'expired', 'unknown'];
@@ -101,9 +101,9 @@ class Engine {
     this.emit(j, a.id, 'attempt', j.command.op, a.request_id, a.job_number, a.bytes, a.deliveries);
     if (j.state === 'accepted') this.setState(j, 'dispatched');
   }
-  // A job.get is a plain read: no job number of its own. A job.cancel is a signed request and takes one.
+  // A job.get or message.get is a plain read: no job number of its own. A job.cancel is a signed request and takes one.
   sendControl(j, a, op) {
-    const command = { op, args: { target_job_number: a.job_number } };
+    const command = { op, args: op === 'message.get' ? { message: `msg_${a.job_number}` } : { target_job_number: a.job_number } };
     if (!validateCommand(command, this.devices[j.device].role, 'backend').valid) throw new Error('control is not a catalogue command');
     const c = this.counters;
     const ctl = {
@@ -189,10 +189,10 @@ class Engine {
     }
     // Section 7: a status read when the job has been quiet, at most every 300 s; quiet runs from the latest answer,
     // or from the first delivery when there is none.
-    const gets = j.controls.filter((c) => c.op === 'job.get');
+    const gets = j.controls.filter((c) => c.op !== 'job.cancel');
     const quietSince = Math.max(cur.first_delivery_s, cur.answered_s ?? 0);
     const due = this.now - quietSince >= DEFAULTS.read_s && gets.every((c) => this.now - c.delivery_s >= DEFAULTS.read_s);
-    if (j.read_wanted || due) { j.read_wanted = false; return this.sendControl(j, cur, 'job.get'); }
+    if (j.read_wanted || due) { j.read_wanted = false; return this.sendControl(j, cur, CATALOGUE.ops.find((o) => o.op === j.command.op).status_read); }
     if (j.state === 'dispatched' && !cur.read_only && this.now - cur.last_delivery_s >= DEFAULTS.redeliver_s) {
       this.sendAttempt(j, cur);
       return { outcome: 'redelivered', attempt: cur.id, delivery: cur.deliveries };
@@ -225,9 +225,17 @@ class Engine {
     if (!cls || TERMINAL.includes(j.state) || a.nothing_ran || a !== last(j.attempts)) return this.ignore();
     const k = cls.kind;
     if ((k === 'cancelled' && j.cancel_requested_s === null) || (['busy', 'replay', 'duplicate', 'job_open'].includes(k) && j.state !== 'dispatched')) return this.ignore();
+    // A message.get that finds nothing says the message is not on the device: evicted, lost to a reboot or never
+    // sent, which look the same. It settles nothing: the job stays where it is.
+    if (c?.op === 'message.get' && k === 'unknown_state') {
+      c.device_answered = { status: r.status, error: null, state: 'unknown', epoch: r.epoch ?? null, at: this.at(this.now) };
+      a.answered_s = this.now;
+      a.read_only = true; // the entry may have been evicted after it was sent: never deliver the message again
+      return { outcome: 'applied' };
+    }
     const bound = { device: j.device, request_id: a.request_id, job_number: a.job_number, command: j.command, dispositions: a.dispositions };
     if (!applyResult(bound, { ...r, signed_by: j.device, request_id: a.request_id, job_number: a.job_number }, this.at(this.now)).applied) return this.ignore();
-    if (c) c.device_answered = { status: r.status, error: r.error ?? null, state: r.state ?? null, at: this.at(this.now) };
+    if (c) c.device_answered = { status: r.status, error: r.error ?? null, state: r.state ?? null, epoch: r.epoch ?? null, at: this.at(this.now) };
     a.answered_s = this.now;
     if (isEvent) j.events.push({ at: this.at(this.now), status: r.status, state: r.state ?? null, data: this.authorityOk(j) ? (r.data ?? null) : null });
     if (k === 'open') { if (j.state === 'dispatched') this.setState(j, 'running'); }

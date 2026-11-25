@@ -252,6 +252,18 @@
     "closed": null,
     "ignored_results": 0
    }
+  },
+  {
+   "schema": "result",
+   "note": "a negative epoch",
+   "value": {
+    "signed_by": "dev_1",
+    "request_id": "rq_1",
+    "job_number": 1,
+    "status": "ok",
+    "state": "unknown",
+    "epoch": -1
+   }
   }
  ]
 }

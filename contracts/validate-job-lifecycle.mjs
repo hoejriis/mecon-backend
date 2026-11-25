@@ -55,6 +55,7 @@ export function validateJobLifecycle(dir = 'job-lifecycle/v1') {
   }
 
   const covered = new Set();
+  let sawNotFound = false;
   const answers = { statuses: new Set(), errors: new Set() };
   const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   const num = (id) => Number(id.split('_')[1]);
@@ -108,7 +109,10 @@ export function validateJobLifecycle(dir = 'job-lifecycle/v1') {
         const lastAtt = j.attempts[j.attempts.length - 1];
         if (j.state === 'unknown' && j.outcome.reason === 'abandon_deadline' && Date.parse(j.outcome.at) - Date.parse(lastAtt.dispositions.signed) < 3600000) fail(`${where} ${j.id} was abandoned less than 3600 s after signing`);
         for (const c of j.controls) {
-          if ((c.op === 'job.get') !== (c.job_number === null)) fail(`${where} ${j.id} ${c.id}: a job.get has no job number and a job.cancel has one`);
+          if (j.command.op === 'message.send' && c.op === 'job.get') fail(`${where} ${j.id} a message.send job was read with job.get`);
+          const read = CATALOGUE.ops.find((x) => x.op === j.command.op).status_read;
+          if (c.op !== 'job.cancel' && c.op !== read) fail(`${where} ${j.id} ${c.id} read with ${c.op}, not the op's status read ${read}`);
+          if ((c.op !== 'job.cancel') !== (c.job_number === null)) fail(`${where} ${j.id} ${c.id}: a read has no job number and a job.cancel has one`);
         }
       }
       // Section 5: every delivery carries the stored bytes of its attempt or control, and counts up by one.
@@ -150,12 +154,14 @@ export function validateJobLifecycle(dir = 'job-lifecycle/v1') {
       if (s.step === 'create' && e.response.outcome === 'error' && now.size !== prevJobs.size) fail(`${where} a refused create made a job`);
       if (s.step === 'create' && e.response.outcome === 'error' && e.out.length) fail(`${where} a refused create sent something`);
       const r = s.result;
+      if (r && s.step !== 'create' && r.state === 'unknown' && r.epoch !== undefined) sawNotFound = true;
       if (r) { answers.statuses.add(r.status); if (r.error) answers.errors.add(r.error); }
       prevJobs = now;
     });
     if (failures === b0) ok(`fixtures/${f}`);
   }
   for (const k of STEP_KINDS) if (!covered.has(k)) fail(`no fixture covers the step kind ${k}`);
+  if (!sawNotFound) fail('no fixture shows a message.get that finds nothing');
   for (const k of ANSWER_STATUSES) if (!answers.statuses.has(k)) fail(`no fixture covers the device status ${k}`);
   for (const k of Object.keys(ERROR_CODES)) if (!answers.errors.has(k)) fail(`no fixture covers the device error ${k}`);
   ok('every step kind is covered by a fixture');

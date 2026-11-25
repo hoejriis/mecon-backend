@@ -122,6 +122,14 @@ write(LDIR, 'H-forged-and-late', lifecycle('H', 'Results that are unsigned, from
   answer('rq_1', 1, 'progress'), answer('rq_1', 1, 'confirmed'), event('rq_1', 1, 'progress'), answer('rq_1', 1, 'confirmed'),
 ]));
 
+write(LDIR, 'I-message-status-read', lifecycle('I', 'A message is not a job: its status is read with message.get, never job.get; a found entry settles like any state, a not found one settles nothing', [
+  create({ command: dm }), claim('job_1'), deliver('job_1'), advance(61), claim('job_1'), deliver('job_1'),
+  refuse('rq_1', 1, 'failed', { error: 'duplicate' }), deliver('job_1'),
+  answer('rq_2', 1, 'transmitted', { epoch: 3 }), answer('rq_1', 1, 'acked'),
+  create({ command: dm }), claim('job_2'), deliver('job_2'), advance(301), claim('job_2'), deliver('job_2'),
+  answer('rq_4', 2, 'unknown', { epoch: 4 }), advance(299), claim('job_2'), deliver('job_2'), advance(3600),
+]));
+
 // ---- device dispatch ----
 const DDIR = 'device-dispatch/v1';
 const dispatchStep = (step, t, o = {}) => ({ step, t, ...o });
@@ -157,6 +165,9 @@ const res = (request_id, job_number, state, o = {}) => ({ signed_by: 'dev_1', re
     { note: 'config.apply to a repeater', by: 'caller', role: 'repeater', command: { op: 'config.apply', args: { settings: { tx_power: 14, repeat: true } } } },
     { note: 'job.cancel signed by the Backend', by: 'backend', role: 'companion', command: { op: 'job.cancel', args: { target_job_number: 4 } } },
     { note: 'job.get signed by the Backend', by: 'backend', role: 'repeater', command: { op: 'job.get', args: { target_job_number: 4 } } },
+    { note: 'message.get signed by the Backend', by: 'backend', role: 'companion', command: { op: 'message.get', args: { message: 'msg_4' } } },
+    { note: 'message.get requested by a caller', by: 'caller', role: 'companion', command: { op: 'message.get', args: { message: 'msg_4' } } },
+    { note: 'message.get for a repeater', by: 'backend', role: 'repeater', command: { op: 'message.get', args: { message: 'msg_4' } } },
     { note: 'an op the catalogue does not list', by: 'caller', role: 'companion', command: { op: 'device.reboot', args: {} } },
     { note: 'job.get requested by a caller', by: 'caller', role: 'companion', command: { op: 'job.get', args: { target_job_number: 4 } } },
     { note: 'contact.put to a repeater: a known op for the wrong role', by: 'caller', role: 'repeater', command: put() },

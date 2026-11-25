@@ -51,6 +51,7 @@ export function validateDeviceDispatch(dir = 'device-dispatch/v1') {
     if (!/^[a-z]+\.[a-z]+$/.test(o.op)) fail(`catalogue: ${o.op} is not a valid op name`);
     if (!Array.isArray(o.roles) || !o.roles.length || o.roles.some((r) => !['companion', 'repeater'].includes(r))) fail(`catalogue: ${o.op} roles`);
     if (!Array.isArray(o.cancellable_states) || o.cancellable_states.some((x) => !ALL_STATES.includes(x)) || (o.internal && o.cancellable_states.length)) fail(`catalogue: ${o.op} cancellable_states`);
+    if (o.internal ? o.status_read !== null : !CATALOGUE.ops.some((x) => x.op === o.status_read && x.internal && !x.changes_state)) fail(`catalogue: ${o.op} status_read must be null for an internal op, else an internal read op`);
     if (typeof o.changes_state !== 'boolean' || typeof o.internal !== 'boolean') fail(`catalogue: ${o.op} changes_state and internal must be booleans`);
     if (o.args?.type !== 'object' || o.args.additionalProperties !== false || !Array.isArray(o.args.required)) fail(`catalogue: ${o.op} args must be a closed object schema with required fields`);
     if (!readme.includes(`\`${o.op}\``)) fail(`README.md does not name ${o.op}`);

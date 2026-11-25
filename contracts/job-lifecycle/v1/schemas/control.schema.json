@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://example.test/mecon/job-lifecycle/v1/control",
-  "title": "A signed job.get or job.cancel about an attempt",
+  "title": "A signed job.cancel, or a job.get or message.get read, about an attempt",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -24,7 +24,8 @@
     "op": {
       "enum": [
         "job.get",
-        "job.cancel"
+        "job.cancel",
+        "message.get"
       ]
     },
     "request_id": {
@@ -74,6 +75,7 @@
             "status",
             "error",
             "state",
+            "epoch",
             "at"
           ],
           "properties": {
@@ -120,6 +122,13 @@
                 "unknown",
                 null
               ]
+            },
+            "epoch": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
             }
           }
         }
@@ -131,7 +140,7 @@
       "maximum": 4294967295
     }
   },
-  "description": "A job.get is a plain read with no job number of its own (job_number is null); a job.cancel is a signed request with its own job number. target_job_number is the job they are about.",
+  "description": "A job.get or message.get is a plain read with no job number of its own (job_number is null); a job.cancel is a signed request with its own job number. target_job_number is the job they are about.",
   "allOf": [
     {
       "if": {

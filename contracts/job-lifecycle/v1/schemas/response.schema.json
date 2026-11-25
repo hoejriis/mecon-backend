@@ -4,20 +4,130 @@
   "title": "The response to one step",
   "type": "object",
   "additionalProperties": false,
-  "required": ["outcome"],
+  "required": [
+    "outcome"
+  ],
   "properties": {
-    "outcome": { "enum": ["created", "replayed", "error", "read", "listed", "claimed", "held", "not_claimable", "not_leased", "terminal", "unknown_job", "already_signed", "signed", "refused", "halted", "delivered", "redelivered", "sent", "too_soon", "idle", "recorded", "unknown_target", "ignored", "applied", "cancelled", "cancel_requested", "set", "restarted", "advanced"] },
-    "job_id": { "type": "string", "pattern": "^job_[1-9][0-9]*$" },
-    "job_ids": { "type": "array", "items": { "type": "string", "pattern": "^job_[1-9][0-9]*$" } },
-    "error": { "$ref": "https://example.test/mecon/job-lifecycle/v1/error" },
-    "attempt": { "type": "string", "pattern": "^att_[1-9][0-9]*$" },
-    "control": { "type": "string", "pattern": "^ctl_[1-9][0-9]*$" },
-    "op": { "enum": ["job.get", "job.cancel"] },
-    "delivery": { "type": "integer", "minimum": 1 }
+    "outcome": {
+      "enum": [
+        "created",
+        "replayed",
+        "error",
+        "read",
+        "listed",
+        "claimed",
+        "held",
+        "not_claimable",
+        "not_leased",
+        "terminal",
+        "unknown_job",
+        "already_signed",
+        "signed",
+        "refused",
+        "halted",
+        "delivered",
+        "redelivered",
+        "sent",
+        "too_soon",
+        "idle",
+        "recorded",
+        "unknown_target",
+        "ignored",
+        "applied",
+        "cancelled",
+        "cancel_requested",
+        "set",
+        "restarted",
+        "advanced"
+      ]
+    },
+    "job_id": {
+      "type": "string",
+      "pattern": "^job_[1-9][0-9]*$"
+    },
+    "job_ids": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^job_[1-9][0-9]*$"
+      }
+    },
+    "error": {
+      "$ref": "https://example.test/mecon/job-lifecycle/v1/error"
+    },
+    "attempt": {
+      "type": "string",
+      "pattern": "^att_[1-9][0-9]*$"
+    },
+    "control": {
+      "type": "string",
+      "pattern": "^ctl_[1-9][0-9]*$"
+    },
+    "op": {
+      "enum": [
+        "job.get",
+        "job.cancel",
+        "message.get"
+      ]
+    },
+    "delivery": {
+      "type": "integer",
+      "minimum": 1
+    }
   },
   "allOf": [
-    { "if": { "properties": { "outcome": { "const": "error" } } }, "then": { "required": ["error"] }, "else": { "not": { "required": ["error"] } } },
-    { "if": { "properties": { "outcome": { "enum": ["created", "replayed", "read"] } } }, "then": { "required": ["job_id"] } },
-    { "if": { "properties": { "outcome": { "const": "listed" } } }, "then": { "required": ["job_ids"] } }
+    {
+      "if": {
+        "properties": {
+          "outcome": {
+            "const": "error"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "error"
+        ]
+      },
+      "else": {
+        "not": {
+          "required": [
+            "error"
+          ]
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "outcome": {
+            "enum": [
+              "created",
+              "replayed",
+              "read"
+            ]
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "job_id"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "outcome": {
+            "const": "listed"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "job_ids"
+        ]
+      }
+    }
   ]
 }

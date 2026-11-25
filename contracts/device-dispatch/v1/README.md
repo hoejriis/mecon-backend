@@ -31,9 +31,12 @@ There is no door for "send any op". A command is `{ "op": ..., "args": {...} }` 
 - `changes_state`: whether running it changes the device;
 - `internal`: whether only the Backend may request it;
 - `cancellable_states`: the device job states in which a `job.cancel` still has something to cancel (section 3);
+- `status_read`: the internal op the Backend uses to ask the device where a job of this op stands: `job.get` for the job ops and `message.get` for `message.send`; null for the internal ops;
 - `args`: a closed JSON Schema (`additionalProperties` is false, required args are listed).
 
-The synthetic catalogue holds `contact.put`, `contact.remove`, `message.send`, `packet.transmit`, `config.apply`, `job.cancel` and `job.get`. The last two are internal: the Backend signs them to manage a job it already has, and a caller cannot request them. A `job.cancel` is a signed request and takes a job number of its own. **A `job.get` is a plain read:** it carries no job number of its own and no signature-bound job id, it takes no place in the job number sequence, and `target_job_number` only names the job it reads.
+The synthetic catalogue holds `contact.put`, `contact.remove`, `message.send`, `packet.transmit`, `config.apply`, `job.cancel`, `job.get` and `message.get`. The last three are internal: the Backend signs them to manage a job it already has, and a caller cannot request them. A `job.cancel` is a signed request and takes a job number of its own. **A `job.get` is a plain read:** it carries no job number of its own and no signature-bound job id, it takes no place in the job number sequence, and `target_job_number` only names the job it reads.
+
+**A message is not a job.** On the device `message.send` lives in a separate table of 8 slots held in RAM, and a `job.get` for it always answers `unknown-job`. Its status read is **`message.get`** with `{"message": <identity>}` (here `msg_<n>`, the attempt's job number). It is a plain read like `job.get`: no job number of its own. A Backend never reads a `message.send` with `job.get`.
 
 A command is checked **before anything is signed**, against the device's role. The first failing check names the reason, and the reasons are checked in this order:
 
@@ -94,6 +97,8 @@ A set `signed`, `transport_accepted` or `acked` never changes, and `rf_transmitt
 | unknown | `unknown` |
 
 A device state of `unknown` is the device saying it does not know how the job ended. It ends the job `unknown`, never `failed`.
+
+**The answer to a `message.get`** carries the device `epoch`. When the entry is found, `state` is the entry's state, applied like any other state. When it is not found the answer is `ok` with `state` `unknown` and the current epoch: the entry was evicted, lost to a reboot, or never sent, and these cannot be told apart. That answer settles nothing: it is never `refused`, never `failed` and never "nothing ran", so the job stays where it is and is not delivered again. Contrast `unknown-job` from a `job.get` on a job op, which ends the job `unknown` (job lifecycle contract, section 4).
 
 **What can be cancelled.** A `job.cancel` is useful only while the job's latest state is in its op's `cancellable_states`: `accepted`, `applied` (cancelling an applied job reverts it) and `awaiting-confirm` for the data ops; also `progress` for `config.apply`, standing in here for an update that can be abandoned part way; and `accepted`, `queued` and `duty-held` for the radio ops, which have nothing to cancel once transmitted.
 

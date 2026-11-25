@@ -9,7 +9,7 @@ How the Backend runs one caller's request that one device run one typed command,
 | `README.md` | This contract. |
 | `schemas/job.schema.json` | JSON Schema for a job as its creator reads it. |
 | `schemas/attempt.schema.json` | JSON Schema for one attempt. |
-| `schemas/control.schema.json` | JSON Schema for a signed `job.get` or `job.cancel` about an attempt. |
+| `schemas/control.schema.json` | JSON Schema for a signed `job.cancel`, or a `job.get` or `message.get` read, about an attempt. |
 | `schemas/outcome.schema.json` | JSON Schema for the outcome of a terminal job. |
 | `schemas/error.schema.json` | JSON Schema for the three fixed error bodies. |
 | `schemas/response.schema.json` | JSON Schema for the response to one step. |
@@ -24,11 +24,12 @@ How the Backend runs one caller's request that one device run one typed command,
 | `fixtures/F-cancel.json` | Fixture F: cancel before dispatch, and after dispatch only once the device has acknowledged, in a cancellable state, with no other request open. |
 | `fixtures/G-authority.json` | Fixture G: authority re-checked before every delivery. |
 | `fixtures/H-forged-and-late.json` | Fixture H: forged results, a result for another device and late results, ignored and counted. |
+| `fixtures/I-message-status-read.json` | Fixture I: a message is read with `message.get`, never `job.get`: found and settled, and not found and left to the abandon deadline. |
 | `fixtures/K-invalid.json` | Fixture K: documents the schemas reject. |
 
-`npm test` in `contracts/` validates every schema and fixture. It replays fixtures A to H through `job-lifecycle-reference.mjs`, a reference model written from this README (it uses the device dispatch reference for commands, dispositions and correlation), and compares every step's response, deliveries, ignored count and job views exactly. It also checks the rules of section 10 on every step, fails when a fixture or schema file is not referenced here, when a fixture names another version than this one, and when no fixture covers a step kind. `scripts/gen-job-dispatch-fixtures.mjs` regenerates the scripted fixtures' expected outputs; a changed expectation is reviewed by hand, and a second implementation replaying the same fixtures is what checks the reference.
+`npm test` in `contracts/` validates every schema and fixture. It replays fixtures A to I through `job-lifecycle-reference.mjs`, a reference model written from this README (it uses the device dispatch reference for commands, dispositions and correlation), and compares every step's response, deliveries, ignored count and job views exactly. It also checks the rules of section 10 on every step, fails when a fixture or schema file is not referenced here, when a fixture names another version than this one, and when no fixture covers a step kind. `scripts/gen-job-dispatch-fixtures.mjs` regenerates the scripted fixtures' expected outputs; a changed expectation is reviewed by hand, and a second implementation replaying the same fixtures is what checks the reference.
 
-Fixture letters are per contract. The device dispatch contract has its own fixtures I, J, K and L.
+Fixture letters are per contract; the device dispatch contract has its own fixtures.
 
 ---
 
@@ -48,7 +49,7 @@ The claim lease (section 5) is internal to the Backend. It is not part of the jo
 
 **Attempt** (`schemas/attempt.schema.json`): one signed request, `att_<n>`, with its own `request_id` (`rq_<n>`), its own job number and its stored signed bytes. **Identical bytes delivered more than once are one attempt.** It keeps a `deliveries` count, and the dispositions of the device dispatch contract (section 2 there).
 
-**Control** (`schemas/control.schema.json`): a `job.get` or `job.cancel` about an attempt, `ctl_<n>`, with its own request id, delivered once. A `job.cancel` is a signed request with a job number of its own. **A `job.get` is a plain read:** it has no job number and no signature-bound job id, takes no place in the sequence, and names the job it reads in `target_job_number`.
+**Control** (`schemas/control.schema.json`): a status read or a `job.cancel` about an attempt, `ctl_<n>`, with its own request id, delivered once. A `job.cancel` is a signed request with a job number of its own. **A status read is a plain read:** it has no job number and no signature-bound job id, takes no place in the sequence, and names the job it reads in `target_job_number`. **The read is per op** (the catalogue's `status_read`): `job.get` for the job ops, and `message.get` for `message.send`, which is not a job on the device.
 
 **Event**: a device's unsolicited status for the job (section 6), with `at`, `status`, `state` and `data`.
 
@@ -113,9 +114,10 @@ An attempt is signed with the next job number of the device, and a `job.cancel` 
 | `refused`, `invalid`, `unknown-op`, `unsupported-version` | Nothing ran. The job ends `refused`, reason `nothing_ran`, at once, with **no new attempt**. |
 | `busy` | Nothing ran. The attempt is kept and is delivered again, as the identical bytes, later on the 60 second cadence of section 7. No new attempt. |
 | `busy` with error `job-open` | Nothing ran, and another job is open on the device. The job ends `refused`, reason `nothing_ran`. |
-| `refused` with error `replay` and a `mark` | The device has seen this job number. If the attempt was delivered **exactly once**, nothing ran from it: **one new attempt** is made, at most once per job, with a job number above the reported `mark`. Otherwise, or when the new attempt has been used, the Backend reads the job with `job.get` (section 7). |
-| `failed` with error `duplicate` | The job number ran, or a power cut lost its answer. **Never re-sign:** the Backend reads the job with `job.get`. |
-| `failed` with error `unknown-job` | The device has no such job. The job ends `unknown`, reason `device_lost_job`. |
+| `refused` with error `replay` and a `mark` | The device has seen this job number. If the attempt was delivered **exactly once**, nothing ran from it: **one new attempt** is made, at most once per job, with a job number above the reported `mark`. Otherwise, or when the new attempt has been used, the Backend reads the job with the op's status read (section 7). |
+| `failed` with error `duplicate` | The job number ran, or a power cut lost its answer. **Never re-sign:** the Backend reads the job with the op's status read. |
+| `failed` with error `unknown-job` | The device has no such job (the answer of a `job.get`). The job ends `unknown`, reason `device_lost_job`. |
+| `ok` with state `unknown` to a `message.get` | The device does not have the message: evicted, lost to a reboot or never sent. Never `refused`, `failed` or nothing ran: the job stays where it is, is not delivered again, and ends `unknown` at the abandon deadline unless an outcome event settles it first. |
 | `failed`, no error | The device ran it and it failed. `failed`. |
 | `ok` with a state | The job is open (`running`), or ended as the state says (section 3). |
 
@@ -131,7 +133,7 @@ A delivery moves a job from `accepted` to `dispatched`. A delivery is recorded a
 
 ## 6. Device results
 
-A result is correlated first (device dispatch section 3): signed by the attempt's device, naming its request id and its job number. One that fails is ignored and counted, never applied. A result for a `job.cancel` is correlated by its own request id and job number; a result for a `job.get` by its request id and the job number of the job it reads. Either then settles the attempt the control is about.
+A result is correlated first (device dispatch section 3): signed by the attempt's device, naming its request id and its job number. One that fails is ignored and counted, never applied. A result for a `job.cancel` is correlated by its own request id and job number; a result for a status read by its request id and the job number of the job it reads. Either then settles the attempt the control is about.
 
 A correlated result for the job's current attempt updates the attempt's dispositions and then moves the job:
 - an open state moves `dispatched` to `running`, and leaves `running` as it is;
@@ -146,10 +148,10 @@ An **event** is a device result that the Backend did not ask for with a delivery
 **After a restart,** every lease is void, since the workers that held them are gone, and the persisted state is unchanged. Then:
 - an `accepted` job is dispatched normally: a worker claims it and delivers;
 - a `dispatched` job that no device answer has opened is **re-delivered as identical bytes at most every 60 seconds** (a plain `busy` leaves it in that position). This is a transport retry, and it is safe because the device keeps one run per job number;
-- a job that has been **quiet for 300 seconds** is read with a signed `job.get`, **at most every 300 seconds**. Quiet runs from the latest device answer, or from the first delivery if there is none. A `job.get` is also sent at once after a `replay` or `duplicate` that leaves the question open (section 4);
+- a job that has been **quiet for 300 seconds** is read with a signed status read, **at most every 300 seconds**. Quiet runs from the latest device answer, or from the first delivery if there is none. A status read is also sent at once after a `replay` or `duplicate` that leaves the question open (section 4);
 - the job is never re-signed, except by the one new attempt a `replay` allows.
 
-A job that the device has opened (`running`) is not re-delivered; it is only read when quiet. A `job.get` answer that the device does not know the job for is `unknown-job` (section 4).
+A job that the device has opened (`running`) is not re-delivered; it is only read when quiet. After a `message.get` that found nothing the message is not delivered again, since an evicted entry may already have been sent; it is only read again. A job op's `job.get` answer for a job the device does not know is `unknown-job` (section 4).
 
 **Expiry bounds dispatch only.** `expires_at` ends a job that was never dispatched, `expired`, whether or not a signed attempt exists. It never ends a dispatched job, and it bounds the one new attempt of a `replay`.
 
@@ -181,7 +183,7 @@ Each lifecycle fixture is a scripted sequence of steps against a clock that only
 - every job state change is in the transition table, a terminal job's state and outcome never change, and every outcome reason fits its state;
 - an attempt's stored bytes, request id and job number never change, a delivery carries exactly the stored bytes, and an attempt's `deliveries` equals the deliveries handed out;
 - job numbers of one device strictly increase with the requests, and a job never has a new attempt after one that may have run;
-- a `job.cancel` goes out only after the device acknowledged the job, in a cancellable state, with no other request to the device open; a `job.get` has no job number, a `job.cancel` has one; an attempt is marked nothing-ran only after a `replay` to one delivery, and a job has at most one new attempt; an abandoned job is at least 3600 seconds past its signing;
+- a `job.cancel` goes out only after the device acknowledged the job, in a cancellable state, with no other request to the device open; a status read has no job number, a `job.cancel` has one; a status read is the op's own, and a `message.send` job is never read with `job.get`; an attempt is marked nothing-ran only after a `replay` to one delivery, and a job has at most one new attempt; an abandoned job is at least 3600 seconds past its signing;
 - a refused create makes no job and sends nothing; a read by anyone but the creator is `not_found`, and a list holds the caller's own jobs;
 - every step kind, every device status and every error code appears in at least one fixture, and **K**: each case fails its schema.
 

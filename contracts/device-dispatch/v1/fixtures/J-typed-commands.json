@@ -109,6 +109,50 @@
    }
   },
   {
+   "note": "message.get signed by the Backend",
+   "by": "backend",
+   "role": "companion",
+   "command": {
+    "op": "message.get",
+    "args": {
+     "message": "msg_4"
+    }
+   },
+   "expect": {
+    "valid": true
+   }
+  },
+  {
+   "note": "message.get requested by a caller",
+   "by": "caller",
+   "role": "companion",
+   "command": {
+    "op": "message.get",
+    "args": {
+     "message": "msg_4"
+    }
+   },
+   "expect": {
+    "valid": false,
+    "reason": "internal_op"
+   }
+  },
+  {
+   "note": "message.get for a repeater",
+   "by": "backend",
+   "role": "repeater",
+   "command": {
+    "op": "message.get",
+    "args": {
+     "message": "msg_4"
+    }
+   },
+   "expect": {
+    "valid": false,
+    "reason": "wrong_role"
+   }
+  },
+  {
    "note": "an op the catalogue does not list",
    "by": "caller",
    "role": "companion",

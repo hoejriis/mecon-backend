@@ -315,3 +315,86 @@ describe(`${S}: receive and storage`, () => {
     expect(new BleError('unsupported').code).toBe('unsupported');
   });
 });
+
+describe(`${S}: reply timer starts after the write`, () => {
+  /** A transport whose write stays pending (the OS pairing prompt), then lands and replies after `replyAfterMs`. */
+  class SlowWrite extends MockTransport {
+    constructor(
+      peer: MockCompanion,
+      private writeMs: number,
+      private replyAfterMs: number,
+    ) {
+      super(peer);
+    }
+    override async write(frame: Uint8Array): Promise<void> {
+      if (this.writeMs === Infinity) return new Promise<void>(() => undefined);
+      await new Promise((r) => setTimeout(r, this.writeMs));
+      setTimeout(() => this.peer.receive(frame), this.replyAfterMs);
+    }
+  }
+  const fakeRig = (writeMs: number, replyAfterMs: number, mock?: MockCompanionOptions) => {
+    const peer = new MockCompanion(mock);
+    const transport = new SlowWrite(peer, writeMs, replyAfterMs);
+    // the first write is exchanged after the chooser and connect; the adapter uses the real default bounds
+    const adapter = new BleAdapter({ transport, nowSec: () => 1700000000 });
+    adapters.push(adapter);
+    return { adapter, peer };
+  };
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it('a write pending 8 s (PIN typing) then a reply within 1 s connects', async () => {
+    vi.useFakeTimers();
+    const { adapter } = fakeRig(8000, 1000);
+    const p = adapter.connect();
+    await vi.advanceTimersByTimeAsync(3 * 9000 + 100);
+    expect(await p).toEqual({ ok: true, error: null });
+  });
+
+  it('a write that never resolves fails write_timeout after the write bound, naming the op', async () => {
+    vi.useFakeTimers();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const { adapter } = fakeRig(Infinity, 0);
+    const p = adapter.connect();
+    await vi.advanceTimersByTimeAsync(59_000);
+    expect(snap(adapter).lastError).toBeNull();
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(await p).toEqual({ ok: false, error: 'write_timeout' });
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0]![0])).toContain('APP_START');
+  });
+
+  it('a reply later than 5 s after the write fails response_timeout naming the op', async () => {
+    vi.useFakeTimers();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const { adapter } = fakeRig(8000, 6000);
+    const p = adapter.connect();
+    await vi.advanceTimersByTimeAsync(8000 + 4900);
+    expect(snap(adapter).lastError).toBeNull();
+    await vi.advanceTimersByTimeAsync(200);
+    expect(await p).toEqual({ ok: false, error: 'response_timeout' });
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0]![0])).toContain('APP_START');
+  });
+
+  it('the error detail names the exchange', async () => {
+    const { adapter } = rig({ mock: { silent: true }, responseTimeoutMs: 30 });
+    const errs: string[] = [];
+    vi.spyOn(console, 'warn').mockImplementation((m: string) => void errs.push(m));
+    const orig = (adapter as unknown as { exchange: (op: string, ...r: unknown[]) => Promise<unknown> }).exchange.bind(adapter);
+    let detail = '';
+    (adapter as unknown as { exchange: unknown }).exchange = async (op: string, ...r: unknown[]) => {
+      try {
+        return await orig(op, ...r);
+      } catch (e) {
+        detail = (e as BleError).message;
+        throw e;
+      }
+    };
+    expect(await adapter.connect()).toEqual({ ok: false, error: 'response_timeout' });
+    expect(detail).toBe('no answer to APP_START');
+    expect(errs[0]).not.toMatch(/key|text/i);
+  });
+});

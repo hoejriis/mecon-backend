@@ -75,6 +75,8 @@
             "status",
             "error",
             "state",
+            "outcome",
+            "duty_held",
             "epoch",
             "at"
           ],
@@ -109,17 +111,16 @@
                 "progress",
                 "applied",
                 "awaiting-confirm",
+                "confirmed",
+                "reverted",
+                "failed",
+                "cancelled",
+                "unknown",
                 "queued",
                 "duty-held",
                 "transmitted",
-                "confirmed",
-                "applied-final",
                 "acked",
-                "done",
-                "reverted",
                 "timed-out",
-                "cancelled",
-                "unknown",
                 null
               ]
             },
@@ -129,6 +130,18 @@
                 "null"
               ],
               "minimum": 0
+            },
+            "outcome": {
+              "enum": [
+                "transmitted",
+                "expired",
+                "failed",
+                "unknown",
+                null
+              ]
+            },
+            "duty_held": {
+              "type": "boolean"
             }
           }
         }

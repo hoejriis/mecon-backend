@@ -89,6 +89,7 @@
                     "heard",
                     "authority",
                     "native_ack",
+                    "cancel_result",
                     "tick"
                   ]
                 }

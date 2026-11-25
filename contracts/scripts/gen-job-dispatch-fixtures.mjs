@@ -37,6 +37,8 @@ const event = (...a) => ({ step: 'device_event', result: result(...a) });
 const refuse = (...a) => ({ step: 'device_answer', result: failure(...a) });
 const put = (n = 'ctc_1') => ({ op: 'contact.put', args: { contact_ref: n, name: 'Synthetic One' } });
 const rm = (n = 'ctc_1') => ({ op: 'contact.remove', args: { contact_ref: n } });
+const chan = { op: 'message.send', args: { kind: 'channel', target: 'chan_1', text: 'synthetic broadcast' } };
+const pkt = { op: 'packet.transmit', args: { packet_hex: '0a0b0c0d' } };
 const dm = { op: 'message.send', args: { kind: 'direct', target: 'ctc_2', text: 'synthetic hello' } };
 
 const lifecycle = (fixture, title, steps) => {
@@ -65,11 +67,11 @@ write(LDIR, 'C-crash-and-second-worker', lifecycle('C', 'A worker stores the sig
   deliver('job_1', W2), advance(30), claim('job_1', W2), deliver('job_1', W2), { step: 'restart' }, deliver('job_1', W2),
 ]));
 
-write(LDIR, 'D-no-answer-unknown', lifecycle('D', 'No answer: identical re-delivery, plain reads every 300 s, unknown (never failed) at 3600 s from signing; and a device that lost the job', [
+write(LDIR, 'D-no-answer-unknown', lifecycle('D', 'No answer: identical re-delivery, the first read after 900 s of quiet and later reads every 300 s, unknown (never failed) at 3600 s from signing; and a device that lost the job', [
   create({ command: { op: 'packet.transmit', args: { packet_hex: '0a0b0c0d' } } }), claim('job_1'), deliver('job_1'), advance(61), claim('job_1'),
-  deliver('job_1'), advance(240), claim('job_1'), deliver('job_1'), advance(300), claim('job_1'), deliver('job_1'), advance(2999), advance(1),
-  answer('rq_1', 1, 'done'),
-  create({ command: put('ctc_2') }), claim('job_2'), deliver('job_2'), advance(301), claim('job_2'), deliver('job_2'),
+  deliver('job_1'), advance(339), claim('job_1'), deliver('job_1'), advance(501), claim('job_1'), deliver('job_1'), advance(300), claim('job_1'), deliver('job_1'), advance(2399), advance(1),
+  answer('rq_1', 1, 'applied', { outcome: 'transmitted' }),
+  create({ command: put('ctc_2') }), claim('job_2'), deliver('job_2'), advance(900), claim('job_2'), deliver('job_2'),
   refuse('rq_5', 2, 'failed', { error: 'unknown-job' }),
   create({ command: put('ctc_3') }), claim('job_3'), sign('job_3'), advance(20), deliver('job_3'), advance(3579), advance(1),
 ]));
@@ -78,22 +80,22 @@ write(LDIR, 'E-nothing-ran', lifecycle('E', 'What each device answer proves: ref
   create({ command: put() }), claim('job_1'), deliver('job_1'), refuse('rq_1', 1, 'refused', { error: 'replay', mark: 5 }), deliver('job_1'),
   refuse('rq_1', 1, 'refused', { error: 'replay', mark: 5 }), answer('rq_2', 6, 'confirmed'),
   create({ command: put('ctc_2') }), claim('job_2'), deliver('job_2'), advance(61), claim('job_2'), deliver('job_2'),
-  refuse('rq_3', 7, 'refused', { error: 'replay', mark: 7 }), deliver('job_2'), answer('rq_4', 7, 'confirmed', {}),
+  refuse('rq_3', 7, 'refused', { error: 'replay', mark: 7 }), deliver('job_2'), answer('rq_4', 7, 'confirmed'),
   create({ command: put('ctc_3') }), claim('job_3'), deliver('job_3'), refuse('rq_5', 8, 'refused', { error: 'replay', mark: 8 }), deliver('job_3'),
   refuse('rq_6', 9, 'refused', { error: 'replay', mark: 9 }), deliver('job_3'), answer('rq_7', 9, 'reverted'),
   create({ command: put('ctc_4') }), claim('job_4'), deliver('job_4'), refuse('rq_8', 10, 'invalid'),
   create({ command: put('ctc_5') }), claim('job_5'), deliver('job_5'), refuse('rq_9', 11, 'busy'), advance(61), claim('job_5'), deliver('job_5'),
-  answer('rq_9', 11, 'accepted'), answer('rq_9', 11, 'applied-final'),
+  answer('rq_9', 11, 'accepted'), answer('rq_9', 11, 'confirmed'),
   create({ command: put('ctc_6') }), claim('job_6'), deliver('job_6'), refuse('rq_10', 12, 'busy', { error: 'job-open' }),
   create({ command: put('ctc_7') }), claim('job_7'), deliver('job_7'), refuse('rq_11', 13, 'failed', { error: 'duplicate' }), deliver('job_7'),
-  answer('rq_12', 13, 'done'),
+  answer('rq_12', 13, 'confirmed'),
   create({ command: put('ctc_8'), ttl_s: 100 }), claim('job_8'), deliver('job_8'), advance(101), refuse('rq_13', 14, 'refused', { error: 'replay', mark: 14 }),
   create({ command: put('ctc_9') }), claim('job_9'), deliver('job_9'), answer('rq_14', 15, 'unknown'),
   create({ command: put('ctc_10') }), claim('job_10'), deliver('job_10'), refuse('rq_15', 16, 'unknown-op'),
   create({ command: put('ctc_11') }), claim('job_11'), deliver('job_11'), refuse('rq_16', 17, 'unsupported-version'),
 ]));
 
-write(LDIR, 'F-cancel', lifecycle('F', 'Cancel before dispatch; after dispatch only once the device has acknowledged, in a cancellable state and with no other open request; the outcome may still be succeeded', [
+write(LDIR, 'F-cancel', lifecycle('F', 'Cancel before dispatch; after dispatch only once the device has acknowledged, in a cancellable state and with no other open request (a message never, a packet only while accepted); the outcome may still be succeeded', [
   create({ command: put() }), cancel('job_1'), claim('job_1'), cancel('job_1'),
   create({ command: put('ctc_2') }), claim('job_2'), deliver('job_2'), cancel('job_2'), deliver('job_2'), answer('rq_1', 1, 'accepted'), deliver('job_2'),
   cancel('job_2'), ack('job_2', 'ctl_1'), answer('rq_1', 1, 'confirmed'), cancel('job_2'),
@@ -103,6 +105,10 @@ write(LDIR, 'F-cancel', lifecycle('F', 'Cancel before dispatch; after dispatch o
   create({ command: put('ctc_5') }), claim('job_5'), deliver('job_5'), answer('rq_6', 6, 'accepted'),
   create({ command: put('ctc_6') }), claim('job_6'), deliver('job_6'), cancel('job_5'), deliver('job_5'), answer('rq_7', 7, 'confirmed'),
   deliver('job_5'), answer('rq_8', 8, 'cancelled'),
+  create({ command: pkt }), claim('job_7'), deliver('job_7'), answer('rq_9', 9, 'accepted', { duty_held: true }), cancel('job_7'), deliver('job_7'),
+  answer('rq_10', 10, 'cancelled'),
+  create({ command: pkt }), claim('job_8'), deliver('job_8'), answer('rq_11', 11, 'progress'), cancel('job_8'), deliver('job_8'),
+  answer('rq_11', 11, 'applied', { outcome: 'transmitted' }),
 ]));
 
 write(LDIR, 'G-authority', lifecycle('G', 'Authority re-checked before every delivery: refused before the first, re-delivery stops after, blocked flag, and events after the device left reach', [
@@ -118,16 +124,19 @@ write(LDIR, 'G-authority', lifecycle('G', 'Authority re-checked before every del
 
 write(LDIR, 'H-forged-and-late', lifecycle('H', 'Results that are unsigned, from another device, or name the wrong request or job number are ignored and counted; late results never move a terminal job', [
   create({ command: put() }), claim('job_1'), deliver('job_1'),
-  answer('rq_1', 1, 'done', {}, null), answer('rq_1', 1, 'done', {}, 'dev_2'), answer('rq_1', 99, 'done'), answer('rq_9', 1, 'done'), answer('rq_1', 1, 'acked'),
+  answer('rq_1', 1, 'confirmed', {}, null), answer('rq_1', 1, 'confirmed', {}, 'dev_2'), answer('rq_1', 99, 'confirmed'), answer('rq_9', 1, 'confirmed'), answer('rq_1', 1, 'acked'),
   answer('rq_1', 1, 'progress'), answer('rq_1', 1, 'confirmed'), event('rq_1', 1, 'progress'), answer('rq_1', 1, 'confirmed'),
 ]));
 
-write(LDIR, 'I-message-status-read', lifecycle('I', 'A message is not a job: its status is read with message.get, never job.get; a found entry settles like any state, a not found one settles nothing', [
+write(LDIR, 'I-message-status-read', lifecycle('I', 'A message is not a job: its status is read with message.get, never job.get; a found entry settles like any state, a not found one settles nothing; a time-out is not final; a channel message ends at transmitted', [
   create({ command: dm }), claim('job_1'), deliver('job_1'), advance(61), claim('job_1'), deliver('job_1'),
   refuse('rq_1', 1, 'failed', { error: 'duplicate' }), deliver('job_1'),
   answer('rq_2', 1, 'transmitted', { epoch: 3 }), answer('rq_1', 1, 'acked'),
-  create({ command: dm }), claim('job_2'), deliver('job_2'), advance(301), claim('job_2'), deliver('job_2'),
+  create({ command: dm }), claim('job_2'), deliver('job_2'), advance(900), claim('job_2'), deliver('job_2'),
   answer('rq_4', 2, 'unknown', { epoch: 4 }), advance(299), claim('job_2'), deliver('job_2'), advance(3600),
+  create({ command: dm }), claim('job_3'), deliver('job_3'), answer('rq_5', 3, 'transmitted'), answer('rq_5', 3, 'timed-out'), answer('rq_5', 3, 'acked'),
+  create({ command: dm }), claim('job_4'), deliver('job_4'), answer('rq_6', 4, 'transmitted'), answer('rq_6', 4, 'timed-out'), advance(3600),
+  create({ command: chan }), claim('job_5'), deliver('job_5'), answer('rq_7', 5, 'transmitted'), answer('rq_7', 5, 'acked'),
 ]));
 
 // ---- device dispatch ----
@@ -141,17 +150,20 @@ const res = (request_id, job_number, state, o = {}) => ({ signed_by: 'dev_1', re
       { request_id: 'rq_1', device: 'dev_1', role: 'companion', job_number: 1, command: dm },
       { request_id: 'rq_2', device: 'dev_1', role: 'companion', job_number: 2, command: { op: 'message.send', args: { kind: 'channel', target: 'chan_1', text: 'synthetic broadcast' } } },
       { request_id: 'rq_3', device: 'dev_1', role: 'companion', job_number: 3, command: put() },
+      { request_id: 'rq_4', device: 'dev_1', role: 'companion', job_number: 4, command: pkt },
     ],
   };
   const steps = [
-    dispatchStep('sign', 0, { request_id: 'rq_1' }), dispatchStep('sign', 0, { request_id: 'rq_2' }),
+    dispatchStep('sign', 0, { request_id: 'rq_1' }), dispatchStep('sign', 0, { request_id: 'rq_2' }), dispatchStep('sign', 0, { request_id: 'rq_4' }),
     dispatchStep('transport_accept', 1, { request_id: 'rq_1' }), dispatchStep('transport_accept', 1, { request_id: 'rq_2' }),
     dispatchStep('transport_accept', 1, { request_id: 'rq_3' }),
-    dispatchStep('result', 2, { result: res('rq_1', 1, 'queued') }), dispatchStep('result', 3, { result: res('rq_3', 3, 'done') }),
+    dispatchStep('result', 2, { result: res('rq_1', 1, 'queued') }), dispatchStep('result', 3, { result: res('rq_3', 3, 'confirmed') }),
     dispatchStep('result', 5, { result: res('rq_1', 1, 'duty-held') }),
     dispatchStep('result', 10, { result: res('rq_1', 1, 'transmitted', { rf_count: 1 }) }), dispatchStep('result', 11, { result: res('rq_2', 2, 'transmitted') }),
     dispatchStep('result', 12, { result: res('rq_1', 1, 'transmitted', { rf_count: 1 }) }), dispatchStep('result', 13, { result: res('rq_2', 2, 'acked') }),
-    dispatchStep('result', 14, { result: res('rq_1', 1, 'acked') }), dispatchStep('result', 15, { result: res('rq_2', 2, 'done') }),
+    dispatchStep('result', 14, { result: res('rq_1', 1, 'timed-out') }), dispatchStep('result', 15, { result: res('rq_1', 1, 'acked') }),
+    dispatchStep('result', 16, { result: res('rq_4', 4, 'accepted', { duty_held: true }) }), dispatchStep('result', 17, { result: res('rq_4', 4, 'queued') }),
+    dispatchStep('result', 18, { result: res('rq_4', 4, 'applied', { outcome: 'transmitted' }) }),
   ];
   const got = replayDispatch(s, steps);
   write(DDIR, 'I-dispositions', { fixture: 'I', title: 'Dispositions kept distinct: broker acceptance, duty hold, transmission, a native ACK on a direct message and never on a channel message', kind: 'dispatch', contract_version: CONTRACT_VERSION, setup: s, steps: steps.map((st, i) => ({ ...st, expect: got[i] })) });
@@ -201,10 +213,18 @@ const res = (request_id, job_number, state, o = {}) => ({ signed_by: 'dev_1', re
       [o('start', 0), o('result', 1, { gateway: 'comp', status: 'queued' }), o('result', 5, { gateway: 'comp', status: 'duty-held' }), o('tick', 119), o('tick', 120),
         o('result', 130, { gateway: 'rep_2', status: 'transmitted' }), o('heard', 135, { gateway: 'rep_1' }), o('tick', 141), o('tick', 142),
         o('result', 150, { gateway: 'rep_3', status: 'transmitted' }), o('tick', 162)]),
-    run('The Companion transmits: the window opens, the next round picks a gateway, and a native ACK stops scheduling and cancels what is still cancellable', 'direct', rep3,
+    run('The Companion transmits: the window opens and the next round picks a gateway; a native ACK stops scheduling and cancels only Repeater origins still dispatched; a refused cancel is retried for up to 300 s and then given up', 'direct', rep3,
       ['comp', 'rep_1', 'rep_2', 'rep_3'],
       [o('start', 0), o('result', 2, { gateway: 'comp', status: 'transmitted' }), o('tick', 13), o('tick', 14), o('result', 15, { gateway: 'rep_1', status: 'queued' }),
-        o('native_ack', 16), o('result', 17, { gateway: 'rep_1', status: 'transmitted' }), o('tick', 40)]),
+        o('native_ack', 16), o('cancel_result', 20, { gateway: 'rep_1', accepted: false }), o('cancel_result', 317, { gateway: 'rep_1', accepted: false }),
+        o('result', 330, { gateway: 'rep_1', status: 'transmitted' }), o('tick', 340)]),
+    run('The Companion is never cancelled; a Repeater whose cancel was accepted and which then reports transmitted counts as transmitted', 'direct', rep3,
+      ['comp', 'rep_1', 'rep_2', 'rep_3'],
+      [o('start', 0), o('result', 1, { gateway: 'comp', status: 'queued' }), o('tick', 120), o('result', 121, { gateway: 'rep_1', status: 'queued' }),
+        o('native_ack', 125), o('cancel_result', 126, { gateway: 'rep_1', accepted: true }), o('result', 130, { gateway: 'rep_1', status: 'transmitted' }), o('result', 131, { gateway: 'comp', status: 'transmitted' })]),
+    run('A Repeater that expires its own hold after 60 s reports expired, and the next round starts at once', 'channel',
+      { comp: gw('companion', { connected: false }), rep_1: gw('repeater'), rep_2: gw('repeater') }, ['comp', 'rep_1', 'rep_2'],
+      [o('start', 0), o('result', 1, { gateway: 'rep_1', status: 'queued' }), o('tick', 59), o('result', 61, { gateway: 'rep_1', status: 'expired' }), o('result', 70, { gateway: 'rep_2', status: 'transmitted' })]),
     run('A channel message: no Companion connected, so a Repeater; an ACK on a channel is ignored; an origin that is not an origin is ignored; a gateway no longer authorised is skipped', 'channel',
       { comp: gw('companion', { connected: false }), rep_1: gw('repeater'), rep_2: gw('repeater'), rep_3: gw('repeater') }, ['comp', 'rep_2', 'rep_1', 'rep_3'],
       [o('start', 0), o('result', 3, { gateway: 'rep_2', status: 'transmitted' }), o('native_ack', 5), o('authority', 8, { gateway: 'rep_1', authorized: false }),

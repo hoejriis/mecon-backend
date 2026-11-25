@@ -76,9 +76,9 @@ A create request (`schemas/create-request.schema.json`) names the device, a comm
 | --- | --- |
 | `accepted` | Committed, before anything is delivered. A signed attempt may exist. |
 | `dispatched` | An attempt was handed to a transport. |
-| `running` | The device answered that the job is open on it: the state `accepted`, `progress`, `applied`, `awaiting-confirm`, `queued`, `duty-held` or `transmitted`. |
-| `succeeded` | The device's final state is `confirmed`, `applied-final`, `acked` or `done`. |
-| `failed` | The device ran it and it failed: the status `failed` with no error code, or the final state `reverted` or `timed-out`. |
+| `running` | The device answered that the job is open on it: an open state (device dispatch section 3), including a message that is `timed-out`. |
+| `succeeded` | The device's final state is `confirmed`, a packet `applied` with outcome `transmitted`, a direct message `acked`, or a channel message `transmitted`. |
+| `failed` | The device ran it and it failed: the status `failed` with no error code, or the final state `reverted`, `failed`, or a packet `applied` with outcome `expired` or `failed`. A message in `timed-out` is not failed: it stays `running`. |
 | `refused` | Nothing ran: either the Backend's own check (reason `authority`), or a device answer proving nothing ran (reason `nothing_ran`). |
 | `cancelled` | Before dispatch, or the device confirmed `cancelled`. |
 | `expired` | Never dispatched before `expires_at`. |
@@ -148,7 +148,7 @@ An **event** is a device result that the Backend did not ask for with a delivery
 **After a restart,** every lease is void, since the workers that held them are gone, and the persisted state is unchanged. Then:
 - an `accepted` job is dispatched normally: a worker claims it and delivers;
 - a `dispatched` job that no device answer has opened is **re-delivered as identical bytes at most every 60 seconds** (a plain `busy` leaves it in that position). This is a transport retry, and it is safe because the device keeps one run per job number;
-- a job that has been **quiet for 300 seconds** is read with a signed status read, **at most every 300 seconds**. Quiet runs from the latest device answer, or from the first delivery if there is none. A status read is also sent at once after a `replay` or `duplicate` that leaves the question open (section 4);
+- a job that has been **quiet for 900 seconds** is read with a signed status read, and read again **at most every 300 seconds** after that. Quiet runs from the latest device answer, or from the first delivery if there is none. A status read is also sent at once after a `replay` or `duplicate` that leaves the question open (section 4);
 - the job is never re-signed, except by the one new attempt a `replay` allows.
 
 A job that the device has opened (`running`) is not re-delivered; it is only read when quiet. After a `message.get` that found nothing the message is not delivered again, since an evicted entry may already have been sent; it is only read again. A job op's `job.get` answer for a job the device does not know is `unknown-job` (section 4).
@@ -161,7 +161,7 @@ A job that the device has opened (`running`) is not re-delivered; it is only rea
 
 **Cancel.** The caller's cancel is for the caller's own job; any other job is `not_found`.
 - **Before dispatch** (the job is `accepted`, or only a new attempt is awaited), the job is `cancelled` at once with reason `caller_before_dispatch`, and nothing is sent.
-- **After dispatch,** the request is recorded (`cancel_requested_at`) and the job keeps its state. **A signed `job.cancel` is sent only when** the device has acknowledged the job (it answered `ok`), its latest state is one the op can cancel (device dispatch section 3: `accepted`, `applied` or `awaiting-confirm`, `progress` for an update only, and for `packet.transmit` `accepted`, `queued` or `duty-held`; a `message.send` has none, so its cancel is only recorded and never sent), **and no other request to that device is open.** Before any device acknowledgement nothing is sent; the cancel is only recorded, and it is sent once the device acknowledges, if the job is still cancellable then. It goes out ahead of any re-delivery.
+- **After dispatch,** the request is recorded (`cancel_requested_at`) and the job keeps its state. **A signed `job.cancel` is sent only when** the device has acknowledged the job (it answered `ok`), its latest state is one the op can cancel (device dispatch section 3: `accepted`, `applied` or `awaiting-confirm`; for `packet.transmit` `accepted` only, a duty hold included; a `message.send` has none, so its cancel is only recorded and never sent), **and no other request to that device is open.** Before any device acknowledgement nothing is sent; the cancel is only recorded, and it is sent once the device acknowledges, if the job is still cancellable then. It goes out ahead of any re-delivery.
 - The job moves only when the device reports: it may still be `succeeded`, `failed` or `cancelled`.
 - **A second cancel is a `conflict`,** and so is a cancel of a terminal job.
 
@@ -187,12 +187,19 @@ Each lifecycle fixture is a scripted sequence of steps against a clock that only
 - a refused create makes no job and sends nothing; a read by anyone but the creator is `not_found`, and a list holds the caller's own jobs;
 - every step kind, every device status and every error code appears in at least one fixture, and **K**: each case fails its schema.
 
-A Backend replaying these fixtures supplies its own storage, transport and clock. The expected values use the defaults of this README: a lease of 30 seconds, a re-delivery interval of 60 seconds, a status read after 300 seconds of quiet, repeated at most every 300 seconds, an abandon deadline of 3600 seconds and a time to live of 600 seconds.
+A Backend replaying these fixtures supplies its own storage, transport and clock. The expected values use the defaults of this README: a lease of 30 seconds, a re-delivery interval of 60 seconds, a first status read after 900 seconds of quiet, repeated at most every 300 seconds, an abandon deadline of 3600 seconds and a time to live of 600 seconds.
 
 ## 11. Gaps in the observed implementation
 
 - **Failure for what is not a failure.** It ends an unanswered request, a nothing-ran answer, a device-reported unknown and an `unknown-job` answer as `failed`. The contract has `refused` for what provably did not run and `unknown` for what the Backend cannot know.
+- **A message job ended at once when nothing is found.** When `message.get` answers not found and no outcome was reported, it ends the job at once. The contract keeps it open until the abandon deadline and then ends it `unknown`.
 - **No re-check before a re-delivery or a re-signing.** A request that is sent again is not checked against the caller's right, the fleet or the blocked flag again.
 - **No per-caller idempotency key** except on one send route. Elsewhere a repeated create makes a second job.
 - **Error bodies repeat the reason.** What an error says depends on the request, where the contract's three bodies are fixed.
 - **Scoping.** Co-holders of a device see each other's jobs; a creator who loses access to a device loses its own jobs; and some views show only the newest request per device.
+- **Message reads.** It reads a message's status only once, after a `duplicate` or a `replay`. It never reads a quiet message job on a timer: its quiet sweep covers device jobs only.
+- **Cancel of a packet.** Its cancel check for `packet.transmit` would also accept `applied`; the contract allows `accepted` only.
+- **A `replay` with no usable mark** fails the job instead of reading it.
+- **A `duplicate` is treated as done** instead of read.
+- **The posture change.** One settings op is signed again after a `replay` even when it may have run.
+- **`unknown-job` for a confirmed job.** A job the device had confirmed is failed only after two `unknown-job` answers; the contract ends it `unknown` on the first.

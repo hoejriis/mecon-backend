@@ -75,6 +75,7 @@
        "comp"
       ],
       "cancel_sent": [],
+      "cancel_given_up": [],
       "closed": null,
       "ignored_results": 0
      }
@@ -95,6 +96,7 @@
       "next_round_at": "2026-01-01T00:02:00Z",
       "scheduled": [],
       "cancel_sent": [],
+      "cancel_given_up": [],
       "closed": null,
       "ignored_results": 0
      }
@@ -115,6 +117,7 @@
       "next_round_at": "2026-01-01T00:02:00Z",
       "scheduled": [],
       "cancel_sent": [],
+      "cancel_given_up": [],
       "closed": null,
       "ignored_results": 0
      }
@@ -133,6 +136,7 @@
       "next_round_at": "2026-01-01T00:02:00Z",
       "scheduled": [],
       "cancel_sent": [],
+      "cancel_given_up": [],
       "closed": null,
       "ignored_results": 0
      }
@@ -158,6 +162,7 @@
        "rep_2"
       ],
       "cancel_sent": [],
+      "cancel_given_up": [],
       "closed": null,
       "ignored_results": 0
      }
@@ -183,6 +188,7 @@
       "next_round_at": "2026-01-01T00:02:22Z",
       "scheduled": [],
       "cancel_sent": [],
+      "cancel_given_up": [],
       "closed": null,
       "ignored_results": 0
      }
@@ -207,6 +213,7 @@
       "next_round_at": "2026-01-01T00:02:22Z",
       "scheduled": [],
       "cancel_sent": [],
+      "cancel_given_up": [],
       "closed": null,
       "ignored_results": 0
      }
@@ -230,6 +237,7 @@
       "next_round_at": "2026-01-01T00:02:22Z",
       "scheduled": [],
       "cancel_sent": [],
+      "cancel_given_up": [],
       "closed": null,
       "ignored_results": 0
      }
@@ -260,6 +268,7 @@
        "rep_3"
       ],
       "cancel_sent": [],
+      "cancel_given_up": [],
       "closed": null,
       "ignored_results": 0
      }
@@ -290,6 +299,7 @@
       "next_round_at": "2026-01-01T00:02:42Z",
       "scheduled": [],
       "cancel_sent": [],
+      "cancel_given_up": [],
       "closed": null,
       "ignored_results": 0
      }
@@ -318,6 +328,7 @@
       "next_round_at": null,
       "scheduled": [],
       "cancel_sent": [],
+      "cancel_given_up": [],
       "closed": "no_candidates",
       "ignored_results": 0
      }
@@ -325,7 +336,7 @@
    ]
   },
   {
-   "note": "The Companion transmits: the window opens, the next round picks a gateway, and a native ACK stops scheduling and cancels what is still cancellable",
+   "note": "The Companion transmits: the window opens and the next round picks a gateway; a native ACK stops scheduling and cancels only Repeater origins still dispatched; a refused cancel is retried for up to 300 s and then given up",
    "setup": {
     "start": "2026-01-01T00:00:00Z",
     "message_kind": "direct",
@@ -395,6 +406,7 @@
        "comp"
       ],
       "cancel_sent": [],
+      "cancel_given_up": [],
       "closed": null,
       "ignored_results": 0
      }
@@ -415,6 +427,7 @@
       "next_round_at": "2026-01-01T00:00:14Z",
       "scheduled": [],
       "cancel_sent": [],
+      "cancel_given_up": [],
       "closed": null,
       "ignored_results": 0
      }
@@ -433,6 +446,7 @@
       "next_round_at": "2026-01-01T00:00:14Z",
       "scheduled": [],
       "cancel_sent": [],
+      "cancel_given_up": [],
       "closed": null,
       "ignored_results": 0
      }
@@ -458,6 +472,7 @@
        "rep_1"
       ],
       "cancel_sent": [],
+      "cancel_given_up": [],
       "closed": null,
       "ignored_results": 0
      }
@@ -483,6 +498,7 @@
       "next_round_at": null,
       "scheduled": [],
       "cancel_sent": [],
+      "cancel_given_up": [],
       "closed": null,
       "ignored_results": 0
      }
@@ -508,13 +524,70 @@
       "cancel_sent": [
        "rep_1"
       ],
+      "cancel_given_up": [],
+      "closed": "native_ack",
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "cancel_result",
+     "t": 20,
+     "gateway": "rep_1",
+     "accepted": false,
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": "transmitted",
+        "transmitted_at": "2026-01-01T00:00:02Z"
+       },
+       {
+        "gateway": "rep_1",
+        "result": "queued",
+        "transmitted_at": null
+       }
+      ],
+      "next_round_at": null,
+      "scheduled": [],
+      "cancel_sent": [
+       "rep_1"
+      ],
+      "cancel_given_up": [],
+      "closed": "native_ack",
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "cancel_result",
+     "t": 317,
+     "gateway": "rep_1",
+     "accepted": false,
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": "transmitted",
+        "transmitted_at": "2026-01-01T00:00:02Z"
+       },
+       {
+        "gateway": "rep_1",
+        "result": "queued",
+        "transmitted_at": null
+       }
+      ],
+      "next_round_at": null,
+      "scheduled": [],
+      "cancel_sent": [],
+      "cancel_given_up": [
+       "rep_1"
+      ],
       "closed": "native_ack",
       "ignored_results": 0
      }
     },
     {
      "step": "result",
-     "t": 17,
+     "t": 330,
      "gateway": "rep_1",
      "status": "transmitted",
      "expect": {
@@ -526,26 +599,178 @@
        },
        {
         "gateway": "rep_1",
-        "result": "queued",
-        "transmitted_at": null
+        "result": "transmitted",
+        "transmitted_at": "2026-01-01T00:05:30Z"
        }
       ],
       "next_round_at": null,
       "scheduled": [],
       "cancel_sent": [],
+      "cancel_given_up": [],
       "closed": "native_ack",
-      "ignored_results": 1
+      "ignored_results": 0
      }
     },
     {
      "step": "tick",
-     "t": 40,
+     "t": 340,
      "expect": {
       "origins": [
        {
         "gateway": "comp",
         "result": "transmitted",
         "transmitted_at": "2026-01-01T00:00:02Z"
+       },
+       {
+        "gateway": "rep_1",
+        "result": "transmitted",
+        "transmitted_at": "2026-01-01T00:05:30Z"
+       }
+      ],
+      "next_round_at": null,
+      "scheduled": [],
+      "cancel_sent": [],
+      "cancel_given_up": [],
+      "closed": "native_ack",
+      "ignored_results": 0
+     }
+    }
+   ]
+  },
+  {
+   "note": "The Companion is never cancelled; a Repeater whose cancel was accepted and which then reports transmitted counts as transmitted",
+   "setup": {
+    "start": "2026-01-01T00:00:00Z",
+    "message_kind": "direct",
+    "packet_fixed": true,
+    "window_s": 12,
+    "companion_timeout_s": 120,
+    "lifetime_s": 600,
+    "order": [
+     "comp",
+     "rep_1",
+     "rep_2",
+     "rep_3"
+    ],
+    "gateways": {
+     "comp": {
+      "kind": "companion",
+      "connected": true,
+      "capable": true,
+      "eligible": true,
+      "reachable": true,
+      "authorized": true,
+      "heard": false
+     },
+     "rep_1": {
+      "kind": "repeater",
+      "connected": false,
+      "capable": false,
+      "eligible": true,
+      "reachable": true,
+      "authorized": true,
+      "heard": false
+     },
+     "rep_2": {
+      "kind": "repeater",
+      "connected": false,
+      "capable": false,
+      "eligible": true,
+      "reachable": true,
+      "authorized": true,
+      "heard": false
+     },
+     "rep_3": {
+      "kind": "repeater",
+      "connected": false,
+      "capable": false,
+      "eligible": true,
+      "reachable": true,
+      "authorized": true,
+      "heard": false
+     }
+    }
+   },
+   "steps": [
+    {
+     "step": "start",
+     "t": 0,
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": null,
+        "transmitted_at": null
+       }
+      ],
+      "next_round_at": "2026-01-01T00:02:00Z",
+      "scheduled": [
+       "comp"
+      ],
+      "cancel_sent": [],
+      "cancel_given_up": [],
+      "closed": null,
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "result",
+     "t": 1,
+     "gateway": "comp",
+     "status": "queued",
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": "queued",
+        "transmitted_at": null
+       }
+      ],
+      "next_round_at": "2026-01-01T00:02:00Z",
+      "scheduled": [],
+      "cancel_sent": [],
+      "cancel_given_up": [],
+      "closed": null,
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "tick",
+     "t": 120,
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": "queued",
+        "transmitted_at": null
+       },
+       {
+        "gateway": "rep_1",
+        "result": null,
+        "transmitted_at": null
+       }
+      ],
+      "next_round_at": null,
+      "scheduled": [
+       "rep_1"
+      ],
+      "cancel_sent": [],
+      "cancel_given_up": [],
+      "closed": null,
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "result",
+     "t": 121,
+     "gateway": "rep_1",
+     "status": "queued",
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": "queued",
+        "transmitted_at": null
        },
        {
         "gateway": "rep_1",
@@ -556,8 +781,275 @@
       "next_round_at": null,
       "scheduled": [],
       "cancel_sent": [],
+      "cancel_given_up": [],
+      "closed": null,
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "native_ack",
+     "t": 125,
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": "queued",
+        "transmitted_at": null
+       },
+       {
+        "gateway": "rep_1",
+        "result": "queued",
+        "transmitted_at": null
+       }
+      ],
+      "next_round_at": null,
+      "scheduled": [],
+      "cancel_sent": [
+       "rep_1"
+      ],
+      "cancel_given_up": [],
       "closed": "native_ack",
-      "ignored_results": 1
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "cancel_result",
+     "t": 126,
+     "gateway": "rep_1",
+     "accepted": true,
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": "queued",
+        "transmitted_at": null
+       },
+       {
+        "gateway": "rep_1",
+        "result": "cancelled",
+        "transmitted_at": null
+       }
+      ],
+      "next_round_at": null,
+      "scheduled": [],
+      "cancel_sent": [],
+      "cancel_given_up": [],
+      "closed": "native_ack",
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "result",
+     "t": 130,
+     "gateway": "rep_1",
+     "status": "transmitted",
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": "queued",
+        "transmitted_at": null
+       },
+       {
+        "gateway": "rep_1",
+        "result": "transmitted",
+        "transmitted_at": "2026-01-01T00:02:10Z"
+       }
+      ],
+      "next_round_at": null,
+      "scheduled": [],
+      "cancel_sent": [],
+      "cancel_given_up": [],
+      "closed": "native_ack",
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "result",
+     "t": 131,
+     "gateway": "comp",
+     "status": "transmitted",
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": "transmitted",
+        "transmitted_at": "2026-01-01T00:02:11Z"
+       },
+       {
+        "gateway": "rep_1",
+        "result": "transmitted",
+        "transmitted_at": "2026-01-01T00:02:10Z"
+       }
+      ],
+      "next_round_at": null,
+      "scheduled": [],
+      "cancel_sent": [],
+      "cancel_given_up": [],
+      "closed": "native_ack",
+      "ignored_results": 0
+     }
+    }
+   ]
+  },
+  {
+   "note": "A Repeater that expires its own hold after 60 s reports expired, and the next round starts at once",
+   "setup": {
+    "start": "2026-01-01T00:00:00Z",
+    "message_kind": "channel",
+    "packet_fixed": true,
+    "window_s": 12,
+    "companion_timeout_s": 120,
+    "lifetime_s": 600,
+    "order": [
+     "comp",
+     "rep_1",
+     "rep_2"
+    ],
+    "gateways": {
+     "comp": {
+      "kind": "companion",
+      "connected": false,
+      "capable": true,
+      "eligible": true,
+      "reachable": true,
+      "authorized": true,
+      "heard": false
+     },
+     "rep_1": {
+      "kind": "repeater",
+      "connected": false,
+      "capable": false,
+      "eligible": true,
+      "reachable": true,
+      "authorized": true,
+      "heard": false
+     },
+     "rep_2": {
+      "kind": "repeater",
+      "connected": false,
+      "capable": false,
+      "eligible": true,
+      "reachable": true,
+      "authorized": true,
+      "heard": false
+     }
+    }
+   },
+   "steps": [
+    {
+     "step": "start",
+     "t": 0,
+     "expect": {
+      "origins": [
+       {
+        "gateway": "rep_1",
+        "result": null,
+        "transmitted_at": null
+       }
+      ],
+      "next_round_at": null,
+      "scheduled": [
+       "rep_1"
+      ],
+      "cancel_sent": [],
+      "cancel_given_up": [],
+      "closed": null,
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "result",
+     "t": 1,
+     "gateway": "rep_1",
+     "status": "queued",
+     "expect": {
+      "origins": [
+       {
+        "gateway": "rep_1",
+        "result": "queued",
+        "transmitted_at": null
+       }
+      ],
+      "next_round_at": null,
+      "scheduled": [],
+      "cancel_sent": [],
+      "cancel_given_up": [],
+      "closed": null,
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "tick",
+     "t": 59,
+     "expect": {
+      "origins": [
+       {
+        "gateway": "rep_1",
+        "result": "queued",
+        "transmitted_at": null
+       }
+      ],
+      "next_round_at": null,
+      "scheduled": [],
+      "cancel_sent": [],
+      "cancel_given_up": [],
+      "closed": null,
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "result",
+     "t": 61,
+     "gateway": "rep_1",
+     "status": "expired",
+     "expect": {
+      "origins": [
+       {
+        "gateway": "rep_1",
+        "result": "expired",
+        "transmitted_at": null
+       },
+       {
+        "gateway": "rep_2",
+        "result": null,
+        "transmitted_at": null
+       }
+      ],
+      "next_round_at": null,
+      "scheduled": [
+       "rep_2"
+      ],
+      "cancel_sent": [],
+      "cancel_given_up": [],
+      "closed": null,
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "result",
+     "t": 70,
+     "gateway": "rep_2",
+     "status": "transmitted",
+     "expect": {
+      "origins": [
+       {
+        "gateway": "rep_1",
+        "result": "expired",
+        "transmitted_at": null
+       },
+       {
+        "gateway": "rep_2",
+        "result": "transmitted",
+        "transmitted_at": "2026-01-01T00:01:10Z"
+       }
+      ],
+      "next_round_at": "2026-01-01T00:01:22Z",
+      "scheduled": [],
+      "cancel_sent": [],
+      "cancel_given_up": [],
+      "closed": null,
+      "ignored_results": 0
      }
     }
    ]
@@ -633,6 +1125,7 @@
        "rep_2"
       ],
       "cancel_sent": [],
+      "cancel_given_up": [],
       "closed": null,
       "ignored_results": 0
      }
@@ -653,6 +1146,7 @@
       "next_round_at": "2026-01-01T00:00:15Z",
       "scheduled": [],
       "cancel_sent": [],
+      "cancel_given_up": [],
       "closed": null,
       "ignored_results": 0
      }
@@ -671,6 +1165,7 @@
       "next_round_at": "2026-01-01T00:00:15Z",
       "scheduled": [],
       "cancel_sent": [],
+      "cancel_given_up": [],
       "closed": null,
       "ignored_results": 1
      }
@@ -691,6 +1186,7 @@
       "next_round_at": "2026-01-01T00:00:15Z",
       "scheduled": [],
       "cancel_sent": [],
+      "cancel_given_up": [],
       "closed": null,
       "ignored_results": 1
      }
@@ -711,6 +1207,7 @@
       "next_round_at": "2026-01-01T00:00:15Z",
       "scheduled": [],
       "cancel_sent": [],
+      "cancel_given_up": [],
       "closed": null,
       "ignored_results": 2
      }
@@ -736,6 +1233,7 @@
        "rep_3"
       ],
       "cancel_sent": [],
+      "cancel_given_up": [],
       "closed": null,
       "ignored_results": 2
      }
@@ -823,6 +1321,7 @@
        "comp"
       ],
       "cancel_sent": [],
+      "cancel_given_up": [],
       "closed": null,
       "ignored_results": 0
      }
@@ -850,6 +1349,7 @@
        "rep_1"
       ],
       "cancel_sent": [],
+      "cancel_given_up": [],
       "closed": null,
       "ignored_results": 0
      }
@@ -882,6 +1382,7 @@
        "rep_2"
       ],
       "cancel_sent": [],
+      "cancel_given_up": [],
       "closed": null,
       "ignored_results": 0
      }
@@ -919,6 +1420,7 @@
        "rep_3"
       ],
       "cancel_sent": [],
+      "cancel_given_up": [],
       "closed": null,
       "ignored_results": 0
      }
@@ -961,6 +1463,7 @@
        "rep_4"
       ],
       "cancel_sent": [],
+      "cancel_given_up": [],
       "closed": null,
       "ignored_results": 0
      }
@@ -1001,6 +1504,7 @@
       "next_round_at": null,
       "scheduled": [],
       "cancel_sent": [],
+      "cancel_given_up": [],
       "closed": null,
       "ignored_results": 1
      }
@@ -1041,6 +1545,7 @@
       "next_round_at": "2026-01-01T00:00:23Z",
       "scheduled": [],
       "cancel_sent": [],
+      "cancel_given_up": [],
       "closed": null,
       "ignored_results": 1
      }
@@ -1079,6 +1584,7 @@
       "next_round_at": null,
       "scheduled": [],
       "cancel_sent": [],
+      "cancel_given_up": [],
       "closed": "no_candidates",
       "ignored_results": 1
      }
@@ -1128,6 +1634,7 @@
       "next_round_at": null,
       "scheduled": [],
       "cancel_sent": [],
+      "cancel_given_up": [],
       "closed": "no_origin",
       "ignored_results": 0
      }
@@ -1140,6 +1647,7 @@
       "next_round_at": null,
       "scheduled": [],
       "cancel_sent": [],
+      "cancel_given_up": [],
       "closed": "no_origin",
       "ignored_results": 0
      }
@@ -1187,6 +1695,7 @@
        "rep_1"
       ],
       "cancel_sent": [],
+      "cancel_given_up": [],
       "closed": null,
       "ignored_results": 0
      }
@@ -1207,6 +1716,7 @@
       "next_round_at": null,
       "scheduled": [],
       "cancel_sent": [],
+      "cancel_given_up": [],
       "closed": null,
       "ignored_results": 0
      }
@@ -1225,6 +1735,7 @@
       "next_round_at": null,
       "scheduled": [],
       "cancel_sent": [],
+      "cancel_given_up": [],
       "closed": null,
       "ignored_results": 0
      }
@@ -1243,6 +1754,7 @@
       "next_round_at": null,
       "scheduled": [],
       "cancel_sent": [],
+      "cancel_given_up": [],
       "closed": "lifetime",
       "ignored_results": 0
      }

@@ -46,6 +46,18 @@
       "name": "Synthetic One"
      }
     }
+   },
+   {
+    "request_id": "rq_4",
+    "device": "dev_1",
+    "role": "companion",
+    "job_number": 4,
+    "command": {
+     "op": "packet.transmit",
+     "args": {
+      "packet_hex": "0a0b0c0d"
+     }
+    }
    }
   ]
  },
@@ -78,6 +90,13 @@
       "device_answered": null,
       "rf_transmitted": null,
       "acked": null
+     },
+     "rq_4": {
+      "signed": null,
+      "transport_accepted": null,
+      "device_answered": null,
+      "rf_transmitted": null,
+      "acked": null
      }
     }
    }
@@ -106,6 +125,52 @@
      },
      "rq_3": {
       "signed": null,
+      "transport_accepted": null,
+      "device_answered": null,
+      "rf_transmitted": null,
+      "acked": null
+     },
+     "rq_4": {
+      "signed": null,
+      "transport_accepted": null,
+      "device_answered": null,
+      "rf_transmitted": null,
+      "acked": null
+     }
+    }
+   }
+  },
+  {
+   "step": "sign",
+   "t": 0,
+   "request_id": "rq_4",
+   "expect": {
+    "applied": null,
+    "ignored_results": 0,
+    "attempts": {
+     "rq_1": {
+      "signed": "2026-01-01T00:00:00Z",
+      "transport_accepted": null,
+      "device_answered": null,
+      "rf_transmitted": null,
+      "acked": null
+     },
+     "rq_2": {
+      "signed": "2026-01-01T00:00:00Z",
+      "transport_accepted": null,
+      "device_answered": null,
+      "rf_transmitted": null,
+      "acked": null
+     },
+     "rq_3": {
+      "signed": null,
+      "transport_accepted": null,
+      "device_answered": null,
+      "rf_transmitted": null,
+      "acked": null
+     },
+     "rq_4": {
+      "signed": "2026-01-01T00:00:00Z",
       "transport_accepted": null,
       "device_answered": null,
       "rf_transmitted": null,
@@ -142,6 +207,13 @@
       "device_answered": null,
       "rf_transmitted": null,
       "acked": null
+     },
+     "rq_4": {
+      "signed": "2026-01-01T00:00:00Z",
+      "transport_accepted": null,
+      "device_answered": null,
+      "rf_transmitted": null,
+      "acked": null
      }
     }
    }
@@ -170,6 +242,13 @@
      },
      "rq_3": {
       "signed": null,
+      "transport_accepted": null,
+      "device_answered": null,
+      "rf_transmitted": null,
+      "acked": null
+     },
+     "rq_4": {
+      "signed": "2026-01-01T00:00:00Z",
       "transport_accepted": null,
       "device_answered": null,
       "rf_transmitted": null,
@@ -206,6 +285,13 @@
       "device_answered": null,
       "rf_transmitted": null,
       "acked": null
+     },
+     "rq_4": {
+      "signed": "2026-01-01T00:00:00Z",
+      "transport_accepted": null,
+      "device_answered": null,
+      "rf_transmitted": null,
+      "acked": null
      }
     }
    }
@@ -231,6 +317,8 @@
        "status": "ok",
        "error": null,
        "state": "queued",
+       "outcome": null,
+       "duty_held": false,
        "at": "2026-01-01T00:00:02Z"
       },
       "rf_transmitted": null,
@@ -249,6 +337,13 @@
       "device_answered": null,
       "rf_transmitted": null,
       "acked": null
+     },
+     "rq_4": {
+      "signed": "2026-01-01T00:00:00Z",
+      "transport_accepted": null,
+      "device_answered": null,
+      "rf_transmitted": null,
+      "acked": null
      }
     }
    }
@@ -261,7 +356,7 @@
     "request_id": "rq_3",
     "job_number": 3,
     "status": "ok",
-    "state": "done"
+    "state": "confirmed"
    },
    "expect": {
     "applied": false,
@@ -274,6 +369,8 @@
        "status": "ok",
        "error": null,
        "state": "queued",
+       "outcome": null,
+       "duty_held": false,
        "at": "2026-01-01T00:00:02Z"
       },
       "rf_transmitted": null,
@@ -288,6 +385,13 @@
      },
      "rq_3": {
       "signed": null,
+      "transport_accepted": null,
+      "device_answered": null,
+      "rf_transmitted": null,
+      "acked": null
+     },
+     "rq_4": {
+      "signed": "2026-01-01T00:00:00Z",
       "transport_accepted": null,
       "device_answered": null,
       "rf_transmitted": null,
@@ -317,6 +421,8 @@
        "status": "ok",
        "error": null,
        "state": "duty-held",
+       "outcome": null,
+       "duty_held": false,
        "at": "2026-01-01T00:00:05Z"
       },
       "rf_transmitted": null,
@@ -331,6 +437,13 @@
      },
      "rq_3": {
       "signed": null,
+      "transport_accepted": null,
+      "device_answered": null,
+      "rf_transmitted": null,
+      "acked": null
+     },
+     "rq_4": {
+      "signed": "2026-01-01T00:00:00Z",
       "transport_accepted": null,
       "device_answered": null,
       "rf_transmitted": null,
@@ -361,6 +474,8 @@
        "status": "ok",
        "error": null,
        "state": "transmitted",
+       "outcome": null,
+       "duty_held": false,
        "at": "2026-01-01T00:00:10Z"
       },
       "rf_transmitted": {
@@ -379,6 +494,13 @@
      },
      "rq_3": {
       "signed": null,
+      "transport_accepted": null,
+      "device_answered": null,
+      "rf_transmitted": null,
+      "acked": null
+     },
+     "rq_4": {
+      "signed": "2026-01-01T00:00:00Z",
       "transport_accepted": null,
       "device_answered": null,
       "rf_transmitted": null,
@@ -408,6 +530,8 @@
        "status": "ok",
        "error": null,
        "state": "transmitted",
+       "outcome": null,
+       "duty_held": false,
        "at": "2026-01-01T00:00:10Z"
       },
       "rf_transmitted": {
@@ -424,6 +548,8 @@
        "status": "ok",
        "error": null,
        "state": "transmitted",
+       "outcome": null,
+       "duty_held": false,
        "at": "2026-01-01T00:00:11Z"
       },
       "rf_transmitted": {
@@ -435,6 +561,13 @@
      },
      "rq_3": {
       "signed": null,
+      "transport_accepted": null,
+      "device_answered": null,
+      "rf_transmitted": null,
+      "acked": null
+     },
+     "rq_4": {
+      "signed": "2026-01-01T00:00:00Z",
       "transport_accepted": null,
       "device_answered": null,
       "rf_transmitted": null,
@@ -465,6 +598,8 @@
        "status": "ok",
        "error": null,
        "state": "transmitted",
+       "outcome": null,
+       "duty_held": false,
        "at": "2026-01-01T00:00:12Z"
       },
       "rf_transmitted": {
@@ -481,6 +616,8 @@
        "status": "ok",
        "error": null,
        "state": "transmitted",
+       "outcome": null,
+       "duty_held": false,
        "at": "2026-01-01T00:00:11Z"
       },
       "rf_transmitted": {
@@ -492,6 +629,13 @@
      },
      "rq_3": {
       "signed": null,
+      "transport_accepted": null,
+      "device_answered": null,
+      "rf_transmitted": null,
+      "acked": null
+     },
+     "rq_4": {
+      "signed": "2026-01-01T00:00:00Z",
       "transport_accepted": null,
       "device_answered": null,
       "rf_transmitted": null,
@@ -521,6 +665,8 @@
        "status": "ok",
        "error": null,
        "state": "transmitted",
+       "outcome": null,
+       "duty_held": false,
        "at": "2026-01-01T00:00:12Z"
       },
       "rf_transmitted": {
@@ -537,6 +683,8 @@
        "status": "ok",
        "error": null,
        "state": "transmitted",
+       "outcome": null,
+       "duty_held": false,
        "at": "2026-01-01T00:00:11Z"
       },
       "rf_transmitted": {
@@ -552,6 +700,13 @@
       "device_answered": null,
       "rf_transmitted": null,
       "acked": null
+     },
+     "rq_4": {
+      "signed": "2026-01-01T00:00:00Z",
+      "transport_accepted": null,
+      "device_answered": null,
+      "rf_transmitted": null,
+      "acked": null
      }
     }
    }
@@ -559,6 +714,73 @@
   {
    "step": "result",
    "t": 14,
+   "result": {
+    "signed_by": "dev_1",
+    "request_id": "rq_1",
+    "job_number": 1,
+    "status": "ok",
+    "state": "timed-out"
+   },
+   "expect": {
+    "applied": true,
+    "ignored_results": 2,
+    "attempts": {
+     "rq_1": {
+      "signed": "2026-01-01T00:00:00Z",
+      "transport_accepted": "2026-01-01T00:00:01Z",
+      "device_answered": {
+       "status": "ok",
+       "error": null,
+       "state": "timed-out",
+       "outcome": null,
+       "duty_held": false,
+       "at": "2026-01-01T00:00:14Z"
+      },
+      "rf_transmitted": {
+       "count": 2,
+       "first_at": "2026-01-01T00:00:10Z",
+       "last_at": "2026-01-01T00:00:12Z"
+      },
+      "acked": null
+     },
+     "rq_2": {
+      "signed": "2026-01-01T00:00:00Z",
+      "transport_accepted": "2026-01-01T00:00:01Z",
+      "device_answered": {
+       "status": "ok",
+       "error": null,
+       "state": "transmitted",
+       "outcome": null,
+       "duty_held": false,
+       "at": "2026-01-01T00:00:11Z"
+      },
+      "rf_transmitted": {
+       "count": 1,
+       "first_at": "2026-01-01T00:00:11Z",
+       "last_at": "2026-01-01T00:00:11Z"
+      },
+      "acked": null
+     },
+     "rq_3": {
+      "signed": null,
+      "transport_accepted": null,
+      "device_answered": null,
+      "rf_transmitted": null,
+      "acked": null
+     },
+     "rq_4": {
+      "signed": "2026-01-01T00:00:00Z",
+      "transport_accepted": null,
+      "device_answered": null,
+      "rf_transmitted": null,
+      "acked": null
+     }
+    }
+   }
+  },
+  {
+   "step": "result",
+   "t": 15,
    "result": {
     "signed_by": "dev_1",
     "request_id": "rq_1",
@@ -577,14 +799,16 @@
        "status": "ok",
        "error": null,
        "state": "acked",
-       "at": "2026-01-01T00:00:14Z"
+       "outcome": null,
+       "duty_held": false,
+       "at": "2026-01-01T00:00:15Z"
       },
       "rf_transmitted": {
        "count": 2,
        "first_at": "2026-01-01T00:00:10Z",
        "last_at": "2026-01-01T00:00:12Z"
       },
-      "acked": "2026-01-01T00:00:14Z"
+      "acked": "2026-01-01T00:00:15Z"
      },
      "rq_2": {
       "signed": "2026-01-01T00:00:00Z",
@@ -593,6 +817,8 @@
        "status": "ok",
        "error": null,
        "state": "transmitted",
+       "outcome": null,
+       "duty_held": false,
        "at": "2026-01-01T00:00:11Z"
       },
       "rf_transmitted": {
@@ -608,19 +834,27 @@
       "device_answered": null,
       "rf_transmitted": null,
       "acked": null
+     },
+     "rq_4": {
+      "signed": "2026-01-01T00:00:00Z",
+      "transport_accepted": null,
+      "device_answered": null,
+      "rf_transmitted": null,
+      "acked": null
      }
     }
    }
   },
   {
    "step": "result",
-   "t": 15,
+   "t": 16,
    "result": {
     "signed_by": "dev_1",
-    "request_id": "rq_2",
-    "job_number": 2,
+    "request_id": "rq_4",
+    "job_number": 4,
     "status": "ok",
-    "state": "done"
+    "state": "accepted",
+    "duty_held": true
    },
    "expect": {
     "applied": true,
@@ -633,14 +867,16 @@
        "status": "ok",
        "error": null,
        "state": "acked",
-       "at": "2026-01-01T00:00:14Z"
+       "outcome": null,
+       "duty_held": false,
+       "at": "2026-01-01T00:00:15Z"
       },
       "rf_transmitted": {
        "count": 2,
        "first_at": "2026-01-01T00:00:10Z",
        "last_at": "2026-01-01T00:00:12Z"
       },
-      "acked": "2026-01-01T00:00:14Z"
+      "acked": "2026-01-01T00:00:15Z"
      },
      "rq_2": {
       "signed": "2026-01-01T00:00:00Z",
@@ -648,8 +884,10 @@
       "device_answered": {
        "status": "ok",
        "error": null,
-       "state": "done",
-       "at": "2026-01-01T00:00:15Z"
+       "state": "transmitted",
+       "outcome": null,
+       "duty_held": false,
+       "at": "2026-01-01T00:00:11Z"
       },
       "rf_transmitted": {
        "count": 1,
@@ -663,6 +901,173 @@
       "transport_accepted": null,
       "device_answered": null,
       "rf_transmitted": null,
+      "acked": null
+     },
+     "rq_4": {
+      "signed": "2026-01-01T00:00:00Z",
+      "transport_accepted": null,
+      "device_answered": {
+       "status": "ok",
+       "error": null,
+       "state": "accepted",
+       "outcome": null,
+       "duty_held": true,
+       "at": "2026-01-01T00:00:16Z"
+      },
+      "rf_transmitted": null,
+      "acked": null
+     }
+    }
+   }
+  },
+  {
+   "step": "result",
+   "t": 17,
+   "result": {
+    "signed_by": "dev_1",
+    "request_id": "rq_4",
+    "job_number": 4,
+    "status": "ok",
+    "state": "queued"
+   },
+   "expect": {
+    "applied": false,
+    "ignored_results": 3,
+    "attempts": {
+     "rq_1": {
+      "signed": "2026-01-01T00:00:00Z",
+      "transport_accepted": "2026-01-01T00:00:01Z",
+      "device_answered": {
+       "status": "ok",
+       "error": null,
+       "state": "acked",
+       "outcome": null,
+       "duty_held": false,
+       "at": "2026-01-01T00:00:15Z"
+      },
+      "rf_transmitted": {
+       "count": 2,
+       "first_at": "2026-01-01T00:00:10Z",
+       "last_at": "2026-01-01T00:00:12Z"
+      },
+      "acked": "2026-01-01T00:00:15Z"
+     },
+     "rq_2": {
+      "signed": "2026-01-01T00:00:00Z",
+      "transport_accepted": "2026-01-01T00:00:01Z",
+      "device_answered": {
+       "status": "ok",
+       "error": null,
+       "state": "transmitted",
+       "outcome": null,
+       "duty_held": false,
+       "at": "2026-01-01T00:00:11Z"
+      },
+      "rf_transmitted": {
+       "count": 1,
+       "first_at": "2026-01-01T00:00:11Z",
+       "last_at": "2026-01-01T00:00:11Z"
+      },
+      "acked": null
+     },
+     "rq_3": {
+      "signed": null,
+      "transport_accepted": null,
+      "device_answered": null,
+      "rf_transmitted": null,
+      "acked": null
+     },
+     "rq_4": {
+      "signed": "2026-01-01T00:00:00Z",
+      "transport_accepted": null,
+      "device_answered": {
+       "status": "ok",
+       "error": null,
+       "state": "accepted",
+       "outcome": null,
+       "duty_held": true,
+       "at": "2026-01-01T00:00:16Z"
+      },
+      "rf_transmitted": null,
+      "acked": null
+     }
+    }
+   }
+  },
+  {
+   "step": "result",
+   "t": 18,
+   "result": {
+    "signed_by": "dev_1",
+    "request_id": "rq_4",
+    "job_number": 4,
+    "status": "ok",
+    "state": "applied",
+    "outcome": "transmitted"
+   },
+   "expect": {
+    "applied": true,
+    "ignored_results": 3,
+    "attempts": {
+     "rq_1": {
+      "signed": "2026-01-01T00:00:00Z",
+      "transport_accepted": "2026-01-01T00:00:01Z",
+      "device_answered": {
+       "status": "ok",
+       "error": null,
+       "state": "acked",
+       "outcome": null,
+       "duty_held": false,
+       "at": "2026-01-01T00:00:15Z"
+      },
+      "rf_transmitted": {
+       "count": 2,
+       "first_at": "2026-01-01T00:00:10Z",
+       "last_at": "2026-01-01T00:00:12Z"
+      },
+      "acked": "2026-01-01T00:00:15Z"
+     },
+     "rq_2": {
+      "signed": "2026-01-01T00:00:00Z",
+      "transport_accepted": "2026-01-01T00:00:01Z",
+      "device_answered": {
+       "status": "ok",
+       "error": null,
+       "state": "transmitted",
+       "outcome": null,
+       "duty_held": false,
+       "at": "2026-01-01T00:00:11Z"
+      },
+      "rf_transmitted": {
+       "count": 1,
+       "first_at": "2026-01-01T00:00:11Z",
+       "last_at": "2026-01-01T00:00:11Z"
+      },
+      "acked": null
+     },
+     "rq_3": {
+      "signed": null,
+      "transport_accepted": null,
+      "device_answered": null,
+      "rf_transmitted": null,
+      "acked": null
+     },
+     "rq_4": {
+      "signed": "2026-01-01T00:00:00Z",
+      "transport_accepted": null,
+      "device_answered": {
+       "status": "ok",
+       "error": null,
+       "state": "applied",
+       "outcome": "transmitted",
+       "duty_held": false,
+       "at": "2026-01-01T00:00:18Z"
+      },
+      "rf_transmitted": {
+       "count": 1,
+       "first_at": "2026-01-01T00:00:18Z",
+       "last_at": "2026-01-01T00:00:18Z"
+      },
       "acked": null
      }
     }

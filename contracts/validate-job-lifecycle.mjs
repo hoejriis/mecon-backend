@@ -107,6 +107,11 @@ export function validateJobLifecycle(dir = 'job-lifecycle/v1') {
           if (a.nothing_ran && !(a.dispositions.device_answered?.status === 'refused' && a.dispositions.device_answered.error === 'replay' && a.deliveries === 1)) fail(`${where} ${j.id} ${a.id} is marked nothing ran without a replay after one delivery`);
         }
         const lastAtt = j.attempts[j.attempts.length - 1];
+        const ans = lastAtt?.dispositions.device_answered;
+        if (ans?.state === 'timed-out' && !['running', 'succeeded', 'unknown'].includes(j.state)) fail(`${where} ${j.id} a time-out ended the job ${j.state}`);
+        if (ans?.state === 'timed-out' && j.state === 'succeeded' && lastAtt.dispositions.acked === null) fail(`${where} ${j.id} succeeded after a time-out without an ACK`);
+        if (j.command.op === 'message.send' && j.command.args.kind === 'channel' && ans?.state === 'transmitted' && j.state !== 'succeeded') fail(`${where} ${j.id} a channel message transmitted but the job is ${j.state}`);
+        if (j.command.op === 'message.send' && j.command.args.kind === 'direct' && ans?.state === 'transmitted' && j.state === 'succeeded') fail(`${where} ${j.id} a direct message succeeded at transmitted, without an ACK`);
         if (j.state === 'unknown' && j.outcome.reason === 'abandon_deadline' && Date.parse(j.outcome.at) - Date.parse(lastAtt.dispositions.signed) < 3600000) fail(`${where} ${j.id} was abandoned less than 3600 s after signing`);
         for (const c of j.controls) {
           if (j.command.op === 'message.send' && c.op === 'job.get') fail(`${where} ${j.id} a message.send job was read with job.get`);

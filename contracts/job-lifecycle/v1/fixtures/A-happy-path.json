@@ -330,6 +330,8 @@
           "status": "ok",
           "error": null,
           "state": "progress",
+          "outcome": null,
+          "duty_held": false,
           "at": "2026-01-01T00:00:02Z"
          },
          "rf_transmitted": null,
@@ -387,6 +389,8 @@
           "status": "ok",
           "error": null,
           "state": "progress",
+          "outcome": null,
+          "duty_held": false,
           "at": "2026-01-01T00:00:02Z"
          },
          "rf_transmitted": null,
@@ -451,6 +455,8 @@
           "status": "ok",
           "error": null,
           "state": "awaiting-confirm",
+          "outcome": null,
+          "duty_held": false,
           "at": "2026-01-01T00:00:05Z"
          },
          "rf_transmitted": null,
@@ -515,6 +521,8 @@
           "status": "ok",
           "error": null,
           "state": "awaiting-confirm",
+          "outcome": null,
+          "duty_held": false,
           "at": "2026-01-01T00:00:05Z"
          },
          "rf_transmitted": null,
@@ -585,6 +593,8 @@
           "status": "ok",
           "error": null,
           "state": "confirmed",
+          "outcome": null,
+          "duty_held": false,
           "at": "2026-01-01T00:00:06Z"
          },
          "rf_transmitted": null,
@@ -655,6 +665,8 @@
           "status": "ok",
           "error": null,
           "state": "confirmed",
+          "outcome": null,
+          "duty_held": false,
           "at": "2026-01-01T00:00:06Z"
          },
          "rf_transmitted": null,

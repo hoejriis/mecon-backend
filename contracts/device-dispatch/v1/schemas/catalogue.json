@@ -120,9 +120,7 @@
         }
       },
       "cancellable_states": [
-        "accepted",
-        "queued",
-        "duty-held"
+        "accepted"
       ],
       "status_read": "job.get"
     },
@@ -161,8 +159,7 @@
       "cancellable_states": [
         "accepted",
         "applied",
-        "awaiting-confirm",
-        "progress"
+        "awaiting-confirm"
       ],
       "status_read": "job.get"
     },

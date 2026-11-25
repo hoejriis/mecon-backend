@@ -1,6 +1,6 @@
 {
  "fixture": "I",
- "title": "A message is not a job: its status is read with message.get, never job.get; a found entry settles like any state, a not found one settles nothing",
+ "title": "A message is not a job: its status is read with message.get, never job.get; a found entry settles like any state, a not found one settles nothing; a time-out is not final; a channel message ends at transmitted",
  "kind": "lifecycle",
  "contract_version": "1.0.0-draft.1",
  "setup": {
@@ -403,6 +403,8 @@
           "status": "failed",
           "error": "duplicate",
           "state": null,
+          "outcome": null,
+          "duty_held": false,
           "at": "2026-01-01T00:01:01Z"
          },
          "rf_transmitted": null,
@@ -475,6 +477,8 @@
           "status": "failed",
           "error": "duplicate",
           "state": null,
+          "outcome": null,
+          "duty_held": false,
           "at": "2026-01-01T00:01:01Z"
          },
          "rf_transmitted": null,
@@ -553,6 +557,8 @@
           "status": "ok",
           "error": null,
           "state": "transmitted",
+          "outcome": null,
+          "duty_held": false,
           "at": "2026-01-01T00:01:01Z"
          },
          "rf_transmitted": {
@@ -579,6 +585,8 @@
          "status": "ok",
          "error": null,
          "state": "transmitted",
+         "outcome": null,
+         "duty_held": false,
          "epoch": 3,
          "at": "2026-01-01T00:01:01Z"
         }
@@ -640,6 +648,8 @@
           "status": "ok",
           "error": null,
           "state": "acked",
+          "outcome": null,
+          "duty_held": false,
           "at": "2026-01-01T00:01:01Z"
          },
          "rf_transmitted": {
@@ -666,6 +676,8 @@
          "status": "ok",
          "error": null,
          "state": "transmitted",
+         "outcome": null,
+         "duty_held": false,
          "epoch": 3,
          "at": "2026-01-01T00:01:01Z"
         }
@@ -735,6 +747,8 @@
           "status": "ok",
           "error": null,
           "state": "acked",
+          "outcome": null,
+          "duty_held": false,
           "at": "2026-01-01T00:01:01Z"
          },
          "rf_transmitted": {
@@ -761,6 +775,8 @@
          "status": "ok",
          "error": null,
          "state": "transmitted",
+         "outcome": null,
+         "duty_held": false,
          "epoch": 3,
          "at": "2026-01-01T00:01:01Z"
         }
@@ -845,6 +861,8 @@
           "status": "ok",
           "error": null,
           "state": "acked",
+          "outcome": null,
+          "duty_held": false,
           "at": "2026-01-01T00:01:01Z"
          },
          "rf_transmitted": {
@@ -871,6 +889,8 @@
          "status": "ok",
          "error": null,
          "state": "transmitted",
+         "outcome": null,
+         "duty_held": false,
          "epoch": 3,
          "at": "2026-01-01T00:01:01Z"
         }
@@ -968,6 +988,8 @@
           "status": "ok",
           "error": null,
           "state": "acked",
+          "outcome": null,
+          "duty_held": false,
           "at": "2026-01-01T00:01:01Z"
          },
          "rf_transmitted": {
@@ -994,6 +1016,8 @@
          "status": "ok",
          "error": null,
          "state": "transmitted",
+         "outcome": null,
+         "duty_held": false,
          "epoch": 3,
          "at": "2026-01-01T00:01:01Z"
         }
@@ -1051,7 +1075,7 @@
   },
   {
    "step": "advance",
-   "seconds": 301,
+   "seconds": 900,
    "expect": {
     "response": {
      "outcome": "advanced"
@@ -1093,6 +1117,8 @@
           "status": "ok",
           "error": null,
           "state": "acked",
+          "outcome": null,
+          "duty_held": false,
           "at": "2026-01-01T00:01:01Z"
          },
          "rf_transmitted": {
@@ -1119,6 +1145,8 @@
          "status": "ok",
          "error": null,
          "state": "transmitted",
+         "outcome": null,
+         "duty_held": false,
          "epoch": 3,
          "at": "2026-01-01T00:01:01Z"
         }
@@ -1219,6 +1247,8 @@
           "status": "ok",
           "error": null,
           "state": "acked",
+          "outcome": null,
+          "duty_held": false,
           "at": "2026-01-01T00:01:01Z"
          },
          "rf_transmitted": {
@@ -1245,6 +1275,8 @@
          "status": "ok",
          "error": null,
          "state": "transmitted",
+         "outcome": null,
+         "duty_held": false,
          "epoch": 3,
          "at": "2026-01-01T00:01:01Z"
         }
@@ -1358,6 +1390,8 @@
           "status": "ok",
           "error": null,
           "state": "acked",
+          "outcome": null,
+          "duty_held": false,
           "at": "2026-01-01T00:01:01Z"
          },
          "rf_transmitted": {
@@ -1384,6 +1418,8 @@
          "status": "ok",
          "error": null,
          "state": "transmitted",
+         "outcome": null,
+         "duty_held": false,
          "epoch": 3,
          "at": "2026-01-01T00:01:01Z"
         }
@@ -1411,7 +1447,7 @@
       "idempotency_key": null,
       "state": "dispatched",
       "created_at": "2026-01-01T00:01:01Z",
-      "updated_at": "2026-01-01T00:06:02Z",
+      "updated_at": "2026-01-01T00:16:01Z",
       "expires_at": "2026-01-01T00:11:01Z",
       "cancel_requested_at": null,
       "redelivery_halted": false,
@@ -1503,6 +1539,8 @@
           "status": "ok",
           "error": null,
           "state": "acked",
+          "outcome": null,
+          "duty_held": false,
           "at": "2026-01-01T00:01:01Z"
          },
          "rf_transmitted": {
@@ -1529,6 +1567,8 @@
          "status": "ok",
          "error": null,
          "state": "transmitted",
+         "outcome": null,
+         "duty_held": false,
          "epoch": 3,
          "at": "2026-01-01T00:01:01Z"
         }
@@ -1556,7 +1596,7 @@
       "idempotency_key": null,
       "state": "dispatched",
       "created_at": "2026-01-01T00:01:01Z",
-      "updated_at": "2026-01-01T00:06:02Z",
+      "updated_at": "2026-01-01T00:16:01Z",
       "expires_at": "2026-01-01T00:11:01Z",
       "cancel_requested_at": null,
       "redelivery_halted": false,
@@ -1592,8 +1632,10 @@
          "status": "ok",
          "error": null,
          "state": "unknown",
+         "outcome": null,
+         "duty_held": false,
          "epoch": 4,
-         "at": "2026-01-01T00:06:02Z"
+         "at": "2026-01-01T00:16:01Z"
         }
        }
       ],
@@ -1647,6 +1689,8 @@
           "status": "ok",
           "error": null,
           "state": "acked",
+          "outcome": null,
+          "duty_held": false,
           "at": "2026-01-01T00:01:01Z"
          },
          "rf_transmitted": {
@@ -1673,6 +1717,8 @@
          "status": "ok",
          "error": null,
          "state": "transmitted",
+         "outcome": null,
+         "duty_held": false,
          "epoch": 3,
          "at": "2026-01-01T00:01:01Z"
         }
@@ -1700,7 +1746,7 @@
       "idempotency_key": null,
       "state": "dispatched",
       "created_at": "2026-01-01T00:01:01Z",
-      "updated_at": "2026-01-01T00:06:02Z",
+      "updated_at": "2026-01-01T00:16:01Z",
       "expires_at": "2026-01-01T00:11:01Z",
       "cancel_requested_at": null,
       "redelivery_halted": false,
@@ -1736,8 +1782,10 @@
          "status": "ok",
          "error": null,
          "state": "unknown",
+         "outcome": null,
+         "duty_held": false,
          "epoch": 4,
-         "at": "2026-01-01T00:06:02Z"
+         "at": "2026-01-01T00:16:01Z"
         }
        }
       ],
@@ -1792,6 +1840,8 @@
           "status": "ok",
           "error": null,
           "state": "acked",
+          "outcome": null,
+          "duty_held": false,
           "at": "2026-01-01T00:01:01Z"
          },
          "rf_transmitted": {
@@ -1818,6 +1868,8 @@
          "status": "ok",
          "error": null,
          "state": "transmitted",
+         "outcome": null,
+         "duty_held": false,
          "epoch": 3,
          "at": "2026-01-01T00:01:01Z"
         }
@@ -1845,7 +1897,7 @@
       "idempotency_key": null,
       "state": "dispatched",
       "created_at": "2026-01-01T00:01:01Z",
-      "updated_at": "2026-01-01T00:06:02Z",
+      "updated_at": "2026-01-01T00:16:01Z",
       "expires_at": "2026-01-01T00:11:01Z",
       "cancel_requested_at": null,
       "redelivery_halted": false,
@@ -1881,8 +1933,10 @@
          "status": "ok",
          "error": null,
          "state": "unknown",
+         "outcome": null,
+         "duty_held": false,
          "epoch": 4,
-         "at": "2026-01-01T00:06:02Z"
+         "at": "2026-01-01T00:16:01Z"
         }
        }
       ],
@@ -1937,6 +1991,8 @@
           "status": "ok",
           "error": null,
           "state": "acked",
+          "outcome": null,
+          "duty_held": false,
           "at": "2026-01-01T00:01:01Z"
          },
          "rf_transmitted": {
@@ -1963,6 +2019,8 @@
          "status": "ok",
          "error": null,
          "state": "transmitted",
+         "outcome": null,
+         "duty_held": false,
          "epoch": 3,
          "at": "2026-01-01T00:01:01Z"
         }
@@ -1990,7 +2048,7 @@
       "idempotency_key": null,
       "state": "dispatched",
       "created_at": "2026-01-01T00:01:01Z",
-      "updated_at": "2026-01-01T00:06:02Z",
+      "updated_at": "2026-01-01T00:16:01Z",
       "expires_at": "2026-01-01T00:11:01Z",
       "cancel_requested_at": null,
       "redelivery_halted": false,
@@ -2026,8 +2084,10 @@
          "status": "ok",
          "error": null,
          "state": "unknown",
+         "outcome": null,
+         "duty_held": false,
          "epoch": 4,
-         "at": "2026-01-01T00:06:02Z"
+         "at": "2026-01-01T00:16:01Z"
         }
        }
       ],
@@ -2081,6 +2141,8 @@
           "status": "ok",
           "error": null,
           "state": "acked",
+          "outcome": null,
+          "duty_held": false,
           "at": "2026-01-01T00:01:01Z"
          },
          "rf_transmitted": {
@@ -2107,6 +2169,8 @@
          "status": "ok",
          "error": null,
          "state": "transmitted",
+         "outcome": null,
+         "duty_held": false,
          "epoch": 3,
          "at": "2026-01-01T00:01:01Z"
         }
@@ -2134,7 +2198,7 @@
       "idempotency_key": null,
       "state": "unknown",
       "created_at": "2026-01-01T00:01:01Z",
-      "updated_at": "2026-01-01T01:11:01Z",
+      "updated_at": "2026-01-01T01:21:00Z",
       "expires_at": "2026-01-01T00:11:01Z",
       "cancel_requested_at": null,
       "redelivery_halted": false,
@@ -2170,8 +2234,10 @@
          "status": "ok",
          "error": null,
          "state": "unknown",
+         "outcome": null,
+         "duty_held": false,
          "epoch": 4,
-         "at": "2026-01-01T00:06:02Z"
+         "at": "2026-01-01T00:16:01Z"
         }
        }
       ],
@@ -2179,7 +2245,4310 @@
       "outcome": {
        "reason": "abandon_deadline",
        "device_status": null,
-       "at": "2026-01-01T01:11:01Z"
+       "at": "2026-01-01T01:21:00Z"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "step": "create",
+   "caller": "cal_1",
+   "device": "dev_1",
+   "command": {
+    "op": "message.send",
+    "args": {
+     "kind": "direct",
+     "target": "ctc_2",
+     "text": "synthetic hello"
+    }
+   },
+   "expect": {
+    "response": {
+     "outcome": "created",
+     "job_id": "job_3"
+    },
+    "out": [],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "direct",
+        "target": "ctc_2",
+        "text": "synthetic hello"
+       }
+      },
+      "idempotency_key": null,
+      "state": "succeeded",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:01:01Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_1",
+        "request_id": "rq_1",
+        "job_number": 1,
+        "bytes": "signed:rq_1",
+        "deliveries": 2,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "ok",
+          "error": null,
+          "state": "acked",
+          "outcome": null,
+          "duty_held": false,
+          "at": "2026-01-01T00:01:01Z"
+         },
+         "rf_transmitted": {
+          "count": 1,
+          "first_at": "2026-01-01T00:01:01Z",
+          "last_at": "2026-01-01T00:01:01Z"
+         },
+         "acked": "2026-01-01T00:01:01Z"
+        }
+       }
+      ],
+      "controls": [
+       {
+        "id": "ctl_1",
+        "op": "message.get",
+        "request_id": "rq_2",
+        "job_number": null,
+        "target_job_number": 1,
+        "attempt": "att_1",
+        "bytes": "signed:rq_2",
+        "deliveries": 1,
+        "transport_accepted": null,
+        "device_answered": {
+         "status": "ok",
+         "error": null,
+         "state": "transmitted",
+         "outcome": null,
+         "duty_held": false,
+         "epoch": 3,
+         "at": "2026-01-01T00:01:01Z"
+        }
+       }
+      ],
+      "events": [],
+      "outcome": {
+       "reason": "device_final",
+       "device_status": "acked",
+       "at": "2026-01-01T00:01:01Z"
+      }
+     },
+     {
+      "id": "job_2",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "direct",
+        "target": "ctc_2",
+        "text": "synthetic hello"
+       }
+      },
+      "idempotency_key": null,
+      "state": "unknown",
+      "created_at": "2026-01-01T00:01:01Z",
+      "updated_at": "2026-01-01T01:21:00Z",
+      "expires_at": "2026-01-01T00:11:01Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_2",
+        "request_id": "rq_3",
+        "job_number": 2,
+        "bytes": "signed:rq_3",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:01:01Z",
+         "transport_accepted": null,
+         "device_answered": null,
+         "rf_transmitted": null,
+         "acked": null
+        }
+       }
+      ],
+      "controls": [
+       {
+        "id": "ctl_2",
+        "op": "message.get",
+        "request_id": "rq_4",
+        "job_number": null,
+        "target_job_number": 2,
+        "attempt": "att_2",
+        "bytes": "signed:rq_4",
+        "deliveries": 1,
+        "transport_accepted": null,
+        "device_answered": {
+         "status": "ok",
+         "error": null,
+         "state": "unknown",
+         "outcome": null,
+         "duty_held": false,
+         "epoch": 4,
+         "at": "2026-01-01T00:16:01Z"
+        }
+       }
+      ],
+      "events": [],
+      "outcome": {
+       "reason": "abandon_deadline",
+       "device_status": null,
+       "at": "2026-01-01T01:21:00Z"
+      }
+     },
+     {
+      "id": "job_3",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "direct",
+        "target": "ctc_2",
+        "text": "synthetic hello"
+       }
+      },
+      "idempotency_key": null,
+      "state": "accepted",
+      "created_at": "2026-01-01T01:21:00Z",
+      "updated_at": "2026-01-01T01:21:00Z",
+      "expires_at": "2026-01-01T01:31:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [],
+      "controls": [],
+      "events": [],
+      "outcome": null
+     }
+    ]
+   }
+  },
+  {
+   "step": "claim",
+   "worker": "worker_1",
+   "job": "job_3",
+   "expect": {
+    "response": {
+     "outcome": "claimed"
+    },
+    "out": [],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "direct",
+        "target": "ctc_2",
+        "text": "synthetic hello"
+       }
+      },
+      "idempotency_key": null,
+      "state": "succeeded",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:01:01Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_1",
+        "request_id": "rq_1",
+        "job_number": 1,
+        "bytes": "signed:rq_1",
+        "deliveries": 2,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "ok",
+          "error": null,
+          "state": "acked",
+          "outcome": null,
+          "duty_held": false,
+          "at": "2026-01-01T00:01:01Z"
+         },
+         "rf_transmitted": {
+          "count": 1,
+          "first_at": "2026-01-01T00:01:01Z",
+          "last_at": "2026-01-01T00:01:01Z"
+         },
+         "acked": "2026-01-01T00:01:01Z"
+        }
+       }
+      ],
+      "controls": [
+       {
+        "id": "ctl_1",
+        "op": "message.get",
+        "request_id": "rq_2",
+        "job_number": null,
+        "target_job_number": 1,
+        "attempt": "att_1",
+        "bytes": "signed:rq_2",
+        "deliveries": 1,
+        "transport_accepted": null,
+        "device_answered": {
+         "status": "ok",
+         "error": null,
+         "state": "transmitted",
+         "outcome": null,
+         "duty_held": false,
+         "epoch": 3,
+         "at": "2026-01-01T00:01:01Z"
+        }
+       }
+      ],
+      "events": [],
+      "outcome": {
+       "reason": "device_final",
+       "device_status": "acked",
+       "at": "2026-01-01T00:01:01Z"
+      }
+     },
+     {
+      "id": "job_2",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "direct",
+        "target": "ctc_2",
+        "text": "synthetic hello"
+       }
+      },
+      "idempotency_key": null,
+      "state": "unknown",
+      "created_at": "2026-01-01T00:01:01Z",
+      "updated_at": "2026-01-01T01:21:00Z",
+      "expires_at": "2026-01-01T00:11:01Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_2",
+        "request_id": "rq_3",
+        "job_number": 2,
+        "bytes": "signed:rq_3",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:01:01Z",
+         "transport_accepted": null,
+         "device_answered": null,
+         "rf_transmitted": null,
+         "acked": null
+        }
+       }
+      ],
+      "controls": [
+       {
+        "id": "ctl_2",
+        "op": "message.get",
+        "request_id": "rq_4",
+        "job_number": null,
+        "target_job_number": 2,
+        "attempt": "att_2",
+        "bytes": "signed:rq_4",
+        "deliveries": 1,
+        "transport_accepted": null,
+        "device_answered": {
+         "status": "ok",
+         "error": null,
+         "state": "unknown",
+         "outcome": null,
+         "duty_held": false,
+         "epoch": 4,
+         "at": "2026-01-01T00:16:01Z"
+        }
+       }
+      ],
+      "events": [],
+      "outcome": {
+       "reason": "abandon_deadline",
+       "device_status": null,
+       "at": "2026-01-01T01:21:00Z"
+      }
+     },
+     {
+      "id": "job_3",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "direct",
+        "target": "ctc_2",
+        "text": "synthetic hello"
+       }
+      },
+      "idempotency_key": null,
+      "state": "accepted",
+      "created_at": "2026-01-01T01:21:00Z",
+      "updated_at": "2026-01-01T01:21:00Z",
+      "expires_at": "2026-01-01T01:31:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [],
+      "controls": [],
+      "events": [],
+      "outcome": null
+     }
+    ]
+   }
+  },
+  {
+   "step": "deliver",
+   "worker": "worker_1",
+   "job": "job_3",
+   "expect": {
+    "response": {
+     "outcome": "delivered",
+     "attempt": "att_3",
+     "delivery": 1
+    },
+    "out": [
+     {
+      "job": "job_3",
+      "target": "att_3",
+      "kind": "attempt",
+      "op": "message.send",
+      "job_number": 3,
+      "request_id": "rq_5",
+      "bytes": "signed:rq_5",
+      "delivery": 1
+     }
+    ],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "direct",
+        "target": "ctc_2",
+        "text": "synthetic hello"
+       }
+      },
+      "idempotency_key": null,
+      "state": "succeeded",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:01:01Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_1",
+        "request_id": "rq_1",
+        "job_number": 1,
+        "bytes": "signed:rq_1",
+        "deliveries": 2,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "ok",
+          "error": null,
+          "state": "acked",
+          "outcome": null,
+          "duty_held": false,
+          "at": "2026-01-01T00:01:01Z"
+         },
+         "rf_transmitted": {
+          "count": 1,
+          "first_at": "2026-01-01T00:01:01Z",
+          "last_at": "2026-01-01T00:01:01Z"
+         },
+         "acked": "2026-01-01T00:01:01Z"
+        }
+       }
+      ],
+      "controls": [
+       {
+        "id": "ctl_1",
+        "op": "message.get",
+        "request_id": "rq_2",
+        "job_number": null,
+        "target_job_number": 1,
+        "attempt": "att_1",
+        "bytes": "signed:rq_2",
+        "deliveries": 1,
+        "transport_accepted": null,
+        "device_answered": {
+         "status": "ok",
+         "error": null,
+         "state": "transmitted",
+         "outcome": null,
+         "duty_held": false,
+         "epoch": 3,
+         "at": "2026-01-01T00:01:01Z"
+        }
+       }
+      ],
+      "events": [],
+      "outcome": {
+       "reason": "device_final",
+       "device_status": "acked",
+       "at": "2026-01-01T00:01:01Z"
+      }
+     },
+     {
+      "id": "job_2",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "direct",
+        "target": "ctc_2",
+        "text": "synthetic hello"
+       }
+      },
+      "idempotency_key": null,
+      "state": "unknown",
+      "created_at": "2026-01-01T00:01:01Z",
+      "updated_at": "2026-01-01T01:21:00Z",
+      "expires_at": "2026-01-01T00:11:01Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_2",
+        "request_id": "rq_3",
+        "job_number": 2,
+        "bytes": "signed:rq_3",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:01:01Z",
+         "transport_accepted": null,
+         "device_answered": null,
+         "rf_transmitted": null,
+         "acked": null
+        }
+       }
+      ],
+      "controls": [
+       {
+        "id": "ctl_2",
+        "op": "message.get",
+        "request_id": "rq_4",
+        "job_number": null,
+        "target_job_number": 2,
+        "attempt": "att_2",
+        "bytes": "signed:rq_4",
+        "deliveries": 1,
+        "transport_accepted": null,
+        "device_answered": {
+         "status": "ok",
+         "error": null,
+         "state": "unknown",
+         "outcome": null,
+         "duty_held": false,
+         "epoch": 4,
+         "at": "2026-01-01T00:16:01Z"
+        }
+       }
+      ],
+      "events": [],
+      "outcome": {
+       "reason": "abandon_deadline",
+       "device_status": null,
+       "at": "2026-01-01T01:21:00Z"
+      }
+     },
+     {
+      "id": "job_3",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "direct",
+        "target": "ctc_2",
+        "text": "synthetic hello"
+       }
+      },
+      "idempotency_key": null,
+      "state": "dispatched",
+      "created_at": "2026-01-01T01:21:00Z",
+      "updated_at": "2026-01-01T01:21:00Z",
+      "expires_at": "2026-01-01T01:31:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_3",
+        "request_id": "rq_5",
+        "job_number": 3,
+        "bytes": "signed:rq_5",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T01:21:00Z",
+         "transport_accepted": null,
+         "device_answered": null,
+         "rf_transmitted": null,
+         "acked": null
+        }
+       }
+      ],
+      "controls": [],
+      "events": [],
+      "outcome": null
+     }
+    ]
+   }
+  },
+  {
+   "step": "device_answer",
+   "result": {
+    "signed_by": "dev_1",
+    "request_id": "rq_5",
+    "job_number": 3,
+    "status": "ok",
+    "state": "transmitted"
+   },
+   "expect": {
+    "response": {
+     "outcome": "applied"
+    },
+    "out": [],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "direct",
+        "target": "ctc_2",
+        "text": "synthetic hello"
+       }
+      },
+      "idempotency_key": null,
+      "state": "succeeded",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:01:01Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_1",
+        "request_id": "rq_1",
+        "job_number": 1,
+        "bytes": "signed:rq_1",
+        "deliveries": 2,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "ok",
+          "error": null,
+          "state": "acked",
+          "outcome": null,
+          "duty_held": false,
+          "at": "2026-01-01T00:01:01Z"
+         },
+         "rf_transmitted": {
+          "count": 1,
+          "first_at": "2026-01-01T00:01:01Z",
+          "last_at": "2026-01-01T00:01:01Z"
+         },
+         "acked": "2026-01-01T00:01:01Z"
+        }
+       }
+      ],
+      "controls": [
+       {
+        "id": "ctl_1",
+        "op": "message.get",
+        "request_id": "rq_2",
+        "job_number": null,
+        "target_job_number": 1,
+        "attempt": "att_1",
+        "bytes": "signed:rq_2",
+        "deliveries": 1,
+        "transport_accepted": null,
+        "device_answered": {
+         "status": "ok",
+         "error": null,
+         "state": "transmitted",
+         "outcome": null,
+         "duty_held": false,
+         "epoch": 3,
+         "at": "2026-01-01T00:01:01Z"
+        }
+       }
+      ],
+      "events": [],
+      "outcome": {
+       "reason": "device_final",
+       "device_status": "acked",
+       "at": "2026-01-01T00:01:01Z"
+      }
+     },
+     {
+      "id": "job_2",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "direct",
+        "target": "ctc_2",
+        "text": "synthetic hello"
+       }
+      },
+      "idempotency_key": null,
+      "state": "unknown",
+      "created_at": "2026-01-01T00:01:01Z",
+      "updated_at": "2026-01-01T01:21:00Z",
+      "expires_at": "2026-01-01T00:11:01Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_2",
+        "request_id": "rq_3",
+        "job_number": 2,
+        "bytes": "signed:rq_3",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:01:01Z",
+         "transport_accepted": null,
+         "device_answered": null,
+         "rf_transmitted": null,
+         "acked": null
+        }
+       }
+      ],
+      "controls": [
+       {
+        "id": "ctl_2",
+        "op": "message.get",
+        "request_id": "rq_4",
+        "job_number": null,
+        "target_job_number": 2,
+        "attempt": "att_2",
+        "bytes": "signed:rq_4",
+        "deliveries": 1,
+        "transport_accepted": null,
+        "device_answered": {
+         "status": "ok",
+         "error": null,
+         "state": "unknown",
+         "outcome": null,
+         "duty_held": false,
+         "epoch": 4,
+         "at": "2026-01-01T00:16:01Z"
+        }
+       }
+      ],
+      "events": [],
+      "outcome": {
+       "reason": "abandon_deadline",
+       "device_status": null,
+       "at": "2026-01-01T01:21:00Z"
+      }
+     },
+     {
+      "id": "job_3",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "direct",
+        "target": "ctc_2",
+        "text": "synthetic hello"
+       }
+      },
+      "idempotency_key": null,
+      "state": "running",
+      "created_at": "2026-01-01T01:21:00Z",
+      "updated_at": "2026-01-01T01:21:00Z",
+      "expires_at": "2026-01-01T01:31:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_3",
+        "request_id": "rq_5",
+        "job_number": 3,
+        "bytes": "signed:rq_5",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T01:21:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "ok",
+          "error": null,
+          "state": "transmitted",
+          "outcome": null,
+          "duty_held": false,
+          "at": "2026-01-01T01:21:00Z"
+         },
+         "rf_transmitted": {
+          "count": 1,
+          "first_at": "2026-01-01T01:21:00Z",
+          "last_at": "2026-01-01T01:21:00Z"
+         },
+         "acked": null
+        }
+       }
+      ],
+      "controls": [],
+      "events": [],
+      "outcome": null
+     }
+    ]
+   }
+  },
+  {
+   "step": "device_answer",
+   "result": {
+    "signed_by": "dev_1",
+    "request_id": "rq_5",
+    "job_number": 3,
+    "status": "ok",
+    "state": "timed-out"
+   },
+   "expect": {
+    "response": {
+     "outcome": "applied"
+    },
+    "out": [],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "direct",
+        "target": "ctc_2",
+        "text": "synthetic hello"
+       }
+      },
+      "idempotency_key": null,
+      "state": "succeeded",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:01:01Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_1",
+        "request_id": "rq_1",
+        "job_number": 1,
+        "bytes": "signed:rq_1",
+        "deliveries": 2,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "ok",
+          "error": null,
+          "state": "acked",
+          "outcome": null,
+          "duty_held": false,
+          "at": "2026-01-01T00:01:01Z"
+         },
+         "rf_transmitted": {
+          "count": 1,
+          "first_at": "2026-01-01T00:01:01Z",
+          "last_at": "2026-01-01T00:01:01Z"
+         },
+         "acked": "2026-01-01T00:01:01Z"
+        }
+       }
+      ],
+      "controls": [
+       {
+        "id": "ctl_1",
+        "op": "message.get",
+        "request_id": "rq_2",
+        "job_number": null,
+        "target_job_number": 1,
+        "attempt": "att_1",
+        "bytes": "signed:rq_2",
+        "deliveries": 1,
+        "transport_accepted": null,
+        "device_answered": {
+         "status": "ok",
+         "error": null,
+         "state": "transmitted",
+         "outcome": null,
+         "duty_held": false,
+         "epoch": 3,
+         "at": "2026-01-01T00:01:01Z"
+        }
+       }
+      ],
+      "events": [],
+      "outcome": {
+       "reason": "device_final",
+       "device_status": "acked",
+       "at": "2026-01-01T00:01:01Z"
+      }
+     },
+     {
+      "id": "job_2",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "direct",
+        "target": "ctc_2",
+        "text": "synthetic hello"
+       }
+      },
+      "idempotency_key": null,
+      "state": "unknown",
+      "created_at": "2026-01-01T00:01:01Z",
+      "updated_at": "2026-01-01T01:21:00Z",
+      "expires_at": "2026-01-01T00:11:01Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_2",
+        "request_id": "rq_3",
+        "job_number": 2,
+        "bytes": "signed:rq_3",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:01:01Z",
+         "transport_accepted": null,
+         "device_answered": null,
+         "rf_transmitted": null,
+         "acked": null
+        }
+       }
+      ],
+      "controls": [
+       {
+        "id": "ctl_2",
+        "op": "message.get",
+        "request_id": "rq_4",
+        "job_number": null,
+        "target_job_number": 2,
+        "attempt": "att_2",
+        "bytes": "signed:rq_4",
+        "deliveries": 1,
+        "transport_accepted": null,
+        "device_answered": {
+         "status": "ok",
+         "error": null,
+         "state": "unknown",
+         "outcome": null,
+         "duty_held": false,
+         "epoch": 4,
+         "at": "2026-01-01T00:16:01Z"
+        }
+       }
+      ],
+      "events": [],
+      "outcome": {
+       "reason": "abandon_deadline",
+       "device_status": null,
+       "at": "2026-01-01T01:21:00Z"
+      }
+     },
+     {
+      "id": "job_3",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "direct",
+        "target": "ctc_2",
+        "text": "synthetic hello"
+       }
+      },
+      "idempotency_key": null,
+      "state": "running",
+      "created_at": "2026-01-01T01:21:00Z",
+      "updated_at": "2026-01-01T01:21:00Z",
+      "expires_at": "2026-01-01T01:31:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_3",
+        "request_id": "rq_5",
+        "job_number": 3,
+        "bytes": "signed:rq_5",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T01:21:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "ok",
+          "error": null,
+          "state": "timed-out",
+          "outcome": null,
+          "duty_held": false,
+          "at": "2026-01-01T01:21:00Z"
+         },
+         "rf_transmitted": {
+          "count": 1,
+          "first_at": "2026-01-01T01:21:00Z",
+          "last_at": "2026-01-01T01:21:00Z"
+         },
+         "acked": null
+        }
+       }
+      ],
+      "controls": [],
+      "events": [],
+      "outcome": null
+     }
+    ]
+   }
+  },
+  {
+   "step": "device_answer",
+   "result": {
+    "signed_by": "dev_1",
+    "request_id": "rq_5",
+    "job_number": 3,
+    "status": "ok",
+    "state": "acked"
+   },
+   "expect": {
+    "response": {
+     "outcome": "applied"
+    },
+    "out": [],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "direct",
+        "target": "ctc_2",
+        "text": "synthetic hello"
+       }
+      },
+      "idempotency_key": null,
+      "state": "succeeded",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:01:01Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_1",
+        "request_id": "rq_1",
+        "job_number": 1,
+        "bytes": "signed:rq_1",
+        "deliveries": 2,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "ok",
+          "error": null,
+          "state": "acked",
+          "outcome": null,
+          "duty_held": false,
+          "at": "2026-01-01T00:01:01Z"
+         },
+         "rf_transmitted": {
+          "count": 1,
+          "first_at": "2026-01-01T00:01:01Z",
+          "last_at": "2026-01-01T00:01:01Z"
+         },
+         "acked": "2026-01-01T00:01:01Z"
+        }
+       }
+      ],
+      "controls": [
+       {
+        "id": "ctl_1",
+        "op": "message.get",
+        "request_id": "rq_2",
+        "job_number": null,
+        "target_job_number": 1,
+        "attempt": "att_1",
+        "bytes": "signed:rq_2",
+        "deliveries": 1,
+        "transport_accepted": null,
+        "device_answered": {
+         "status": "ok",
+         "error": null,
+         "state": "transmitted",
+         "outcome": null,
+         "duty_held": false,
+         "epoch": 3,
+         "at": "2026-01-01T00:01:01Z"
+        }
+       }
+      ],
+      "events": [],
+      "outcome": {
+       "reason": "device_final",
+       "device_status": "acked",
+       "at": "2026-01-01T00:01:01Z"
+      }
+     },
+     {
+      "id": "job_2",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "direct",
+        "target": "ctc_2",
+        "text": "synthetic hello"
+       }
+      },
+      "idempotency_key": null,
+      "state": "unknown",
+      "created_at": "2026-01-01T00:01:01Z",
+      "updated_at": "2026-01-01T01:21:00Z",
+      "expires_at": "2026-01-01T00:11:01Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_2",
+        "request_id": "rq_3",
+        "job_number": 2,
+        "bytes": "signed:rq_3",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:01:01Z",
+         "transport_accepted": null,
+         "device_answered": null,
+         "rf_transmitted": null,
+         "acked": null
+        }
+       }
+      ],
+      "controls": [
+       {
+        "id": "ctl_2",
+        "op": "message.get",
+        "request_id": "rq_4",
+        "job_number": null,
+        "target_job_number": 2,
+        "attempt": "att_2",
+        "bytes": "signed:rq_4",
+        "deliveries": 1,
+        "transport_accepted": null,
+        "device_answered": {
+         "status": "ok",
+         "error": null,
+         "state": "unknown",
+         "outcome": null,
+         "duty_held": false,
+         "epoch": 4,
+         "at": "2026-01-01T00:16:01Z"
+        }
+       }
+      ],
+      "events": [],
+      "outcome": {
+       "reason": "abandon_deadline",
+       "device_status": null,
+       "at": "2026-01-01T01:21:00Z"
+      }
+     },
+     {
+      "id": "job_3",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "direct",
+        "target": "ctc_2",
+        "text": "synthetic hello"
+       }
+      },
+      "idempotency_key": null,
+      "state": "succeeded",
+      "created_at": "2026-01-01T01:21:00Z",
+      "updated_at": "2026-01-01T01:21:00Z",
+      "expires_at": "2026-01-01T01:31:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_3",
+        "request_id": "rq_5",
+        "job_number": 3,
+        "bytes": "signed:rq_5",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T01:21:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "ok",
+          "error": null,
+          "state": "acked",
+          "outcome": null,
+          "duty_held": false,
+          "at": "2026-01-01T01:21:00Z"
+         },
+         "rf_transmitted": {
+          "count": 1,
+          "first_at": "2026-01-01T01:21:00Z",
+          "last_at": "2026-01-01T01:21:00Z"
+         },
+         "acked": "2026-01-01T01:21:00Z"
+        }
+       }
+      ],
+      "controls": [],
+      "events": [],
+      "outcome": {
+       "reason": "device_final",
+       "device_status": "acked",
+       "at": "2026-01-01T01:21:00Z"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "step": "create",
+   "caller": "cal_1",
+   "device": "dev_1",
+   "command": {
+    "op": "message.send",
+    "args": {
+     "kind": "direct",
+     "target": "ctc_2",
+     "text": "synthetic hello"
+    }
+   },
+   "expect": {
+    "response": {
+     "outcome": "created",
+     "job_id": "job_4"
+    },
+    "out": [],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "direct",
+        "target": "ctc_2",
+        "text": "synthetic hello"
+       }
+      },
+      "idempotency_key": null,
+      "state": "succeeded",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:01:01Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_1",
+        "request_id": "rq_1",
+        "job_number": 1,
+        "bytes": "signed:rq_1",
+        "deliveries": 2,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "ok",
+          "error": null,
+          "state": "acked",
+          "outcome": null,
+          "duty_held": false,
+          "at": "2026-01-01T00:01:01Z"
+         },
+         "rf_transmitted": {
+          "count": 1,
+          "first_at": "2026-01-01T00:01:01Z",
+          "last_at": "2026-01-01T00:01:01Z"
+         },
+         "acked": "2026-01-01T00:01:01Z"
+        }
+       }
+      ],
+      "controls": [
+       {
+        "id": "ctl_1",
+        "op": "message.get",
+        "request_id": "rq_2",
+        "job_number": null,
+        "target_job_number": 1,
+        "attempt": "att_1",
+        "bytes": "signed:rq_2",
+        "deliveries": 1,
+        "transport_accepted": null,
+        "device_answered": {
+         "status": "ok",
+         "error": null,
+         "state": "transmitted",
+         "outcome": null,
+         "duty_held": false,
+         "epoch": 3,
+         "at": "2026-01-01T00:01:01Z"
+        }
+       }
+      ],
+      "events": [],
+      "outcome": {
+       "reason": "device_final",
+       "device_status": "acked",
+       "at": "2026-01-01T00:01:01Z"
+      }
+     },
+     {
+      "id": "job_2",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "direct",
+        "target": "ctc_2",
+        "text": "synthetic hello"
+       }
+      },
+      "idempotency_key": null,
+      "state": "unknown",
+      "created_at": "2026-01-01T00:01:01Z",
+      "updated_at": "2026-01-01T01:21:00Z",
+      "expires_at": "2026-01-01T00:11:01Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_2",
+        "request_id": "rq_3",
+        "job_number": 2,
+        "bytes": "signed:rq_3",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:01:01Z",
+         "transport_accepted": null,
+         "device_answered": null,
+         "rf_transmitted": null,
+         "acked": null
+        }
+       }
+      ],
+      "controls": [
+       {
+        "id": "ctl_2",
+        "op": "message.get",
+        "request_id": "rq_4",
+        "job_number": null,
+        "target_job_number": 2,
+        "attempt": "att_2",
+        "bytes": "signed:rq_4",
+        "deliveries": 1,
+        "transport_accepted": null,
+        "device_answered": {
+         "status": "ok",
+         "error": null,
+         "state": "unknown",
+         "outcome": null,
+         "duty_held": false,
+         "epoch": 4,
+         "at": "2026-01-01T00:16:01Z"
+        }
+       }
+      ],
+      "events": [],
+      "outcome": {
+       "reason": "abandon_deadline",
+       "device_status": null,
+       "at": "2026-01-01T01:21:00Z"
+      }
+     },
+     {
+      "id": "job_3",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "direct",
+        "target": "ctc_2",
+        "text": "synthetic hello"
+       }
+      },
+      "idempotency_key": null,
+      "state": "succeeded",
+      "created_at": "2026-01-01T01:21:00Z",
+      "updated_at": "2026-01-01T01:21:00Z",
+      "expires_at": "2026-01-01T01:31:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_3",
+        "request_id": "rq_5",
+        "job_number": 3,
+        "bytes": "signed:rq_5",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T01:21:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "ok",
+          "error": null,
+          "state": "acked",
+          "outcome": null,
+          "duty_held": false,
+          "at": "2026-01-01T01:21:00Z"
+         },
+         "rf_transmitted": {
+          "count": 1,
+          "first_at": "2026-01-01T01:21:00Z",
+          "last_at": "2026-01-01T01:21:00Z"
+         },
+         "acked": "2026-01-01T01:21:00Z"
+        }
+       }
+      ],
+      "controls": [],
+      "events": [],
+      "outcome": {
+       "reason": "device_final",
+       "device_status": "acked",
+       "at": "2026-01-01T01:21:00Z"
+      }
+     },
+     {
+      "id": "job_4",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "direct",
+        "target": "ctc_2",
+        "text": "synthetic hello"
+       }
+      },
+      "idempotency_key": null,
+      "state": "accepted",
+      "created_at": "2026-01-01T01:21:00Z",
+      "updated_at": "2026-01-01T01:21:00Z",
+      "expires_at": "2026-01-01T01:31:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [],
+      "controls": [],
+      "events": [],
+      "outcome": null
+     }
+    ]
+   }
+  },
+  {
+   "step": "claim",
+   "worker": "worker_1",
+   "job": "job_4",
+   "expect": {
+    "response": {
+     "outcome": "claimed"
+    },
+    "out": [],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "direct",
+        "target": "ctc_2",
+        "text": "synthetic hello"
+       }
+      },
+      "idempotency_key": null,
+      "state": "succeeded",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:01:01Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_1",
+        "request_id": "rq_1",
+        "job_number": 1,
+        "bytes": "signed:rq_1",
+        "deliveries": 2,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "ok",
+          "error": null,
+          "state": "acked",
+          "outcome": null,
+          "duty_held": false,
+          "at": "2026-01-01T00:01:01Z"
+         },
+         "rf_transmitted": {
+          "count": 1,
+          "first_at": "2026-01-01T00:01:01Z",
+          "last_at": "2026-01-01T00:01:01Z"
+         },
+         "acked": "2026-01-01T00:01:01Z"
+        }
+       }
+      ],
+      "controls": [
+       {
+        "id": "ctl_1",
+        "op": "message.get",
+        "request_id": "rq_2",
+        "job_number": null,
+        "target_job_number": 1,
+        "attempt": "att_1",
+        "bytes": "signed:rq_2",
+        "deliveries": 1,
+        "transport_accepted": null,
+        "device_answered": {
+         "status": "ok",
+         "error": null,
+         "state": "transmitted",
+         "outcome": null,
+         "duty_held": false,
+         "epoch": 3,
+         "at": "2026-01-01T00:01:01Z"
+        }
+       }
+      ],
+      "events": [],
+      "outcome": {
+       "reason": "device_final",
+       "device_status": "acked",
+       "at": "2026-01-01T00:01:01Z"
+      }
+     },
+     {
+      "id": "job_2",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "direct",
+        "target": "ctc_2",
+        "text": "synthetic hello"
+       }
+      },
+      "idempotency_key": null,
+      "state": "unknown",
+      "created_at": "2026-01-01T00:01:01Z",
+      "updated_at": "2026-01-01T01:21:00Z",
+      "expires_at": "2026-01-01T00:11:01Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_2",
+        "request_id": "rq_3",
+        "job_number": 2,
+        "bytes": "signed:rq_3",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:01:01Z",
+         "transport_accepted": null,
+         "device_answered": null,
+         "rf_transmitted": null,
+         "acked": null
+        }
+       }
+      ],
+      "controls": [
+       {
+        "id": "ctl_2",
+        "op": "message.get",
+        "request_id": "rq_4",
+        "job_number": null,
+        "target_job_number": 2,
+        "attempt": "att_2",
+        "bytes": "signed:rq_4",
+        "deliveries": 1,
+        "transport_accepted": null,
+        "device_answered": {
+         "status": "ok",
+         "error": null,
+         "state": "unknown",
+         "outcome": null,
+         "duty_held": false,
+         "epoch": 4,
+         "at": "2026-01-01T00:16:01Z"
+        }
+       }
+      ],
+      "events": [],
+      "outcome": {
+       "reason": "abandon_deadline",
+       "device_status": null,
+       "at": "2026-01-01T01:21:00Z"
+      }
+     },
+     {
+      "id": "job_3",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "direct",
+        "target": "ctc_2",
+        "text": "synthetic hello"
+       }
+      },
+      "idempotency_key": null,
+      "state": "succeeded",
+      "created_at": "2026-01-01T01:21:00Z",
+      "updated_at": "2026-01-01T01:21:00Z",
+      "expires_at": "2026-01-01T01:31:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_3",
+        "request_id": "rq_5",
+        "job_number": 3,
+        "bytes": "signed:rq_5",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T01:21:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "ok",
+          "error": null,
+          "state": "acked",
+          "outcome": null,
+          "duty_held": false,
+          "at": "2026-01-01T01:21:00Z"
+         },
+         "rf_transmitted": {
+          "count": 1,
+          "first_at": "2026-01-01T01:21:00Z",
+          "last_at": "2026-01-01T01:21:00Z"
+         },
+         "acked": "2026-01-01T01:21:00Z"
+        }
+       }
+      ],
+      "controls": [],
+      "events": [],
+      "outcome": {
+       "reason": "device_final",
+       "device_status": "acked",
+       "at": "2026-01-01T01:21:00Z"
+      }
+     },
+     {
+      "id": "job_4",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "direct",
+        "target": "ctc_2",
+        "text": "synthetic hello"
+       }
+      },
+      "idempotency_key": null,
+      "state": "accepted",
+      "created_at": "2026-01-01T01:21:00Z",
+      "updated_at": "2026-01-01T01:21:00Z",
+      "expires_at": "2026-01-01T01:31:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [],
+      "controls": [],
+      "events": [],
+      "outcome": null
+     }
+    ]
+   }
+  },
+  {
+   "step": "deliver",
+   "worker": "worker_1",
+   "job": "job_4",
+   "expect": {
+    "response": {
+     "outcome": "delivered",
+     "attempt": "att_4",
+     "delivery": 1
+    },
+    "out": [
+     {
+      "job": "job_4",
+      "target": "att_4",
+      "kind": "attempt",
+      "op": "message.send",
+      "job_number": 4,
+      "request_id": "rq_6",
+      "bytes": "signed:rq_6",
+      "delivery": 1
+     }
+    ],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "direct",
+        "target": "ctc_2",
+        "text": "synthetic hello"
+       }
+      },
+      "idempotency_key": null,
+      "state": "succeeded",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:01:01Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_1",
+        "request_id": "rq_1",
+        "job_number": 1,
+        "bytes": "signed:rq_1",
+        "deliveries": 2,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "ok",
+          "error": null,
+          "state": "acked",
+          "outcome": null,
+          "duty_held": false,
+          "at": "2026-01-01T00:01:01Z"
+         },
+         "rf_transmitted": {
+          "count": 1,
+          "first_at": "2026-01-01T00:01:01Z",
+          "last_at": "2026-01-01T00:01:01Z"
+         },
+         "acked": "2026-01-01T00:01:01Z"
+        }
+       }
+      ],
+      "controls": [
+       {
+        "id": "ctl_1",
+        "op": "message.get",
+        "request_id": "rq_2",
+        "job_number": null,
+        "target_job_number": 1,
+        "attempt": "att_1",
+        "bytes": "signed:rq_2",
+        "deliveries": 1,
+        "transport_accepted": null,
+        "device_answered": {
+         "status": "ok",
+         "error": null,
+         "state": "transmitted",
+         "outcome": null,
+         "duty_held": false,
+         "epoch": 3,
+         "at": "2026-01-01T00:01:01Z"
+        }
+       }
+      ],
+      "events": [],
+      "outcome": {
+       "reason": "device_final",
+       "device_status": "acked",
+       "at": "2026-01-01T00:01:01Z"
+      }
+     },
+     {
+      "id": "job_2",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "direct",
+        "target": "ctc_2",
+        "text": "synthetic hello"
+       }
+      },
+      "idempotency_key": null,
+      "state": "unknown",
+      "created_at": "2026-01-01T00:01:01Z",
+      "updated_at": "2026-01-01T01:21:00Z",
+      "expires_at": "2026-01-01T00:11:01Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_2",
+        "request_id": "rq_3",
+        "job_number": 2,
+        "bytes": "signed:rq_3",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:01:01Z",
+         "transport_accepted": null,
+         "device_answered": null,
+         "rf_transmitted": null,
+         "acked": null
+        }
+       }
+      ],
+      "controls": [
+       {
+        "id": "ctl_2",
+        "op": "message.get",
+        "request_id": "rq_4",
+        "job_number": null,
+        "target_job_number": 2,
+        "attempt": "att_2",
+        "bytes": "signed:rq_4",
+        "deliveries": 1,
+        "transport_accepted": null,
+        "device_answered": {
+         "status": "ok",
+         "error": null,
+         "state": "unknown",
+         "outcome": null,
+         "duty_held": false,
+         "epoch": 4,
+         "at": "2026-01-01T00:16:01Z"
+        }
+       }
+      ],
+      "events": [],
+      "outcome": {
+       "reason": "abandon_deadline",
+       "device_status": null,
+       "at": "2026-01-01T01:21:00Z"
+      }
+     },
+     {
+      "id": "job_3",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "direct",
+        "target": "ctc_2",
+        "text": "synthetic hello"
+       }
+      },
+      "idempotency_key": null,
+      "state": "succeeded",
+      "created_at": "2026-01-01T01:21:00Z",
+      "updated_at": "2026-01-01T01:21:00Z",
+      "expires_at": "2026-01-01T01:31:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_3",
+        "request_id": "rq_5",
+        "job_number": 3,
+        "bytes": "signed:rq_5",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T01:21:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "ok",
+          "error": null,
+          "state": "acked",
+          "outcome": null,
+          "duty_held": false,
+          "at": "2026-01-01T01:21:00Z"
+         },
+         "rf_transmitted": {
+          "count": 1,
+          "first_at": "2026-01-01T01:21:00Z",
+          "last_at": "2026-01-01T01:21:00Z"
+         },
+         "acked": "2026-01-01T01:21:00Z"
+        }
+       }
+      ],
+      "controls": [],
+      "events": [],
+      "outcome": {
+       "reason": "device_final",
+       "device_status": "acked",
+       "at": "2026-01-01T01:21:00Z"
+      }
+     },
+     {
+      "id": "job_4",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "direct",
+        "target": "ctc_2",
+        "text": "synthetic hello"
+       }
+      },
+      "idempotency_key": null,
+      "state": "dispatched",
+      "created_at": "2026-01-01T01:21:00Z",
+      "updated_at": "2026-01-01T01:21:00Z",
+      "expires_at": "2026-01-01T01:31:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_4",
+        "request_id": "rq_6",
+        "job_number": 4,
+        "bytes": "signed:rq_6",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T01:21:00Z",
+         "transport_accepted": null,
+         "device_answered": null,
+         "rf_transmitted": null,
+         "acked": null
+        }
+       }
+      ],
+      "controls": [],
+      "events": [],
+      "outcome": null
+     }
+    ]
+   }
+  },
+  {
+   "step": "device_answer",
+   "result": {
+    "signed_by": "dev_1",
+    "request_id": "rq_6",
+    "job_number": 4,
+    "status": "ok",
+    "state": "transmitted"
+   },
+   "expect": {
+    "response": {
+     "outcome": "applied"
+    },
+    "out": [],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "direct",
+        "target": "ctc_2",
+        "text": "synthetic hello"
+       }
+      },
+      "idempotency_key": null,
+      "state": "succeeded",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:01:01Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_1",
+        "request_id": "rq_1",
+        "job_number": 1,
+        "bytes": "signed:rq_1",
+        "deliveries": 2,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "ok",
+          "error": null,
+          "state": "acked",
+          "outcome": null,
+          "duty_held": false,
+          "at": "2026-01-01T00:01:01Z"
+         },
+         "rf_transmitted": {
+          "count": 1,
+          "first_at": "2026-01-01T00:01:01Z",
+          "last_at": "2026-01-01T00:01:01Z"
+         },
+         "acked": "2026-01-01T00:01:01Z"
+        }
+       }
+      ],
+      "controls": [
+       {
+        "id": "ctl_1",
+        "op": "message.get",
+        "request_id": "rq_2",
+        "job_number": null,
+        "target_job_number": 1,
+        "attempt": "att_1",
+        "bytes": "signed:rq_2",
+        "deliveries": 1,
+        "transport_accepted": null,
+        "device_answered": {
+         "status": "ok",
+         "error": null,
+         "state": "transmitted",
+         "outcome": null,
+         "duty_held": false,
+         "epoch": 3,
+         "at": "2026-01-01T00:01:01Z"
+        }
+       }
+      ],
+      "events": [],
+      "outcome": {
+       "reason": "device_final",
+       "device_status": "acked",
+       "at": "2026-01-01T00:01:01Z"
+      }
+     },
+     {
+      "id": "job_2",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "direct",
+        "target": "ctc_2",
+        "text": "synthetic hello"
+       }
+      },
+      "idempotency_key": null,
+      "state": "unknown",
+      "created_at": "2026-01-01T00:01:01Z",
+      "updated_at": "2026-01-01T01:21:00Z",
+      "expires_at": "2026-01-01T00:11:01Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_2",
+        "request_id": "rq_3",
+        "job_number": 2,
+        "bytes": "signed:rq_3",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:01:01Z",
+         "transport_accepted": null,
+         "device_answered": null,
+         "rf_transmitted": null,
+         "acked": null
+        }
+       }
+      ],
+      "controls": [
+       {
+        "id": "ctl_2",
+        "op": "message.get",
+        "request_id": "rq_4",
+        "job_number": null,
+        "target_job_number": 2,
+        "attempt": "att_2",
+        "bytes": "signed:rq_4",
+        "deliveries": 1,
+        "transport_accepted": null,
+        "device_answered": {
+         "status": "ok",
+         "error": null,
+         "state": "unknown",
+         "outcome": null,
+         "duty_held": false,
+         "epoch": 4,
+         "at": "2026-01-01T00:16:01Z"
+        }
+       }
+      ],
+      "events": [],
+      "outcome": {
+       "reason": "abandon_deadline",
+       "device_status": null,
+       "at": "2026-01-01T01:21:00Z"
+      }
+     },
+     {
+      "id": "job_3",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "direct",
+        "target": "ctc_2",
+        "text": "synthetic hello"
+       }
+      },
+      "idempotency_key": null,
+      "state": "succeeded",
+      "created_at": "2026-01-01T01:21:00Z",
+      "updated_at": "2026-01-01T01:21:00Z",
+      "expires_at": "2026-01-01T01:31:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_3",
+        "request_id": "rq_5",
+        "job_number": 3,
+        "bytes": "signed:rq_5",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T01:21:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "ok",
+          "error": null,
+          "state": "acked",
+          "outcome": null,
+          "duty_held": false,
+          "at": "2026-01-01T01:21:00Z"
+         },
+         "rf_transmitted": {
+          "count": 1,
+          "first_at": "2026-01-01T01:21:00Z",
+          "last_at": "2026-01-01T01:21:00Z"
+         },
+         "acked": "2026-01-01T01:21:00Z"
+        }
+       }
+      ],
+      "controls": [],
+      "events": [],
+      "outcome": {
+       "reason": "device_final",
+       "device_status": "acked",
+       "at": "2026-01-01T01:21:00Z"
+      }
+     },
+     {
+      "id": "job_4",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "direct",
+        "target": "ctc_2",
+        "text": "synthetic hello"
+       }
+      },
+      "idempotency_key": null,
+      "state": "running",
+      "created_at": "2026-01-01T01:21:00Z",
+      "updated_at": "2026-01-01T01:21:00Z",
+      "expires_at": "2026-01-01T01:31:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_4",
+        "request_id": "rq_6",
+        "job_number": 4,
+        "bytes": "signed:rq_6",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T01:21:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "ok",
+          "error": null,
+          "state": "transmitted",
+          "outcome": null,
+          "duty_held": false,
+          "at": "2026-01-01T01:21:00Z"
+         },
+         "rf_transmitted": {
+          "count": 1,
+          "first_at": "2026-01-01T01:21:00Z",
+          "last_at": "2026-01-01T01:21:00Z"
+         },
+         "acked": null
+        }
+       }
+      ],
+      "controls": [],
+      "events": [],
+      "outcome": null
+     }
+    ]
+   }
+  },
+  {
+   "step": "device_answer",
+   "result": {
+    "signed_by": "dev_1",
+    "request_id": "rq_6",
+    "job_number": 4,
+    "status": "ok",
+    "state": "timed-out"
+   },
+   "expect": {
+    "response": {
+     "outcome": "applied"
+    },
+    "out": [],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "direct",
+        "target": "ctc_2",
+        "text": "synthetic hello"
+       }
+      },
+      "idempotency_key": null,
+      "state": "succeeded",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:01:01Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_1",
+        "request_id": "rq_1",
+        "job_number": 1,
+        "bytes": "signed:rq_1",
+        "deliveries": 2,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "ok",
+          "error": null,
+          "state": "acked",
+          "outcome": null,
+          "duty_held": false,
+          "at": "2026-01-01T00:01:01Z"
+         },
+         "rf_transmitted": {
+          "count": 1,
+          "first_at": "2026-01-01T00:01:01Z",
+          "last_at": "2026-01-01T00:01:01Z"
+         },
+         "acked": "2026-01-01T00:01:01Z"
+        }
+       }
+      ],
+      "controls": [
+       {
+        "id": "ctl_1",
+        "op": "message.get",
+        "request_id": "rq_2",
+        "job_number": null,
+        "target_job_number": 1,
+        "attempt": "att_1",
+        "bytes": "signed:rq_2",
+        "deliveries": 1,
+        "transport_accepted": null,
+        "device_answered": {
+         "status": "ok",
+         "error": null,
+         "state": "transmitted",
+         "outcome": null,
+         "duty_held": false,
+         "epoch": 3,
+         "at": "2026-01-01T00:01:01Z"
+        }
+       }
+      ],
+      "events": [],
+      "outcome": {
+       "reason": "device_final",
+       "device_status": "acked",
+       "at": "2026-01-01T00:01:01Z"
+      }
+     },
+     {
+      "id": "job_2",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "direct",
+        "target": "ctc_2",
+        "text": "synthetic hello"
+       }
+      },
+      "idempotency_key": null,
+      "state": "unknown",
+      "created_at": "2026-01-01T00:01:01Z",
+      "updated_at": "2026-01-01T01:21:00Z",
+      "expires_at": "2026-01-01T00:11:01Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_2",
+        "request_id": "rq_3",
+        "job_number": 2,
+        "bytes": "signed:rq_3",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:01:01Z",
+         "transport_accepted": null,
+         "device_answered": null,
+         "rf_transmitted": null,
+         "acked": null
+        }
+       }
+      ],
+      "controls": [
+       {
+        "id": "ctl_2",
+        "op": "message.get",
+        "request_id": "rq_4",
+        "job_number": null,
+        "target_job_number": 2,
+        "attempt": "att_2",
+        "bytes": "signed:rq_4",
+        "deliveries": 1,
+        "transport_accepted": null,
+        "device_answered": {
+         "status": "ok",
+         "error": null,
+         "state": "unknown",
+         "outcome": null,
+         "duty_held": false,
+         "epoch": 4,
+         "at": "2026-01-01T00:16:01Z"
+        }
+       }
+      ],
+      "events": [],
+      "outcome": {
+       "reason": "abandon_deadline",
+       "device_status": null,
+       "at": "2026-01-01T01:21:00Z"
+      }
+     },
+     {
+      "id": "job_3",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "direct",
+        "target": "ctc_2",
+        "text": "synthetic hello"
+       }
+      },
+      "idempotency_key": null,
+      "state": "succeeded",
+      "created_at": "2026-01-01T01:21:00Z",
+      "updated_at": "2026-01-01T01:21:00Z",
+      "expires_at": "2026-01-01T01:31:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_3",
+        "request_id": "rq_5",
+        "job_number": 3,
+        "bytes": "signed:rq_5",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T01:21:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "ok",
+          "error": null,
+          "state": "acked",
+          "outcome": null,
+          "duty_held": false,
+          "at": "2026-01-01T01:21:00Z"
+         },
+         "rf_transmitted": {
+          "count": 1,
+          "first_at": "2026-01-01T01:21:00Z",
+          "last_at": "2026-01-01T01:21:00Z"
+         },
+         "acked": "2026-01-01T01:21:00Z"
+        }
+       }
+      ],
+      "controls": [],
+      "events": [],
+      "outcome": {
+       "reason": "device_final",
+       "device_status": "acked",
+       "at": "2026-01-01T01:21:00Z"
+      }
+     },
+     {
+      "id": "job_4",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "direct",
+        "target": "ctc_2",
+        "text": "synthetic hello"
+       }
+      },
+      "idempotency_key": null,
+      "state": "running",
+      "created_at": "2026-01-01T01:21:00Z",
+      "updated_at": "2026-01-01T01:21:00Z",
+      "expires_at": "2026-01-01T01:31:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_4",
+        "request_id": "rq_6",
+        "job_number": 4,
+        "bytes": "signed:rq_6",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T01:21:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "ok",
+          "error": null,
+          "state": "timed-out",
+          "outcome": null,
+          "duty_held": false,
+          "at": "2026-01-01T01:21:00Z"
+         },
+         "rf_transmitted": {
+          "count": 1,
+          "first_at": "2026-01-01T01:21:00Z",
+          "last_at": "2026-01-01T01:21:00Z"
+         },
+         "acked": null
+        }
+       }
+      ],
+      "controls": [],
+      "events": [],
+      "outcome": null
+     }
+    ]
+   }
+  },
+  {
+   "step": "advance",
+   "seconds": 3600,
+   "expect": {
+    "response": {
+     "outcome": "advanced"
+    },
+    "out": [],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "direct",
+        "target": "ctc_2",
+        "text": "synthetic hello"
+       }
+      },
+      "idempotency_key": null,
+      "state": "succeeded",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:01:01Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_1",
+        "request_id": "rq_1",
+        "job_number": 1,
+        "bytes": "signed:rq_1",
+        "deliveries": 2,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "ok",
+          "error": null,
+          "state": "acked",
+          "outcome": null,
+          "duty_held": false,
+          "at": "2026-01-01T00:01:01Z"
+         },
+         "rf_transmitted": {
+          "count": 1,
+          "first_at": "2026-01-01T00:01:01Z",
+          "last_at": "2026-01-01T00:01:01Z"
+         },
+         "acked": "2026-01-01T00:01:01Z"
+        }
+       }
+      ],
+      "controls": [
+       {
+        "id": "ctl_1",
+        "op": "message.get",
+        "request_id": "rq_2",
+        "job_number": null,
+        "target_job_number": 1,
+        "attempt": "att_1",
+        "bytes": "signed:rq_2",
+        "deliveries": 1,
+        "transport_accepted": null,
+        "device_answered": {
+         "status": "ok",
+         "error": null,
+         "state": "transmitted",
+         "outcome": null,
+         "duty_held": false,
+         "epoch": 3,
+         "at": "2026-01-01T00:01:01Z"
+        }
+       }
+      ],
+      "events": [],
+      "outcome": {
+       "reason": "device_final",
+       "device_status": "acked",
+       "at": "2026-01-01T00:01:01Z"
+      }
+     },
+     {
+      "id": "job_2",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "direct",
+        "target": "ctc_2",
+        "text": "synthetic hello"
+       }
+      },
+      "idempotency_key": null,
+      "state": "unknown",
+      "created_at": "2026-01-01T00:01:01Z",
+      "updated_at": "2026-01-01T01:21:00Z",
+      "expires_at": "2026-01-01T00:11:01Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_2",
+        "request_id": "rq_3",
+        "job_number": 2,
+        "bytes": "signed:rq_3",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:01:01Z",
+         "transport_accepted": null,
+         "device_answered": null,
+         "rf_transmitted": null,
+         "acked": null
+        }
+       }
+      ],
+      "controls": [
+       {
+        "id": "ctl_2",
+        "op": "message.get",
+        "request_id": "rq_4",
+        "job_number": null,
+        "target_job_number": 2,
+        "attempt": "att_2",
+        "bytes": "signed:rq_4",
+        "deliveries": 1,
+        "transport_accepted": null,
+        "device_answered": {
+         "status": "ok",
+         "error": null,
+         "state": "unknown",
+         "outcome": null,
+         "duty_held": false,
+         "epoch": 4,
+         "at": "2026-01-01T00:16:01Z"
+        }
+       }
+      ],
+      "events": [],
+      "outcome": {
+       "reason": "abandon_deadline",
+       "device_status": null,
+       "at": "2026-01-01T01:21:00Z"
+      }
+     },
+     {
+      "id": "job_3",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "direct",
+        "target": "ctc_2",
+        "text": "synthetic hello"
+       }
+      },
+      "idempotency_key": null,
+      "state": "succeeded",
+      "created_at": "2026-01-01T01:21:00Z",
+      "updated_at": "2026-01-01T01:21:00Z",
+      "expires_at": "2026-01-01T01:31:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_3",
+        "request_id": "rq_5",
+        "job_number": 3,
+        "bytes": "signed:rq_5",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T01:21:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "ok",
+          "error": null,
+          "state": "acked",
+          "outcome": null,
+          "duty_held": false,
+          "at": "2026-01-01T01:21:00Z"
+         },
+         "rf_transmitted": {
+          "count": 1,
+          "first_at": "2026-01-01T01:21:00Z",
+          "last_at": "2026-01-01T01:21:00Z"
+         },
+         "acked": "2026-01-01T01:21:00Z"
+        }
+       }
+      ],
+      "controls": [],
+      "events": [],
+      "outcome": {
+       "reason": "device_final",
+       "device_status": "acked",
+       "at": "2026-01-01T01:21:00Z"
+      }
+     },
+     {
+      "id": "job_4",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "direct",
+        "target": "ctc_2",
+        "text": "synthetic hello"
+       }
+      },
+      "idempotency_key": null,
+      "state": "unknown",
+      "created_at": "2026-01-01T01:21:00Z",
+      "updated_at": "2026-01-01T02:21:00Z",
+      "expires_at": "2026-01-01T01:31:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_4",
+        "request_id": "rq_6",
+        "job_number": 4,
+        "bytes": "signed:rq_6",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T01:21:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "ok",
+          "error": null,
+          "state": "timed-out",
+          "outcome": null,
+          "duty_held": false,
+          "at": "2026-01-01T01:21:00Z"
+         },
+         "rf_transmitted": {
+          "count": 1,
+          "first_at": "2026-01-01T01:21:00Z",
+          "last_at": "2026-01-01T01:21:00Z"
+         },
+         "acked": null
+        }
+       }
+      ],
+      "controls": [],
+      "events": [],
+      "outcome": {
+       "reason": "abandon_deadline",
+       "device_status": null,
+       "at": "2026-01-01T02:21:00Z"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "step": "create",
+   "caller": "cal_1",
+   "device": "dev_1",
+   "command": {
+    "op": "message.send",
+    "args": {
+     "kind": "channel",
+     "target": "chan_1",
+     "text": "synthetic broadcast"
+    }
+   },
+   "expect": {
+    "response": {
+     "outcome": "created",
+     "job_id": "job_5"
+    },
+    "out": [],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "direct",
+        "target": "ctc_2",
+        "text": "synthetic hello"
+       }
+      },
+      "idempotency_key": null,
+      "state": "succeeded",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:01:01Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_1",
+        "request_id": "rq_1",
+        "job_number": 1,
+        "bytes": "signed:rq_1",
+        "deliveries": 2,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "ok",
+          "error": null,
+          "state": "acked",
+          "outcome": null,
+          "duty_held": false,
+          "at": "2026-01-01T00:01:01Z"
+         },
+         "rf_transmitted": {
+          "count": 1,
+          "first_at": "2026-01-01T00:01:01Z",
+          "last_at": "2026-01-01T00:01:01Z"
+         },
+         "acked": "2026-01-01T00:01:01Z"
+        }
+       }
+      ],
+      "controls": [
+       {
+        "id": "ctl_1",
+        "op": "message.get",
+        "request_id": "rq_2",
+        "job_number": null,
+        "target_job_number": 1,
+        "attempt": "att_1",
+        "bytes": "signed:rq_2",
+        "deliveries": 1,
+        "transport_accepted": null,
+        "device_answered": {
+         "status": "ok",
+         "error": null,
+         "state": "transmitted",
+         "outcome": null,
+         "duty_held": false,
+         "epoch": 3,
+         "at": "2026-01-01T00:01:01Z"
+        }
+       }
+      ],
+      "events": [],
+      "outcome": {
+       "reason": "device_final",
+       "device_status": "acked",
+       "at": "2026-01-01T00:01:01Z"
+      }
+     },
+     {
+      "id": "job_2",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "direct",
+        "target": "ctc_2",
+        "text": "synthetic hello"
+       }
+      },
+      "idempotency_key": null,
+      "state": "unknown",
+      "created_at": "2026-01-01T00:01:01Z",
+      "updated_at": "2026-01-01T01:21:00Z",
+      "expires_at": "2026-01-01T00:11:01Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_2",
+        "request_id": "rq_3",
+        "job_number": 2,
+        "bytes": "signed:rq_3",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:01:01Z",
+         "transport_accepted": null,
+         "device_answered": null,
+         "rf_transmitted": null,
+         "acked": null
+        }
+       }
+      ],
+      "controls": [
+       {
+        "id": "ctl_2",
+        "op": "message.get",
+        "request_id": "rq_4",
+        "job_number": null,
+        "target_job_number": 2,
+        "attempt": "att_2",
+        "bytes": "signed:rq_4",
+        "deliveries": 1,
+        "transport_accepted": null,
+        "device_answered": {
+         "status": "ok",
+         "error": null,
+         "state": "unknown",
+         "outcome": null,
+         "duty_held": false,
+         "epoch": 4,
+         "at": "2026-01-01T00:16:01Z"
+        }
+       }
+      ],
+      "events": [],
+      "outcome": {
+       "reason": "abandon_deadline",
+       "device_status": null,
+       "at": "2026-01-01T01:21:00Z"
+      }
+     },
+     {
+      "id": "job_3",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "direct",
+        "target": "ctc_2",
+        "text": "synthetic hello"
+       }
+      },
+      "idempotency_key": null,
+      "state": "succeeded",
+      "created_at": "2026-01-01T01:21:00Z",
+      "updated_at": "2026-01-01T01:21:00Z",
+      "expires_at": "2026-01-01T01:31:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_3",
+        "request_id": "rq_5",
+        "job_number": 3,
+        "bytes": "signed:rq_5",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T01:21:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "ok",
+          "error": null,
+          "state": "acked",
+          "outcome": null,
+          "duty_held": false,
+          "at": "2026-01-01T01:21:00Z"
+         },
+         "rf_transmitted": {
+          "count": 1,
+          "first_at": "2026-01-01T01:21:00Z",
+          "last_at": "2026-01-01T01:21:00Z"
+         },
+         "acked": "2026-01-01T01:21:00Z"
+        }
+       }
+      ],
+      "controls": [],
+      "events": [],
+      "outcome": {
+       "reason": "device_final",
+       "device_status": "acked",
+       "at": "2026-01-01T01:21:00Z"
+      }
+     },
+     {
+      "id": "job_4",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "direct",
+        "target": "ctc_2",
+        "text": "synthetic hello"
+       }
+      },
+      "idempotency_key": null,
+      "state": "unknown",
+      "created_at": "2026-01-01T01:21:00Z",
+      "updated_at": "2026-01-01T02:21:00Z",
+      "expires_at": "2026-01-01T01:31:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_4",
+        "request_id": "rq_6",
+        "job_number": 4,
+        "bytes": "signed:rq_6",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T01:21:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "ok",
+          "error": null,
+          "state": "timed-out",
+          "outcome": null,
+          "duty_held": false,
+          "at": "2026-01-01T01:21:00Z"
+         },
+         "rf_transmitted": {
+          "count": 1,
+          "first_at": "2026-01-01T01:21:00Z",
+          "last_at": "2026-01-01T01:21:00Z"
+         },
+         "acked": null
+        }
+       }
+      ],
+      "controls": [],
+      "events": [],
+      "outcome": {
+       "reason": "abandon_deadline",
+       "device_status": null,
+       "at": "2026-01-01T02:21:00Z"
+      }
+     },
+     {
+      "id": "job_5",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "channel",
+        "target": "chan_1",
+        "text": "synthetic broadcast"
+       }
+      },
+      "idempotency_key": null,
+      "state": "accepted",
+      "created_at": "2026-01-01T02:21:00Z",
+      "updated_at": "2026-01-01T02:21:00Z",
+      "expires_at": "2026-01-01T02:31:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [],
+      "controls": [],
+      "events": [],
+      "outcome": null
+     }
+    ]
+   }
+  },
+  {
+   "step": "claim",
+   "worker": "worker_1",
+   "job": "job_5",
+   "expect": {
+    "response": {
+     "outcome": "claimed"
+    },
+    "out": [],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "direct",
+        "target": "ctc_2",
+        "text": "synthetic hello"
+       }
+      },
+      "idempotency_key": null,
+      "state": "succeeded",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:01:01Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_1",
+        "request_id": "rq_1",
+        "job_number": 1,
+        "bytes": "signed:rq_1",
+        "deliveries": 2,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "ok",
+          "error": null,
+          "state": "acked",
+          "outcome": null,
+          "duty_held": false,
+          "at": "2026-01-01T00:01:01Z"
+         },
+         "rf_transmitted": {
+          "count": 1,
+          "first_at": "2026-01-01T00:01:01Z",
+          "last_at": "2026-01-01T00:01:01Z"
+         },
+         "acked": "2026-01-01T00:01:01Z"
+        }
+       }
+      ],
+      "controls": [
+       {
+        "id": "ctl_1",
+        "op": "message.get",
+        "request_id": "rq_2",
+        "job_number": null,
+        "target_job_number": 1,
+        "attempt": "att_1",
+        "bytes": "signed:rq_2",
+        "deliveries": 1,
+        "transport_accepted": null,
+        "device_answered": {
+         "status": "ok",
+         "error": null,
+         "state": "transmitted",
+         "outcome": null,
+         "duty_held": false,
+         "epoch": 3,
+         "at": "2026-01-01T00:01:01Z"
+        }
+       }
+      ],
+      "events": [],
+      "outcome": {
+       "reason": "device_final",
+       "device_status": "acked",
+       "at": "2026-01-01T00:01:01Z"
+      }
+     },
+     {
+      "id": "job_2",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "direct",
+        "target": "ctc_2",
+        "text": "synthetic hello"
+       }
+      },
+      "idempotency_key": null,
+      "state": "unknown",
+      "created_at": "2026-01-01T00:01:01Z",
+      "updated_at": "2026-01-01T01:21:00Z",
+      "expires_at": "2026-01-01T00:11:01Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_2",
+        "request_id": "rq_3",
+        "job_number": 2,
+        "bytes": "signed:rq_3",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:01:01Z",
+         "transport_accepted": null,
+         "device_answered": null,
+         "rf_transmitted": null,
+         "acked": null
+        }
+       }
+      ],
+      "controls": [
+       {
+        "id": "ctl_2",
+        "op": "message.get",
+        "request_id": "rq_4",
+        "job_number": null,
+        "target_job_number": 2,
+        "attempt": "att_2",
+        "bytes": "signed:rq_4",
+        "deliveries": 1,
+        "transport_accepted": null,
+        "device_answered": {
+         "status": "ok",
+         "error": null,
+         "state": "unknown",
+         "outcome": null,
+         "duty_held": false,
+         "epoch": 4,
+         "at": "2026-01-01T00:16:01Z"
+        }
+       }
+      ],
+      "events": [],
+      "outcome": {
+       "reason": "abandon_deadline",
+       "device_status": null,
+       "at": "2026-01-01T01:21:00Z"
+      }
+     },
+     {
+      "id": "job_3",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "direct",
+        "target": "ctc_2",
+        "text": "synthetic hello"
+       }
+      },
+      "idempotency_key": null,
+      "state": "succeeded",
+      "created_at": "2026-01-01T01:21:00Z",
+      "updated_at": "2026-01-01T01:21:00Z",
+      "expires_at": "2026-01-01T01:31:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_3",
+        "request_id": "rq_5",
+        "job_number": 3,
+        "bytes": "signed:rq_5",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T01:21:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "ok",
+          "error": null,
+          "state": "acked",
+          "outcome": null,
+          "duty_held": false,
+          "at": "2026-01-01T01:21:00Z"
+         },
+         "rf_transmitted": {
+          "count": 1,
+          "first_at": "2026-01-01T01:21:00Z",
+          "last_at": "2026-01-01T01:21:00Z"
+         },
+         "acked": "2026-01-01T01:21:00Z"
+        }
+       }
+      ],
+      "controls": [],
+      "events": [],
+      "outcome": {
+       "reason": "device_final",
+       "device_status": "acked",
+       "at": "2026-01-01T01:21:00Z"
+      }
+     },
+     {
+      "id": "job_4",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "direct",
+        "target": "ctc_2",
+        "text": "synthetic hello"
+       }
+      },
+      "idempotency_key": null,
+      "state": "unknown",
+      "created_at": "2026-01-01T01:21:00Z",
+      "updated_at": "2026-01-01T02:21:00Z",
+      "expires_at": "2026-01-01T01:31:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_4",
+        "request_id": "rq_6",
+        "job_number": 4,
+        "bytes": "signed:rq_6",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T01:21:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "ok",
+          "error": null,
+          "state": "timed-out",
+          "outcome": null,
+          "duty_held": false,
+          "at": "2026-01-01T01:21:00Z"
+         },
+         "rf_transmitted": {
+          "count": 1,
+          "first_at": "2026-01-01T01:21:00Z",
+          "last_at": "2026-01-01T01:21:00Z"
+         },
+         "acked": null
+        }
+       }
+      ],
+      "controls": [],
+      "events": [],
+      "outcome": {
+       "reason": "abandon_deadline",
+       "device_status": null,
+       "at": "2026-01-01T02:21:00Z"
+      }
+     },
+     {
+      "id": "job_5",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "channel",
+        "target": "chan_1",
+        "text": "synthetic broadcast"
+       }
+      },
+      "idempotency_key": null,
+      "state": "accepted",
+      "created_at": "2026-01-01T02:21:00Z",
+      "updated_at": "2026-01-01T02:21:00Z",
+      "expires_at": "2026-01-01T02:31:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [],
+      "controls": [],
+      "events": [],
+      "outcome": null
+     }
+    ]
+   }
+  },
+  {
+   "step": "deliver",
+   "worker": "worker_1",
+   "job": "job_5",
+   "expect": {
+    "response": {
+     "outcome": "delivered",
+     "attempt": "att_5",
+     "delivery": 1
+    },
+    "out": [
+     {
+      "job": "job_5",
+      "target": "att_5",
+      "kind": "attempt",
+      "op": "message.send",
+      "job_number": 5,
+      "request_id": "rq_7",
+      "bytes": "signed:rq_7",
+      "delivery": 1
+     }
+    ],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "direct",
+        "target": "ctc_2",
+        "text": "synthetic hello"
+       }
+      },
+      "idempotency_key": null,
+      "state": "succeeded",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:01:01Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_1",
+        "request_id": "rq_1",
+        "job_number": 1,
+        "bytes": "signed:rq_1",
+        "deliveries": 2,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "ok",
+          "error": null,
+          "state": "acked",
+          "outcome": null,
+          "duty_held": false,
+          "at": "2026-01-01T00:01:01Z"
+         },
+         "rf_transmitted": {
+          "count": 1,
+          "first_at": "2026-01-01T00:01:01Z",
+          "last_at": "2026-01-01T00:01:01Z"
+         },
+         "acked": "2026-01-01T00:01:01Z"
+        }
+       }
+      ],
+      "controls": [
+       {
+        "id": "ctl_1",
+        "op": "message.get",
+        "request_id": "rq_2",
+        "job_number": null,
+        "target_job_number": 1,
+        "attempt": "att_1",
+        "bytes": "signed:rq_2",
+        "deliveries": 1,
+        "transport_accepted": null,
+        "device_answered": {
+         "status": "ok",
+         "error": null,
+         "state": "transmitted",
+         "outcome": null,
+         "duty_held": false,
+         "epoch": 3,
+         "at": "2026-01-01T00:01:01Z"
+        }
+       }
+      ],
+      "events": [],
+      "outcome": {
+       "reason": "device_final",
+       "device_status": "acked",
+       "at": "2026-01-01T00:01:01Z"
+      }
+     },
+     {
+      "id": "job_2",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "direct",
+        "target": "ctc_2",
+        "text": "synthetic hello"
+       }
+      },
+      "idempotency_key": null,
+      "state": "unknown",
+      "created_at": "2026-01-01T00:01:01Z",
+      "updated_at": "2026-01-01T01:21:00Z",
+      "expires_at": "2026-01-01T00:11:01Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_2",
+        "request_id": "rq_3",
+        "job_number": 2,
+        "bytes": "signed:rq_3",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:01:01Z",
+         "transport_accepted": null,
+         "device_answered": null,
+         "rf_transmitted": null,
+         "acked": null
+        }
+       }
+      ],
+      "controls": [
+       {
+        "id": "ctl_2",
+        "op": "message.get",
+        "request_id": "rq_4",
+        "job_number": null,
+        "target_job_number": 2,
+        "attempt": "att_2",
+        "bytes": "signed:rq_4",
+        "deliveries": 1,
+        "transport_accepted": null,
+        "device_answered": {
+         "status": "ok",
+         "error": null,
+         "state": "unknown",
+         "outcome": null,
+         "duty_held": false,
+         "epoch": 4,
+         "at": "2026-01-01T00:16:01Z"
+        }
+       }
+      ],
+      "events": [],
+      "outcome": {
+       "reason": "abandon_deadline",
+       "device_status": null,
+       "at": "2026-01-01T01:21:00Z"
+      }
+     },
+     {
+      "id": "job_3",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "direct",
+        "target": "ctc_2",
+        "text": "synthetic hello"
+       }
+      },
+      "idempotency_key": null,
+      "state": "succeeded",
+      "created_at": "2026-01-01T01:21:00Z",
+      "updated_at": "2026-01-01T01:21:00Z",
+      "expires_at": "2026-01-01T01:31:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_3",
+        "request_id": "rq_5",
+        "job_number": 3,
+        "bytes": "signed:rq_5",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T01:21:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "ok",
+          "error": null,
+          "state": "acked",
+          "outcome": null,
+          "duty_held": false,
+          "at": "2026-01-01T01:21:00Z"
+         },
+         "rf_transmitted": {
+          "count": 1,
+          "first_at": "2026-01-01T01:21:00Z",
+          "last_at": "2026-01-01T01:21:00Z"
+         },
+         "acked": "2026-01-01T01:21:00Z"
+        }
+       }
+      ],
+      "controls": [],
+      "events": [],
+      "outcome": {
+       "reason": "device_final",
+       "device_status": "acked",
+       "at": "2026-01-01T01:21:00Z"
+      }
+     },
+     {
+      "id": "job_4",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "direct",
+        "target": "ctc_2",
+        "text": "synthetic hello"
+       }
+      },
+      "idempotency_key": null,
+      "state": "unknown",
+      "created_at": "2026-01-01T01:21:00Z",
+      "updated_at": "2026-01-01T02:21:00Z",
+      "expires_at": "2026-01-01T01:31:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_4",
+        "request_id": "rq_6",
+        "job_number": 4,
+        "bytes": "signed:rq_6",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T01:21:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "ok",
+          "error": null,
+          "state": "timed-out",
+          "outcome": null,
+          "duty_held": false,
+          "at": "2026-01-01T01:21:00Z"
+         },
+         "rf_transmitted": {
+          "count": 1,
+          "first_at": "2026-01-01T01:21:00Z",
+          "last_at": "2026-01-01T01:21:00Z"
+         },
+         "acked": null
+        }
+       }
+      ],
+      "controls": [],
+      "events": [],
+      "outcome": {
+       "reason": "abandon_deadline",
+       "device_status": null,
+       "at": "2026-01-01T02:21:00Z"
+      }
+     },
+     {
+      "id": "job_5",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "channel",
+        "target": "chan_1",
+        "text": "synthetic broadcast"
+       }
+      },
+      "idempotency_key": null,
+      "state": "dispatched",
+      "created_at": "2026-01-01T02:21:00Z",
+      "updated_at": "2026-01-01T02:21:00Z",
+      "expires_at": "2026-01-01T02:31:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_5",
+        "request_id": "rq_7",
+        "job_number": 5,
+        "bytes": "signed:rq_7",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T02:21:00Z",
+         "transport_accepted": null,
+         "device_answered": null,
+         "rf_transmitted": null,
+         "acked": null
+        }
+       }
+      ],
+      "controls": [],
+      "events": [],
+      "outcome": null
+     }
+    ]
+   }
+  },
+  {
+   "step": "device_answer",
+   "result": {
+    "signed_by": "dev_1",
+    "request_id": "rq_7",
+    "job_number": 5,
+    "status": "ok",
+    "state": "transmitted"
+   },
+   "expect": {
+    "response": {
+     "outcome": "applied"
+    },
+    "out": [],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "direct",
+        "target": "ctc_2",
+        "text": "synthetic hello"
+       }
+      },
+      "idempotency_key": null,
+      "state": "succeeded",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:01:01Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_1",
+        "request_id": "rq_1",
+        "job_number": 1,
+        "bytes": "signed:rq_1",
+        "deliveries": 2,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "ok",
+          "error": null,
+          "state": "acked",
+          "outcome": null,
+          "duty_held": false,
+          "at": "2026-01-01T00:01:01Z"
+         },
+         "rf_transmitted": {
+          "count": 1,
+          "first_at": "2026-01-01T00:01:01Z",
+          "last_at": "2026-01-01T00:01:01Z"
+         },
+         "acked": "2026-01-01T00:01:01Z"
+        }
+       }
+      ],
+      "controls": [
+       {
+        "id": "ctl_1",
+        "op": "message.get",
+        "request_id": "rq_2",
+        "job_number": null,
+        "target_job_number": 1,
+        "attempt": "att_1",
+        "bytes": "signed:rq_2",
+        "deliveries": 1,
+        "transport_accepted": null,
+        "device_answered": {
+         "status": "ok",
+         "error": null,
+         "state": "transmitted",
+         "outcome": null,
+         "duty_held": false,
+         "epoch": 3,
+         "at": "2026-01-01T00:01:01Z"
+        }
+       }
+      ],
+      "events": [],
+      "outcome": {
+       "reason": "device_final",
+       "device_status": "acked",
+       "at": "2026-01-01T00:01:01Z"
+      }
+     },
+     {
+      "id": "job_2",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "direct",
+        "target": "ctc_2",
+        "text": "synthetic hello"
+       }
+      },
+      "idempotency_key": null,
+      "state": "unknown",
+      "created_at": "2026-01-01T00:01:01Z",
+      "updated_at": "2026-01-01T01:21:00Z",
+      "expires_at": "2026-01-01T00:11:01Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_2",
+        "request_id": "rq_3",
+        "job_number": 2,
+        "bytes": "signed:rq_3",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:01:01Z",
+         "transport_accepted": null,
+         "device_answered": null,
+         "rf_transmitted": null,
+         "acked": null
+        }
+       }
+      ],
+      "controls": [
+       {
+        "id": "ctl_2",
+        "op": "message.get",
+        "request_id": "rq_4",
+        "job_number": null,
+        "target_job_number": 2,
+        "attempt": "att_2",
+        "bytes": "signed:rq_4",
+        "deliveries": 1,
+        "transport_accepted": null,
+        "device_answered": {
+         "status": "ok",
+         "error": null,
+         "state": "unknown",
+         "outcome": null,
+         "duty_held": false,
+         "epoch": 4,
+         "at": "2026-01-01T00:16:01Z"
+        }
+       }
+      ],
+      "events": [],
+      "outcome": {
+       "reason": "abandon_deadline",
+       "device_status": null,
+       "at": "2026-01-01T01:21:00Z"
+      }
+     },
+     {
+      "id": "job_3",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "direct",
+        "target": "ctc_2",
+        "text": "synthetic hello"
+       }
+      },
+      "idempotency_key": null,
+      "state": "succeeded",
+      "created_at": "2026-01-01T01:21:00Z",
+      "updated_at": "2026-01-01T01:21:00Z",
+      "expires_at": "2026-01-01T01:31:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_3",
+        "request_id": "rq_5",
+        "job_number": 3,
+        "bytes": "signed:rq_5",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T01:21:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "ok",
+          "error": null,
+          "state": "acked",
+          "outcome": null,
+          "duty_held": false,
+          "at": "2026-01-01T01:21:00Z"
+         },
+         "rf_transmitted": {
+          "count": 1,
+          "first_at": "2026-01-01T01:21:00Z",
+          "last_at": "2026-01-01T01:21:00Z"
+         },
+         "acked": "2026-01-01T01:21:00Z"
+        }
+       }
+      ],
+      "controls": [],
+      "events": [],
+      "outcome": {
+       "reason": "device_final",
+       "device_status": "acked",
+       "at": "2026-01-01T01:21:00Z"
+      }
+     },
+     {
+      "id": "job_4",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "direct",
+        "target": "ctc_2",
+        "text": "synthetic hello"
+       }
+      },
+      "idempotency_key": null,
+      "state": "unknown",
+      "created_at": "2026-01-01T01:21:00Z",
+      "updated_at": "2026-01-01T02:21:00Z",
+      "expires_at": "2026-01-01T01:31:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_4",
+        "request_id": "rq_6",
+        "job_number": 4,
+        "bytes": "signed:rq_6",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T01:21:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "ok",
+          "error": null,
+          "state": "timed-out",
+          "outcome": null,
+          "duty_held": false,
+          "at": "2026-01-01T01:21:00Z"
+         },
+         "rf_transmitted": {
+          "count": 1,
+          "first_at": "2026-01-01T01:21:00Z",
+          "last_at": "2026-01-01T01:21:00Z"
+         },
+         "acked": null
+        }
+       }
+      ],
+      "controls": [],
+      "events": [],
+      "outcome": {
+       "reason": "abandon_deadline",
+       "device_status": null,
+       "at": "2026-01-01T02:21:00Z"
+      }
+     },
+     {
+      "id": "job_5",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "channel",
+        "target": "chan_1",
+        "text": "synthetic broadcast"
+       }
+      },
+      "idempotency_key": null,
+      "state": "succeeded",
+      "created_at": "2026-01-01T02:21:00Z",
+      "updated_at": "2026-01-01T02:21:00Z",
+      "expires_at": "2026-01-01T02:31:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_5",
+        "request_id": "rq_7",
+        "job_number": 5,
+        "bytes": "signed:rq_7",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T02:21:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "ok",
+          "error": null,
+          "state": "transmitted",
+          "outcome": null,
+          "duty_held": false,
+          "at": "2026-01-01T02:21:00Z"
+         },
+         "rf_transmitted": {
+          "count": 1,
+          "first_at": "2026-01-01T02:21:00Z",
+          "last_at": "2026-01-01T02:21:00Z"
+         },
+         "acked": null
+        }
+       }
+      ],
+      "controls": [],
+      "events": [],
+      "outcome": {
+       "reason": "device_final",
+       "device_status": "transmitted",
+       "at": "2026-01-01T02:21:00Z"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "step": "device_answer",
+   "result": {
+    "signed_by": "dev_1",
+    "request_id": "rq_7",
+    "job_number": 5,
+    "status": "ok",
+    "state": "acked"
+   },
+   "expect": {
+    "response": {
+     "outcome": "ignored"
+    },
+    "out": [],
+    "ignored_results": 1,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "direct",
+        "target": "ctc_2",
+        "text": "synthetic hello"
+       }
+      },
+      "idempotency_key": null,
+      "state": "succeeded",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:01:01Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_1",
+        "request_id": "rq_1",
+        "job_number": 1,
+        "bytes": "signed:rq_1",
+        "deliveries": 2,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "ok",
+          "error": null,
+          "state": "acked",
+          "outcome": null,
+          "duty_held": false,
+          "at": "2026-01-01T00:01:01Z"
+         },
+         "rf_transmitted": {
+          "count": 1,
+          "first_at": "2026-01-01T00:01:01Z",
+          "last_at": "2026-01-01T00:01:01Z"
+         },
+         "acked": "2026-01-01T00:01:01Z"
+        }
+       }
+      ],
+      "controls": [
+       {
+        "id": "ctl_1",
+        "op": "message.get",
+        "request_id": "rq_2",
+        "job_number": null,
+        "target_job_number": 1,
+        "attempt": "att_1",
+        "bytes": "signed:rq_2",
+        "deliveries": 1,
+        "transport_accepted": null,
+        "device_answered": {
+         "status": "ok",
+         "error": null,
+         "state": "transmitted",
+         "outcome": null,
+         "duty_held": false,
+         "epoch": 3,
+         "at": "2026-01-01T00:01:01Z"
+        }
+       }
+      ],
+      "events": [],
+      "outcome": {
+       "reason": "device_final",
+       "device_status": "acked",
+       "at": "2026-01-01T00:01:01Z"
+      }
+     },
+     {
+      "id": "job_2",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "direct",
+        "target": "ctc_2",
+        "text": "synthetic hello"
+       }
+      },
+      "idempotency_key": null,
+      "state": "unknown",
+      "created_at": "2026-01-01T00:01:01Z",
+      "updated_at": "2026-01-01T01:21:00Z",
+      "expires_at": "2026-01-01T00:11:01Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_2",
+        "request_id": "rq_3",
+        "job_number": 2,
+        "bytes": "signed:rq_3",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:01:01Z",
+         "transport_accepted": null,
+         "device_answered": null,
+         "rf_transmitted": null,
+         "acked": null
+        }
+       }
+      ],
+      "controls": [
+       {
+        "id": "ctl_2",
+        "op": "message.get",
+        "request_id": "rq_4",
+        "job_number": null,
+        "target_job_number": 2,
+        "attempt": "att_2",
+        "bytes": "signed:rq_4",
+        "deliveries": 1,
+        "transport_accepted": null,
+        "device_answered": {
+         "status": "ok",
+         "error": null,
+         "state": "unknown",
+         "outcome": null,
+         "duty_held": false,
+         "epoch": 4,
+         "at": "2026-01-01T00:16:01Z"
+        }
+       }
+      ],
+      "events": [],
+      "outcome": {
+       "reason": "abandon_deadline",
+       "device_status": null,
+       "at": "2026-01-01T01:21:00Z"
+      }
+     },
+     {
+      "id": "job_3",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "direct",
+        "target": "ctc_2",
+        "text": "synthetic hello"
+       }
+      },
+      "idempotency_key": null,
+      "state": "succeeded",
+      "created_at": "2026-01-01T01:21:00Z",
+      "updated_at": "2026-01-01T01:21:00Z",
+      "expires_at": "2026-01-01T01:31:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_3",
+        "request_id": "rq_5",
+        "job_number": 3,
+        "bytes": "signed:rq_5",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T01:21:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "ok",
+          "error": null,
+          "state": "acked",
+          "outcome": null,
+          "duty_held": false,
+          "at": "2026-01-01T01:21:00Z"
+         },
+         "rf_transmitted": {
+          "count": 1,
+          "first_at": "2026-01-01T01:21:00Z",
+          "last_at": "2026-01-01T01:21:00Z"
+         },
+         "acked": "2026-01-01T01:21:00Z"
+        }
+       }
+      ],
+      "controls": [],
+      "events": [],
+      "outcome": {
+       "reason": "device_final",
+       "device_status": "acked",
+       "at": "2026-01-01T01:21:00Z"
+      }
+     },
+     {
+      "id": "job_4",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "direct",
+        "target": "ctc_2",
+        "text": "synthetic hello"
+       }
+      },
+      "idempotency_key": null,
+      "state": "unknown",
+      "created_at": "2026-01-01T01:21:00Z",
+      "updated_at": "2026-01-01T02:21:00Z",
+      "expires_at": "2026-01-01T01:31:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_4",
+        "request_id": "rq_6",
+        "job_number": 4,
+        "bytes": "signed:rq_6",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T01:21:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "ok",
+          "error": null,
+          "state": "timed-out",
+          "outcome": null,
+          "duty_held": false,
+          "at": "2026-01-01T01:21:00Z"
+         },
+         "rf_transmitted": {
+          "count": 1,
+          "first_at": "2026-01-01T01:21:00Z",
+          "last_at": "2026-01-01T01:21:00Z"
+         },
+         "acked": null
+        }
+       }
+      ],
+      "controls": [],
+      "events": [],
+      "outcome": {
+       "reason": "abandon_deadline",
+       "device_status": null,
+       "at": "2026-01-01T02:21:00Z"
+      }
+     },
+     {
+      "id": "job_5",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "message.send",
+       "args": {
+        "kind": "channel",
+        "target": "chan_1",
+        "text": "synthetic broadcast"
+       }
+      },
+      "idempotency_key": null,
+      "state": "succeeded",
+      "created_at": "2026-01-01T02:21:00Z",
+      "updated_at": "2026-01-01T02:21:00Z",
+      "expires_at": "2026-01-01T02:31:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_5",
+        "request_id": "rq_7",
+        "job_number": 5,
+        "bytes": "signed:rq_7",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T02:21:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "ok",
+          "error": null,
+          "state": "transmitted",
+          "outcome": null,
+          "duty_held": false,
+          "at": "2026-01-01T02:21:00Z"
+         },
+         "rf_transmitted": {
+          "count": 1,
+          "first_at": "2026-01-01T02:21:00Z",
+          "last_at": "2026-01-01T02:21:00Z"
+         },
+         "acked": null
+        }
+       }
+      ],
+      "controls": [],
+      "events": [],
+      "outcome": {
+       "reason": "device_final",
+       "device_status": "transmitted",
+       "at": "2026-01-01T02:21:00Z"
       }
      }
     ]

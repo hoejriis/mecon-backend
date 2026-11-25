@@ -112,6 +112,7 @@ export function validateDeviceDispatch(dir = 'device-dispatch/v1') {
         if (st.packet_fixed !== true || st.companion_timeout_s !== 120 || st.lifetime_s !== 600) fail(`fixtures/${f}: runs[${ri}] must be a fixed-bytes packet send with a Companion timeout of 120 s and a lifetime of 600 s`);
         if (JSON.stringify([...st.order].sort()) !== JSON.stringify(Object.keys(st.gateways).sort())) fail(`fixtures/${f}: runs[${ri}] order is not a seeded order of every gateway`);
         let prev = null;
+        let ackAt = null;
         run.steps.forEach((s, i) => {
           coverage.origin.add(s.step);
           const e = s.expect;
@@ -131,10 +132,13 @@ export function validateDeviceDispatch(dir = 'device-dispatch/v1') {
           if (prev?.closed !== null && prev?.closed !== undefined && e.scheduled.length) fail(`${at} an origin after the scheduling closed`);
           if (e.closed === 'native_ack' && st.message_kind !== 'direct') fail(`${at} a native ACK stopped a channel message`);
           if (e.closed === 'lifetime' && s.t < st.lifetime_s) fail(`${at} closed before the lifetime`);
-          if (e.cancel_sent.length && s.step !== 'native_ack') fail(`${at} a cancel outside a native ACK`);
+          if ((e.cancel_sent.length || e.cancel_given_up.length) && !['native_ack', 'cancel_result'].includes(s.step)) fail(`${at} a cancel outside a native ACK`);
+          if (e.cancel_given_up.length && s.t < ackAt + 300) fail(`${at} a cancel given up before 300 s`);
+          if (s.step === 'native_ack' && e.closed === 'native_ack') ackAt ??= s.t;
           for (const g of e.cancel_sent) {
             const before = prev?.origins.find((o) => o.gateway === g);
             if (!before || !['queued', 'duty-held', null].includes(before.result)) fail(`${at} a cancel to ${g}, whose job is no longer cancellable`);
+            if (st.gateways[g].kind !== 'repeater') fail(`${at} a cancel to ${g}, which is not a Repeater origin`);
           }
           prev = e;
         });

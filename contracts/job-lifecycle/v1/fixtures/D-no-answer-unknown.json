@@ -1,6 +1,6 @@
 {
  "fixture": "D",
- "title": "No answer: identical re-delivery, plain reads every 300 s, unknown (never failed) at 3600 s from signing; and a device that lost the job",
+ "title": "No answer: identical re-delivery, the first read after 900 s of quiet and later reads every 300 s, unknown (never failed) at 3600 s from signing; and a device that lost the job",
  "kind": "lifecycle",
  "contract_version": "1.0.0-draft.1",
  "setup": {
@@ -341,7 +341,7 @@
   },
   {
    "step": "advance",
-   "seconds": 240,
+   "seconds": 339,
    "expect": {
     "response": {
      "outcome": "advanced"
@@ -448,6 +448,174 @@
    "job": "job_1",
    "expect": {
     "response": {
+     "outcome": "redelivered",
+     "attempt": "att_1",
+     "delivery": 3
+    },
+    "out": [
+     {
+      "job": "job_1",
+      "target": "att_1",
+      "kind": "attempt",
+      "op": "packet.transmit",
+      "job_number": 1,
+      "request_id": "rq_1",
+      "bytes": "signed:rq_1",
+      "delivery": 3
+     }
+    ],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "packet.transmit",
+       "args": {
+        "packet_hex": "0a0b0c0d"
+       }
+      },
+      "idempotency_key": null,
+      "state": "dispatched",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:06:40Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_1",
+        "request_id": "rq_1",
+        "job_number": 1,
+        "bytes": "signed:rq_1",
+        "deliveries": 3,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": null,
+         "device_answered": null,
+         "rf_transmitted": null,
+         "acked": null
+        }
+       }
+      ],
+      "controls": [],
+      "events": [],
+      "outcome": null
+     }
+    ]
+   }
+  },
+  {
+   "step": "advance",
+   "seconds": 501,
+   "expect": {
+    "response": {
+     "outcome": "advanced"
+    },
+    "out": [],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "packet.transmit",
+       "args": {
+        "packet_hex": "0a0b0c0d"
+       }
+      },
+      "idempotency_key": null,
+      "state": "dispatched",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:06:40Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_1",
+        "request_id": "rq_1",
+        "job_number": 1,
+        "bytes": "signed:rq_1",
+        "deliveries": 3,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": null,
+         "device_answered": null,
+         "rf_transmitted": null,
+         "acked": null
+        }
+       }
+      ],
+      "controls": [],
+      "events": [],
+      "outcome": null
+     }
+    ]
+   }
+  },
+  {
+   "step": "claim",
+   "worker": "worker_1",
+   "job": "job_1",
+   "expect": {
+    "response": {
+     "outcome": "claimed"
+    },
+    "out": [],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "packet.transmit",
+       "args": {
+        "packet_hex": "0a0b0c0d"
+       }
+      },
+      "idempotency_key": null,
+      "state": "dispatched",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:06:40Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_1",
+        "request_id": "rq_1",
+        "job_number": 1,
+        "bytes": "signed:rq_1",
+        "deliveries": 3,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": null,
+         "device_answered": null,
+         "rf_transmitted": null,
+         "acked": null
+        }
+       }
+      ],
+      "controls": [],
+      "events": [],
+      "outcome": null
+     }
+    ]
+   }
+  },
+  {
+   "step": "deliver",
+   "worker": "worker_1",
+   "job": "job_1",
+   "expect": {
+    "response": {
      "outcome": "sent",
      "control": "ctl_1",
      "op": "job.get"
@@ -479,7 +647,7 @@
       "idempotency_key": null,
       "state": "dispatched",
       "created_at": "2026-01-01T00:00:00Z",
-      "updated_at": "2026-01-01T00:05:01Z",
+      "updated_at": "2026-01-01T00:15:01Z",
       "expires_at": "2026-01-01T00:10:00Z",
       "cancel_requested_at": null,
       "redelivery_halted": false,
@@ -489,7 +657,7 @@
         "request_id": "rq_1",
         "job_number": 1,
         "bytes": "signed:rq_1",
-        "deliveries": 2,
+        "deliveries": 3,
         "nothing_ran": false,
         "dispositions": {
          "signed": "2026-01-01T00:00:00Z",
@@ -543,7 +711,7 @@
       "idempotency_key": null,
       "state": "dispatched",
       "created_at": "2026-01-01T00:00:00Z",
-      "updated_at": "2026-01-01T00:05:01Z",
+      "updated_at": "2026-01-01T00:15:01Z",
       "expires_at": "2026-01-01T00:10:00Z",
       "cancel_requested_at": null,
       "redelivery_halted": false,
@@ -553,7 +721,7 @@
         "request_id": "rq_1",
         "job_number": 1,
         "bytes": "signed:rq_1",
-        "deliveries": 2,
+        "deliveries": 3,
         "nothing_ran": false,
         "dispositions": {
          "signed": "2026-01-01T00:00:00Z",
@@ -608,7 +776,7 @@
       "idempotency_key": null,
       "state": "dispatched",
       "created_at": "2026-01-01T00:00:00Z",
-      "updated_at": "2026-01-01T00:05:01Z",
+      "updated_at": "2026-01-01T00:15:01Z",
       "expires_at": "2026-01-01T00:10:00Z",
       "cancel_requested_at": null,
       "redelivery_halted": false,
@@ -618,7 +786,7 @@
         "request_id": "rq_1",
         "job_number": 1,
         "bytes": "signed:rq_1",
-        "deliveries": 2,
+        "deliveries": 3,
         "nothing_ran": false,
         "dispositions": {
          "signed": "2026-01-01T00:00:00Z",
@@ -686,7 +854,7 @@
       "idempotency_key": null,
       "state": "dispatched",
       "created_at": "2026-01-01T00:00:00Z",
-      "updated_at": "2026-01-01T00:10:01Z",
+      "updated_at": "2026-01-01T00:20:01Z",
       "expires_at": "2026-01-01T00:10:00Z",
       "cancel_requested_at": null,
       "redelivery_halted": false,
@@ -696,7 +864,7 @@
         "request_id": "rq_1",
         "job_number": 1,
         "bytes": "signed:rq_1",
-        "deliveries": 2,
+        "deliveries": 3,
         "nothing_ran": false,
         "dispositions": {
          "signed": "2026-01-01T00:00:00Z",
@@ -741,7 +909,7 @@
   },
   {
    "step": "advance",
-   "seconds": 2999,
+   "seconds": 2399,
    "expect": {
     "response": {
      "outcome": "advanced"
@@ -772,7 +940,7 @@
         "request_id": "rq_1",
         "job_number": 1,
         "bytes": "signed:rq_1",
-        "deliveries": 2,
+        "deliveries": 3,
         "nothing_ran": false,
         "dispositions": {
          "signed": "2026-01-01T00:00:00Z",
@@ -852,7 +1020,7 @@
         "request_id": "rq_1",
         "job_number": 1,
         "bytes": "signed:rq_1",
-        "deliveries": 2,
+        "deliveries": 3,
         "nothing_ran": false,
         "dispositions": {
          "signed": "2026-01-01T00:00:00Z",
@@ -906,7 +1074,8 @@
     "request_id": "rq_1",
     "job_number": 1,
     "status": "ok",
-    "state": "done"
+    "state": "applied",
+    "outcome": "transmitted"
    },
    "expect": {
     "response": {
@@ -938,7 +1107,7 @@
         "request_id": "rq_1",
         "job_number": 1,
         "bytes": "signed:rq_1",
-        "deliveries": 2,
+        "deliveries": 3,
         "nothing_ran": false,
         "dispositions": {
          "signed": "2026-01-01T00:00:00Z",
@@ -1027,7 +1196,7 @@
         "request_id": "rq_1",
         "job_number": 1,
         "bytes": "signed:rq_1",
-        "deliveries": 2,
+        "deliveries": 3,
         "nothing_ran": false,
         "dispositions": {
          "signed": "2026-01-01T00:00:00Z",
@@ -1131,7 +1300,7 @@
         "request_id": "rq_1",
         "job_number": 1,
         "bytes": "signed:rq_1",
-        "deliveries": 2,
+        "deliveries": 3,
         "nothing_ran": false,
         "dispositions": {
          "signed": "2026-01-01T00:00:00Z",
@@ -1248,7 +1417,7 @@
         "request_id": "rq_1",
         "job_number": 1,
         "bytes": "signed:rq_1",
-        "deliveries": 2,
+        "deliveries": 3,
         "nothing_ran": false,
         "dispositions": {
          "signed": "2026-01-01T00:00:00Z",
@@ -1336,7 +1505,7 @@
   },
   {
    "step": "advance",
-   "seconds": 301,
+   "seconds": 900,
    "expect": {
     "response": {
      "outcome": "advanced"
@@ -1367,7 +1536,7 @@
         "request_id": "rq_1",
         "job_number": 1,
         "bytes": "signed:rq_1",
-        "deliveries": 2,
+        "deliveries": 3,
         "nothing_ran": false,
         "dispositions": {
          "signed": "2026-01-01T00:00:00Z",
@@ -1487,7 +1656,7 @@
         "request_id": "rq_1",
         "job_number": 1,
         "bytes": "signed:rq_1",
-        "deliveries": 2,
+        "deliveries": 3,
         "nothing_ran": false,
         "dispositions": {
          "signed": "2026-01-01T00:00:00Z",
@@ -1620,7 +1789,7 @@
         "request_id": "rq_1",
         "job_number": 1,
         "bytes": "signed:rq_1",
-        "deliveries": 2,
+        "deliveries": 3,
         "nothing_ran": false,
         "dispositions": {
          "signed": "2026-01-01T00:00:00Z",
@@ -1678,7 +1847,7 @@
       "idempotency_key": null,
       "state": "dispatched",
       "created_at": "2026-01-01T01:00:01Z",
-      "updated_at": "2026-01-01T01:05:02Z",
+      "updated_at": "2026-01-01T01:15:01Z",
       "expires_at": "2026-01-01T01:10:01Z",
       "cancel_requested_at": null,
       "redelivery_halted": false,
@@ -1758,7 +1927,7 @@
         "request_id": "rq_1",
         "job_number": 1,
         "bytes": "signed:rq_1",
-        "deliveries": 2,
+        "deliveries": 3,
         "nothing_ran": false,
         "dispositions": {
          "signed": "2026-01-01T00:00:00Z",
@@ -1816,7 +1985,7 @@
       "idempotency_key": null,
       "state": "unknown",
       "created_at": "2026-01-01T01:00:01Z",
-      "updated_at": "2026-01-01T01:05:02Z",
+      "updated_at": "2026-01-01T01:15:01Z",
       "expires_at": "2026-01-01T01:10:01Z",
       "cancel_requested_at": null,
       "redelivery_halted": false,
@@ -1835,7 +2004,9 @@
           "status": "failed",
           "error": "unknown-job",
           "state": null,
-          "at": "2026-01-01T01:05:02Z"
+          "outcome": null,
+          "duty_held": false,
+          "at": "2026-01-01T01:15:01Z"
          },
          "rf_transmitted": null,
          "acked": null
@@ -1857,8 +2028,10 @@
          "status": "failed",
          "error": "unknown-job",
          "state": null,
+         "outcome": null,
+         "duty_held": false,
          "epoch": null,
-         "at": "2026-01-01T01:05:02Z"
+         "at": "2026-01-01T01:15:01Z"
         }
        }
       ],
@@ -1866,7 +2039,7 @@
       "outcome": {
        "reason": "device_lost_job",
        "device_status": null,
-       "at": "2026-01-01T01:05:02Z"
+       "at": "2026-01-01T01:15:01Z"
       }
      }
     ]
@@ -1914,7 +2087,7 @@
         "request_id": "rq_1",
         "job_number": 1,
         "bytes": "signed:rq_1",
-        "deliveries": 2,
+        "deliveries": 3,
         "nothing_ran": false,
         "dispositions": {
          "signed": "2026-01-01T00:00:00Z",
@@ -1972,7 +2145,7 @@
       "idempotency_key": null,
       "state": "unknown",
       "created_at": "2026-01-01T01:00:01Z",
-      "updated_at": "2026-01-01T01:05:02Z",
+      "updated_at": "2026-01-01T01:15:01Z",
       "expires_at": "2026-01-01T01:10:01Z",
       "cancel_requested_at": null,
       "redelivery_halted": false,
@@ -1991,7 +2164,9 @@
           "status": "failed",
           "error": "unknown-job",
           "state": null,
-          "at": "2026-01-01T01:05:02Z"
+          "outcome": null,
+          "duty_held": false,
+          "at": "2026-01-01T01:15:01Z"
          },
          "rf_transmitted": null,
          "acked": null
@@ -2013,8 +2188,10 @@
          "status": "failed",
          "error": "unknown-job",
          "state": null,
+         "outcome": null,
+         "duty_held": false,
          "epoch": null,
-         "at": "2026-01-01T01:05:02Z"
+         "at": "2026-01-01T01:15:01Z"
         }
        }
       ],
@@ -2022,7 +2199,7 @@
       "outcome": {
        "reason": "device_lost_job",
        "device_status": null,
-       "at": "2026-01-01T01:05:02Z"
+       "at": "2026-01-01T01:15:01Z"
       }
      },
      {
@@ -2038,9 +2215,9 @@
       },
       "idempotency_key": null,
       "state": "accepted",
-      "created_at": "2026-01-01T01:05:02Z",
-      "updated_at": "2026-01-01T01:05:02Z",
-      "expires_at": "2026-01-01T01:15:02Z",
+      "created_at": "2026-01-01T01:15:01Z",
+      "updated_at": "2026-01-01T01:15:01Z",
+      "expires_at": "2026-01-01T01:25:01Z",
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [],
@@ -2085,7 +2262,7 @@
         "request_id": "rq_1",
         "job_number": 1,
         "bytes": "signed:rq_1",
-        "deliveries": 2,
+        "deliveries": 3,
         "nothing_ran": false,
         "dispositions": {
          "signed": "2026-01-01T00:00:00Z",
@@ -2143,7 +2320,7 @@
       "idempotency_key": null,
       "state": "unknown",
       "created_at": "2026-01-01T01:00:01Z",
-      "updated_at": "2026-01-01T01:05:02Z",
+      "updated_at": "2026-01-01T01:15:01Z",
       "expires_at": "2026-01-01T01:10:01Z",
       "cancel_requested_at": null,
       "redelivery_halted": false,
@@ -2162,7 +2339,9 @@
           "status": "failed",
           "error": "unknown-job",
           "state": null,
-          "at": "2026-01-01T01:05:02Z"
+          "outcome": null,
+          "duty_held": false,
+          "at": "2026-01-01T01:15:01Z"
          },
          "rf_transmitted": null,
          "acked": null
@@ -2184,8 +2363,10 @@
          "status": "failed",
          "error": "unknown-job",
          "state": null,
+         "outcome": null,
+         "duty_held": false,
          "epoch": null,
-         "at": "2026-01-01T01:05:02Z"
+         "at": "2026-01-01T01:15:01Z"
         }
        }
       ],
@@ -2193,7 +2374,7 @@
       "outcome": {
        "reason": "device_lost_job",
        "device_status": null,
-       "at": "2026-01-01T01:05:02Z"
+       "at": "2026-01-01T01:15:01Z"
       }
      },
      {
@@ -2209,9 +2390,9 @@
       },
       "idempotency_key": null,
       "state": "accepted",
-      "created_at": "2026-01-01T01:05:02Z",
-      "updated_at": "2026-01-01T01:05:02Z",
-      "expires_at": "2026-01-01T01:15:02Z",
+      "created_at": "2026-01-01T01:15:01Z",
+      "updated_at": "2026-01-01T01:15:01Z",
+      "expires_at": "2026-01-01T01:25:01Z",
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [],
@@ -2257,7 +2438,7 @@
         "request_id": "rq_1",
         "job_number": 1,
         "bytes": "signed:rq_1",
-        "deliveries": 2,
+        "deliveries": 3,
         "nothing_ran": false,
         "dispositions": {
          "signed": "2026-01-01T00:00:00Z",
@@ -2315,7 +2496,7 @@
       "idempotency_key": null,
       "state": "unknown",
       "created_at": "2026-01-01T01:00:01Z",
-      "updated_at": "2026-01-01T01:05:02Z",
+      "updated_at": "2026-01-01T01:15:01Z",
       "expires_at": "2026-01-01T01:10:01Z",
       "cancel_requested_at": null,
       "redelivery_halted": false,
@@ -2334,7 +2515,9 @@
           "status": "failed",
           "error": "unknown-job",
           "state": null,
-          "at": "2026-01-01T01:05:02Z"
+          "outcome": null,
+          "duty_held": false,
+          "at": "2026-01-01T01:15:01Z"
          },
          "rf_transmitted": null,
          "acked": null
@@ -2356,8 +2539,10 @@
          "status": "failed",
          "error": "unknown-job",
          "state": null,
+         "outcome": null,
+         "duty_held": false,
          "epoch": null,
-         "at": "2026-01-01T01:05:02Z"
+         "at": "2026-01-01T01:15:01Z"
         }
        }
       ],
@@ -2365,7 +2550,7 @@
       "outcome": {
        "reason": "device_lost_job",
        "device_status": null,
-       "at": "2026-01-01T01:05:02Z"
+       "at": "2026-01-01T01:15:01Z"
       }
      },
      {
@@ -2381,9 +2566,9 @@
       },
       "idempotency_key": null,
       "state": "accepted",
-      "created_at": "2026-01-01T01:05:02Z",
-      "updated_at": "2026-01-01T01:05:02Z",
-      "expires_at": "2026-01-01T01:15:02Z",
+      "created_at": "2026-01-01T01:15:01Z",
+      "updated_at": "2026-01-01T01:15:01Z",
+      "expires_at": "2026-01-01T01:25:01Z",
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [
@@ -2395,7 +2580,7 @@
         "deliveries": 0,
         "nothing_ran": false,
         "dispositions": {
-         "signed": "2026-01-01T01:05:02Z",
+         "signed": "2026-01-01T01:15:01Z",
          "transport_accepted": null,
          "device_answered": null,
          "rf_transmitted": null,
@@ -2443,7 +2628,7 @@
         "request_id": "rq_1",
         "job_number": 1,
         "bytes": "signed:rq_1",
-        "deliveries": 2,
+        "deliveries": 3,
         "nothing_ran": false,
         "dispositions": {
          "signed": "2026-01-01T00:00:00Z",
@@ -2501,7 +2686,7 @@
       "idempotency_key": null,
       "state": "unknown",
       "created_at": "2026-01-01T01:00:01Z",
-      "updated_at": "2026-01-01T01:05:02Z",
+      "updated_at": "2026-01-01T01:15:01Z",
       "expires_at": "2026-01-01T01:10:01Z",
       "cancel_requested_at": null,
       "redelivery_halted": false,
@@ -2520,7 +2705,9 @@
           "status": "failed",
           "error": "unknown-job",
           "state": null,
-          "at": "2026-01-01T01:05:02Z"
+          "outcome": null,
+          "duty_held": false,
+          "at": "2026-01-01T01:15:01Z"
          },
          "rf_transmitted": null,
          "acked": null
@@ -2542,8 +2729,10 @@
          "status": "failed",
          "error": "unknown-job",
          "state": null,
+         "outcome": null,
+         "duty_held": false,
          "epoch": null,
-         "at": "2026-01-01T01:05:02Z"
+         "at": "2026-01-01T01:15:01Z"
         }
        }
       ],
@@ -2551,7 +2740,7 @@
       "outcome": {
        "reason": "device_lost_job",
        "device_status": null,
-       "at": "2026-01-01T01:05:02Z"
+       "at": "2026-01-01T01:15:01Z"
       }
      },
      {
@@ -2567,9 +2756,9 @@
       },
       "idempotency_key": null,
       "state": "accepted",
-      "created_at": "2026-01-01T01:05:02Z",
-      "updated_at": "2026-01-01T01:05:02Z",
-      "expires_at": "2026-01-01T01:15:02Z",
+      "created_at": "2026-01-01T01:15:01Z",
+      "updated_at": "2026-01-01T01:15:01Z",
+      "expires_at": "2026-01-01T01:25:01Z",
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [
@@ -2581,7 +2770,7 @@
         "deliveries": 0,
         "nothing_ran": false,
         "dispositions": {
-         "signed": "2026-01-01T01:05:02Z",
+         "signed": "2026-01-01T01:15:01Z",
          "transport_accepted": null,
          "device_answered": null,
          "rf_transmitted": null,
@@ -2643,7 +2832,7 @@
         "request_id": "rq_1",
         "job_number": 1,
         "bytes": "signed:rq_1",
-        "deliveries": 2,
+        "deliveries": 3,
         "nothing_ran": false,
         "dispositions": {
          "signed": "2026-01-01T00:00:00Z",
@@ -2701,7 +2890,7 @@
       "idempotency_key": null,
       "state": "unknown",
       "created_at": "2026-01-01T01:00:01Z",
-      "updated_at": "2026-01-01T01:05:02Z",
+      "updated_at": "2026-01-01T01:15:01Z",
       "expires_at": "2026-01-01T01:10:01Z",
       "cancel_requested_at": null,
       "redelivery_halted": false,
@@ -2720,7 +2909,9 @@
           "status": "failed",
           "error": "unknown-job",
           "state": null,
-          "at": "2026-01-01T01:05:02Z"
+          "outcome": null,
+          "duty_held": false,
+          "at": "2026-01-01T01:15:01Z"
          },
          "rf_transmitted": null,
          "acked": null
@@ -2742,8 +2933,10 @@
          "status": "failed",
          "error": "unknown-job",
          "state": null,
+         "outcome": null,
+         "duty_held": false,
          "epoch": null,
-         "at": "2026-01-01T01:05:02Z"
+         "at": "2026-01-01T01:15:01Z"
         }
        }
       ],
@@ -2751,7 +2944,7 @@
       "outcome": {
        "reason": "device_lost_job",
        "device_status": null,
-       "at": "2026-01-01T01:05:02Z"
+       "at": "2026-01-01T01:15:01Z"
       }
      },
      {
@@ -2767,9 +2960,9 @@
       },
       "idempotency_key": null,
       "state": "dispatched",
-      "created_at": "2026-01-01T01:05:02Z",
-      "updated_at": "2026-01-01T01:05:22Z",
-      "expires_at": "2026-01-01T01:15:02Z",
+      "created_at": "2026-01-01T01:15:01Z",
+      "updated_at": "2026-01-01T01:15:21Z",
+      "expires_at": "2026-01-01T01:25:01Z",
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [
@@ -2781,7 +2974,7 @@
         "deliveries": 1,
         "nothing_ran": false,
         "dispositions": {
-         "signed": "2026-01-01T01:05:02Z",
+         "signed": "2026-01-01T01:15:01Z",
          "transport_accepted": null,
          "device_answered": null,
          "rf_transmitted": null,
@@ -2829,7 +3022,7 @@
         "request_id": "rq_1",
         "job_number": 1,
         "bytes": "signed:rq_1",
-        "deliveries": 2,
+        "deliveries": 3,
         "nothing_ran": false,
         "dispositions": {
          "signed": "2026-01-01T00:00:00Z",
@@ -2887,7 +3080,7 @@
       "idempotency_key": null,
       "state": "unknown",
       "created_at": "2026-01-01T01:00:01Z",
-      "updated_at": "2026-01-01T01:05:02Z",
+      "updated_at": "2026-01-01T01:15:01Z",
       "expires_at": "2026-01-01T01:10:01Z",
       "cancel_requested_at": null,
       "redelivery_halted": false,
@@ -2906,7 +3099,9 @@
           "status": "failed",
           "error": "unknown-job",
           "state": null,
-          "at": "2026-01-01T01:05:02Z"
+          "outcome": null,
+          "duty_held": false,
+          "at": "2026-01-01T01:15:01Z"
          },
          "rf_transmitted": null,
          "acked": null
@@ -2928,8 +3123,10 @@
          "status": "failed",
          "error": "unknown-job",
          "state": null,
+         "outcome": null,
+         "duty_held": false,
          "epoch": null,
-         "at": "2026-01-01T01:05:02Z"
+         "at": "2026-01-01T01:15:01Z"
         }
        }
       ],
@@ -2937,7 +3134,7 @@
       "outcome": {
        "reason": "device_lost_job",
        "device_status": null,
-       "at": "2026-01-01T01:05:02Z"
+       "at": "2026-01-01T01:15:01Z"
       }
      },
      {
@@ -2953,9 +3150,9 @@
       },
       "idempotency_key": null,
       "state": "dispatched",
-      "created_at": "2026-01-01T01:05:02Z",
-      "updated_at": "2026-01-01T01:05:22Z",
-      "expires_at": "2026-01-01T01:15:02Z",
+      "created_at": "2026-01-01T01:15:01Z",
+      "updated_at": "2026-01-01T01:15:21Z",
+      "expires_at": "2026-01-01T01:25:01Z",
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [
@@ -2967,7 +3164,7 @@
         "deliveries": 1,
         "nothing_ran": false,
         "dispositions": {
-         "signed": "2026-01-01T01:05:02Z",
+         "signed": "2026-01-01T01:15:01Z",
          "transport_accepted": null,
          "device_answered": null,
          "rf_transmitted": null,
@@ -3015,7 +3212,7 @@
         "request_id": "rq_1",
         "job_number": 1,
         "bytes": "signed:rq_1",
-        "deliveries": 2,
+        "deliveries": 3,
         "nothing_ran": false,
         "dispositions": {
          "signed": "2026-01-01T00:00:00Z",
@@ -3073,7 +3270,7 @@
       "idempotency_key": null,
       "state": "unknown",
       "created_at": "2026-01-01T01:00:01Z",
-      "updated_at": "2026-01-01T01:05:02Z",
+      "updated_at": "2026-01-01T01:15:01Z",
       "expires_at": "2026-01-01T01:10:01Z",
       "cancel_requested_at": null,
       "redelivery_halted": false,
@@ -3092,7 +3289,9 @@
           "status": "failed",
           "error": "unknown-job",
           "state": null,
-          "at": "2026-01-01T01:05:02Z"
+          "outcome": null,
+          "duty_held": false,
+          "at": "2026-01-01T01:15:01Z"
          },
          "rf_transmitted": null,
          "acked": null
@@ -3114,8 +3313,10 @@
          "status": "failed",
          "error": "unknown-job",
          "state": null,
+         "outcome": null,
+         "duty_held": false,
          "epoch": null,
-         "at": "2026-01-01T01:05:02Z"
+         "at": "2026-01-01T01:15:01Z"
         }
        }
       ],
@@ -3123,7 +3324,7 @@
       "outcome": {
        "reason": "device_lost_job",
        "device_status": null,
-       "at": "2026-01-01T01:05:02Z"
+       "at": "2026-01-01T01:15:01Z"
       }
      },
      {
@@ -3139,9 +3340,9 @@
       },
       "idempotency_key": null,
       "state": "unknown",
-      "created_at": "2026-01-01T01:05:02Z",
-      "updated_at": "2026-01-01T02:05:02Z",
-      "expires_at": "2026-01-01T01:15:02Z",
+      "created_at": "2026-01-01T01:15:01Z",
+      "updated_at": "2026-01-01T02:15:01Z",
+      "expires_at": "2026-01-01T01:25:01Z",
       "cancel_requested_at": null,
       "redelivery_halted": false,
       "attempts": [
@@ -3153,7 +3354,7 @@
         "deliveries": 1,
         "nothing_ran": false,
         "dispositions": {
-         "signed": "2026-01-01T01:05:02Z",
+         "signed": "2026-01-01T01:15:01Z",
          "transport_accepted": null,
          "device_answered": null,
          "rf_transmitted": null,
@@ -3166,7 +3367,7 @@
       "outcome": {
        "reason": "abandon_deadline",
        "device_status": null,
-       "at": "2026-01-01T02:05:02Z"
+       "at": "2026-01-01T02:15:01Z"
       }
      }
     ]

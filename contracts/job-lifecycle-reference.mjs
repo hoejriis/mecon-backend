@@ -5,7 +5,7 @@
 // reference.
 import { CATALOGUE, validateCommand, newDispositions, applyResult, correlates, classify, cancellable, iso } from './device-dispatch-reference.mjs';
 
-export const DEFAULTS = { lease_s: 30, redeliver_s: 60, read_s: 300, abandon_s: 3600, ttl_s: 600 };
+export const DEFAULTS = { lease_s: 30, redeliver_s: 60, read_first_s: 900, read_every_s: 300, abandon_s: 3600, ttl_s: 600 };
 export const STATES = ['accepted', 'dispatched', 'running', 'succeeded', 'failed', 'refused', 'cancelled', 'expired', 'unknown'];
 export const TERMINAL = ['succeeded', 'failed', 'refused', 'cancelled', 'expired', 'unknown'];
 // Section 3: the only moves a job makes. A terminal state has none.
@@ -187,11 +187,11 @@ class Engine {
     if (j.cancel_requested_s !== null && !j.controls.some((c) => c.op === 'job.cancel') && answer?.status === 'ok' && cancellable(j.command.op, answer.state) && !this.otherOpen(j)) {
       return this.sendControl(j, cur, 'job.cancel');
     }
-    // Section 7: a status read when the job has been quiet, at most every 300 s; quiet runs from the latest answer,
-    // or from the first delivery when there is none.
+    // Section 7: the first status read comes after 900 s of quiet, and later reads at most every 300 s after that;
+    // quiet runs from the latest answer, or from the first delivery when there is none.
     const gets = j.controls.filter((c) => c.op !== 'job.cancel');
     const quietSince = Math.max(cur.first_delivery_s, cur.answered_s ?? 0);
-    const due = this.now - quietSince >= DEFAULTS.read_s && gets.every((c) => this.now - c.delivery_s >= DEFAULTS.read_s);
+    const due = this.now - quietSince >= DEFAULTS.read_first_s && gets.every((c) => this.now - c.delivery_s >= DEFAULTS.read_every_s);
     if (j.read_wanted || due) { j.read_wanted = false; return this.sendControl(j, cur, CATALOGUE.ops.find((o) => o.op === j.command.op).status_read); }
     if (j.state === 'dispatched' && !cur.read_only && this.now - cur.last_delivery_s >= DEFAULTS.redeliver_s) {
       this.sendAttempt(j, cur);
@@ -221,26 +221,26 @@ class Engine {
     }
     if (!hit) return this.ignore();
     const { j, a, c } = hit;
-    const cls = classify(r);
+    const cls = classify(r, j.command);
     if (!cls || TERMINAL.includes(j.state) || a.nothing_ran || a !== last(j.attempts)) return this.ignore();
     const k = cls.kind;
     if ((k === 'cancelled' && j.cancel_requested_s === null) || (['busy', 'replay', 'duplicate', 'job_open'].includes(k) && j.state !== 'dispatched')) return this.ignore();
     // A message.get that finds nothing says the message is not on the device: evicted, lost to a reboot or never
     // sent, which look the same. It settles nothing: the job stays where it is.
     if (c?.op === 'message.get' && k === 'unknown_state') {
-      c.device_answered = { status: r.status, error: null, state: 'unknown', epoch: r.epoch ?? null, at: this.at(this.now) };
+      c.device_answered = { status: r.status, error: null, state: 'unknown', outcome: null, duty_held: false, epoch: r.epoch ?? null, at: this.at(this.now) };
       a.answered_s = this.now;
       a.read_only = true; // the entry may have been evicted after it was sent: never deliver the message again
       return { outcome: 'applied' };
     }
     const bound = { device: j.device, request_id: a.request_id, job_number: a.job_number, command: j.command, dispositions: a.dispositions };
     if (!applyResult(bound, { ...r, signed_by: j.device, request_id: a.request_id, job_number: a.job_number }, this.at(this.now)).applied) return this.ignore();
-    if (c) c.device_answered = { status: r.status, error: r.error ?? null, state: r.state ?? null, epoch: r.epoch ?? null, at: this.at(this.now) };
+    if (c) c.device_answered = { status: r.status, error: r.error ?? null, state: r.state ?? null, outcome: r.outcome ?? null, duty_held: r.duty_held ?? false, epoch: r.epoch ?? null, at: this.at(this.now) };
     a.answered_s = this.now;
     if (isEvent) j.events.push({ at: this.at(this.now), status: r.status, state: r.state ?? null, data: this.authorityOk(j) ? (r.data ?? null) : null });
     if (k === 'open') { if (j.state === 'dispatched') this.setState(j, 'running'); }
-    else if (k === 'final_success') this.setState(j, 'succeeded', { reason: 'device_final', device_status: r.state });
-    else if (k === 'final_failure') this.setState(j, 'failed', { reason: 'device_final', device_status: r.state });
+    else if (k === 'final_success') this.setState(j, 'succeeded', { reason: 'device_final', device_status: r.outcome ?? r.state });
+    else if (k === 'final_failure') this.setState(j, 'failed', { reason: 'device_final', device_status: r.outcome ?? r.state });
     else if (k === 'failed') this.setState(j, 'failed', { reason: 'device_final', device_status: 'failed' });
     else if (k === 'cancelled') this.setState(j, 'cancelled', { reason: 'device_confirmed', device_status: 'cancelled' });
     else if (k === 'unknown_state') this.setState(j, 'unknown', { reason: 'device_reported_unknown', device_status: 'unknown' });

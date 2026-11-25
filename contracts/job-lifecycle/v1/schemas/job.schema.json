@@ -136,17 +136,16 @@
               "progress",
               "applied",
               "awaiting-confirm",
+              "confirmed",
+              "reverted",
+              "failed",
+              "cancelled",
+              "unknown",
               "queued",
               "duty-held",
               "transmitted",
-              "confirmed",
-              "applied-final",
               "acked",
-              "done",
-              "reverted",
               "timed-out",
-              "cancelled",
-              "unknown",
               null
             ]
           }

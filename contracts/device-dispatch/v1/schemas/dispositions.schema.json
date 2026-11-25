@@ -31,6 +31,8 @@
             "status",
             "error",
             "state",
+            "outcome",
+            "duty_held",
             "at"
           ],
           "properties": {
@@ -63,19 +65,30 @@
                 "progress",
                 "applied",
                 "awaiting-confirm",
+                "confirmed",
+                "reverted",
+                "failed",
+                "cancelled",
+                "unknown",
                 "queued",
                 "duty-held",
                 "transmitted",
-                "confirmed",
-                "applied-final",
                 "acked",
-                "done",
-                "reverted",
                 "timed-out",
-                "cancelled",
+                null
+              ]
+            },
+            "outcome": {
+              "enum": [
+                "transmitted",
+                "expired",
+                "failed",
                 "unknown",
                 null
               ]
+            },
+            "duty_held": {
+              "type": "boolean"
             }
           }
         }

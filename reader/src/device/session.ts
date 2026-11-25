@@ -457,8 +457,9 @@ export class DeviceSession {
     const reasm = new MeconReassembler();
     let off = (): void => undefined;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let fail!: (e: BleError) => void;
     const answer = new Promise<Envelope>((resolve, reject) => {
-      timer = setTimeout(() => reject(new BleError('response_timeout', `no answer to ${op}`)), timeoutMs);
+      fail = reject;
       off = t.onFrame((f) => {
         const text = reasm.push(f);
         if (text === null) return;
@@ -472,8 +473,14 @@ export class DeviceSession {
         }
       });
     });
+    answer.catch(() => undefined);
     try {
       for (const f of encodeMeconFrames(1, buildRequest(id, op as 'hello', args))) await t.write(f);
+      // The reply timer starts after the writes: a write can block (serial flow control), and that is not a slow device.
+      timer = setTimeout(() => {
+        console.warn(`[reader] response_timeout: no answer to ${op} within ${timeoutMs} ms`);
+        fail(new BleError('response_timeout', `no answer to ${op}`));
+      }, timeoutMs);
       return await answer;
     } finally {
       clearTimeout(timer);

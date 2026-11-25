@@ -114,6 +114,8 @@ export interface BackendSendPort {
 export interface BleAdapterOptions {
   transport: CompanionTransport;
   responseTimeoutMs?: number;
+  /** Bound on the write call itself. On some hosts the first write to the encrypted characteristic waits for the user to type the pairing PIN. */
+  writeTimeoutMs?: number;
   connectTimeoutMs?: number;
   nowSec?: () => number;
   backendPath?: BackendSendPort;
@@ -133,6 +135,7 @@ interface Inflight {
 export class BleAdapter {
   private readonly transport: CompanionTransport;
   private readonly responseTimeoutMs: number;
+  private readonly writeTimeoutMs: number;
   private readonly connectTimeoutMs: number;
   private readonly nowSec: () => number;
   private readonly backendPath: BackendSendPort | undefined;
@@ -153,6 +156,7 @@ export class BleAdapter {
   constructor(opts: BleAdapterOptions) {
     this.transport = opts.transport;
     this.responseTimeoutMs = opts.responseTimeoutMs ?? 5000;
+    this.writeTimeoutMs = opts.writeTimeoutMs ?? 60000;
     this.connectTimeoutMs = opts.connectTimeoutMs ?? 10000;
     this.nowSec = opts.nowSec ?? (() => Math.floor(Date.now() / 1000));
     this.backendPath = opts.backendPath;
@@ -289,9 +293,9 @@ export class BleAdapter {
     f?.fail(new BleError('disconnected'));
   }
 
-  private withTimeout<T>(p: Promise<T>, ms: number, code: BleErrorCode): Promise<T> {
+  private withTimeout<T>(p: Promise<T>, ms: number, code: BleErrorCode, detail?: string): Promise<T> {
     return new Promise<T>((resolve, reject) => {
-      const t = this.timer(() => reject(new BleError(code)), ms);
+      const t = this.timer(() => reject(new BleError(code, detail)), ms);
       p.then(
         (v) => {
           this.clear(t);
@@ -315,9 +319,9 @@ export class BleAdapter {
   /**
    * Writes one frame and waits for its reply. Resolves with an error frame when
    * the device refused. Rejects with BleError on timeout, disconnect or write error.
-   * `onWritten` runs after the write call returned, before the reply is awaited.
+   * `op` names the exchange in timeout errors and the console line.
    */
-  private async exchange(frame: Uint8Array, onFrame: (f: Frame) => 'done' | 'more' | 'ignore'): Promise<Frame | null> {
+  private async exchange(op: string, frame: Uint8Array, onFrame: (f: Frame) => 'done' | 'more' | 'ignore'): Promise<Frame | null> {
     let error: Frame | null = null;
     let finish!: () => void;
     let fail!: (e: BleError) => void;
@@ -338,15 +342,27 @@ export class BleAdapter {
       fail,
     };
     this.inflight = me;
-    const t = this.timer(() => {
-      if (this.inflight === me) this.inflight = null;
-      fail(new BleError('response_timeout'));
-    }, this.responseTimeoutMs);
+    let t: ReturnType<typeof setTimeout> | undefined;
     try {
-      await this.transport.write(frame);
+      // The reply timer starts only once the write has returned: a write can stay
+      // pending for a long time (the OS pairing prompt), and that wait is not the
+      // device being slow to answer. The write has its own, longer bound.
+      try {
+        await this.withTimeout(this.transport.write(frame), this.writeTimeoutMs, 'write_timeout', `write of ${op} not completed (pairing not finished?)`);
+      } catch (e) {
+        if (e instanceof BleError && e.code === 'write_timeout') console.warn(`[reader] write_timeout during ${op} after ${this.writeTimeoutMs} ms`);
+        throw e;
+      }
+      if (this.inflight === me) {
+        t = this.timer(() => {
+          if (this.inflight === me) this.inflight = null;
+          console.warn(`[reader] response_timeout: no answer to ${op} within ${this.responseTimeoutMs} ms`);
+          fail(new BleError('response_timeout', `no answer to ${op}`));
+        }, this.responseTimeoutMs);
+      }
       await done;
     } finally {
-      this.clear(t);
+      if (t !== undefined) this.clear(t);
       if (this.inflight === me) this.inflight = null;
     }
     return error;
@@ -393,12 +409,12 @@ export class BleAdapter {
   // -- hello ---------------------------------------------------------------
   private async hello(): Promise<void> {
     await this.serial(async () => {
-      await this.exchange(encodeAppStart(), (f) => {
+      await this.exchange('APP_START', encodeAppStart(), (f) => {
         if (f.kind !== 'selfInfo') return 'ignore';
         this.set({ selfInfo: f.info });
         return 'done';
       }).then((err) => this.mustNotBeError(err));
-      await this.exchange(encodeDeviceQuery(APP_TARGET_VERSION), (f) => {
+      await this.exchange('DEVICE_QUERY', encodeDeviceQuery(APP_TARGET_VERSION), (f) => {
         if (f.kind !== 'deviceInfo') return 'ignore';
         this.set({ deviceInfo: f.info });
         return 'done';
@@ -413,7 +429,7 @@ export class BleAdapter {
 
   private async fetchContacts(): Promise<void> {
     const found: Contact[] = [];
-    const err = await this.exchange(encodeGetContacts(), (f) => {
+    const err = await this.exchange('GET_CONTACTS', encodeGetContacts(), (f) => {
       if (f.kind === 'contactsStart') return 'more';
       if (f.kind === 'contact') {
         // A duplicated notification must not list a contact twice.
@@ -440,7 +456,7 @@ export class BleAdapter {
       await this.serial(async () => {
         for (let i = 0; i < 200; i++) {
           const got: { msg: InboxMessage | null; more: boolean } = { msg: null, more: true };
-          const err = await this.exchange(encodeSyncNextMessage(), (f) => {
+          const err = await this.exchange('SYNC_NEXT_MESSAGE', encodeSyncNextMessage(), (f) => {
             if (f.kind === 'noMoreMessages') {
               got.more = false;
               return 'done';
@@ -541,7 +557,7 @@ export class BleAdapter {
     a.writeIssued = true;
     this.touchAttempt(a, {});
     try {
-      const err = await this.exchange(frame, (f) => {
+      const err = await this.exchange(a.kind === 'direct' ? 'SEND_DIRECT' : 'SEND_CHANNEL', frame, (f) => {
         if (a.kind === 'direct') {
           if (f.kind !== 'sent') return 'ignore';
           this.seenTags.add(f.tag);

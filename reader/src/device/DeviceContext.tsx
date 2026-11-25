@@ -30,6 +30,8 @@ const ERRORS: Record<string, string> = {
   gesture_required: 'The browser needs a fresh tap to open the device chooser. Try again.',
   permission_denied: 'The browser did not give access to the device.',
   chooser_cancelled: 'No device was chosen.',
+  write_timeout: 'Pairing was not completed in time. Enter the PIN shown on the device when the system asks, then connect again.',
+  response_timeout: 'The device did not answer. Move closer or reconnect, then try again.',
   port_busy: 'The device is in use by another program or tab.',
 };
 

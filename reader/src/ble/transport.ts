@@ -13,6 +13,8 @@ export type BleErrorCode =
   | 'write_failed'
   | 'disconnected'
   | 'response_timeout'
+  /** The write call itself did not complete (on some hosts it waits for the user to finish pairing). Distinct from a missing reply. */
+  | 'write_timeout'
   | 'device_error'
   | 'attempt_reused'
   | 'text_too_long'

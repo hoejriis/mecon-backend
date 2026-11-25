@@ -26,6 +26,7 @@ const T = {
   device: ['src/device', 'src/messaging'],
   gate: ['src/offline', 'src/device', 'src/messaging'],
   probe: ['src/device'],
+  ble: ['src/ble/adapter.test.ts'],
 };
 
 /** @type {Array<{id:string, description:string, file:string, edits:Array<[string,string]>, tests:string[]}>} */
@@ -135,6 +136,18 @@ const MUTANTS = [
     edits: [["      const c = classifyProbeFrame(frame);", "      const c = { label: 'unchecked' };"]] },
   { id: 'probe12', description: 'the serial write guard does not classify bytes', file: 'src/device/guard.ts', tests: T.probe,
     edits: [["      const c = classifyProbeWrite(bytes);", "      const c = { label: 'unchecked' };"]] },
+  // Exchange timers (reply timer after the write, bounded write, named op)
+  { id: 'tmr1', description: 'reply timer started before the write (the old behaviour)', file: 'src/ble/adapter.ts', tests: T.ble,
+    edits: [["    let t: ReturnType<typeof setTimeout> | undefined;\n    try {\n      // The reply timer starts only", "    let t: ReturnType<typeof setTimeout> | undefined = this.timer(() => {\n      if (this.inflight === me) this.inflight = null;\n      fail(new BleError('response_timeout', `no answer to ${op}`));\n    }, this.responseTimeoutMs);\n    try {\n      // The reply timer starts only"],
+      ["      if (this.inflight === me) {\n        t = this.timer(", "      if (false as boolean) {\n        t = this.timer("]] },
+  { id: 'tmr2', description: 'the write has no timeout', file: 'src/ble/adapter.ts', tests: T.ble,
+    edits: [["await this.withTimeout(this.transport.write(frame), this.writeTimeoutMs, 'write_timeout', `write of ${op} not completed (pairing not finished?)`);", "await this.transport.write(frame);"]] },
+  { id: 'tmr3', description: 'response_timeout drops the op name', file: 'src/ble/adapter.ts', tests: T.ble,
+    edits: [["fail(new BleError('response_timeout', `no answer to ${op}`));", "fail(new BleError('response_timeout'));"]] },
+  { id: 'tmr4', description: 'the write timeout reports response_timeout instead of write_timeout', file: 'src/ble/adapter.ts', tests: T.ble,
+    edits: [["this.writeTimeoutMs, 'write_timeout',", "this.writeTimeoutMs, 'response_timeout',"]] },
+  { id: 'tmr5', description: 'the response timeout logs nothing', file: 'src/ble/adapter.ts', tests: T.ble,
+    edits: [["          console.warn(`[reader] response_timeout: no answer to ${op} within ${this.responseTimeoutMs} ms`);\n", ""]] },
 ];
 
 // ---------------------------------------------------------------------------------------------

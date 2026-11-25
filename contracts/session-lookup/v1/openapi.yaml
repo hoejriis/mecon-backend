@@ -59,16 +59,16 @@ info:
     `sec_fetch_site` on every `write` lookup.
 
     Login start's Origin check is not done through `/lookup`: it is the same OR,
-    checked by the core in its own login-start call, not through `/lookup`.
+    checked by the core in its own login-start call.
 
     ## CSRF
 
     The core derives the token (an HMAC of the session under a secret the core
     holds; the token is not stored) and the key never leaves the core. On every
     `write` lookup the core checks `csrf_token` and answers `csrf_failed` when it
-    is missing or wrong. The core may return a `Caller.csrf_token` on lookups that
-    serve `GET /session`, so the browser can learn its token; the facade uses it
-    for that response only and treats it as optional everywhere else.
+    is missing or wrong. The core returns `Caller.csrf_token` only on a lookup with
+    `purpose: session`, the one that serves `GET /session`, so the browser can
+    learn its token there; on every other purpose the field is absent.
 
     ## Revocations
 
@@ -210,7 +210,8 @@ components:
           description: The browser's session cookie value. Opaque to the facade, which never parses or stores it.
         purpose:
           type: string
-          enum: [read, write, stream]
+          enum: [read, write, stream, session]
+          description: '`session` is a read that serves `GET /session`; only it returns `Caller.csrf_token`.'
         origin:
           type: [string, 'null']
           maxLength: 2048
@@ -266,7 +267,7 @@ components:
         csrf_token:
           type: string
           minLength: 1
-          description: Optional. Present on lookups that serve `GET /session`.
+          description: 'Present only on a lookup with `purpose: session`; absent otherwise.'
 
     Denied:
       type: object

@@ -1,0 +1,813 @@
+{
+ "contract": "mecon-reader-core/1.0.0-draft.1",
+ "synthetic": true,
+ "group": "transport",
+ "cases": [
+  {
+   "id": "transport-01",
+   "title": "Without the Authorization header every operation answers 401 service_unauthorized",
+   "world": "two-fleets",
+   "steps": [
+    {
+     "action": "issue-session",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "a_ref"
+    },
+    {
+     "action": "user-id",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "a_uid"
+    },
+    {
+     "request": {
+      "operation": "getHealth",
+      "service_token": "absent"
+     },
+     "expect": {
+      "status": 401,
+      "schema": "ServiceError",
+      "body": {
+       "/code": "service_unauthorized"
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "listDevices",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       }
+      },
+      "service_token": "absent"
+     },
+     "expect": {
+      "status": 401,
+      "schema": "ServiceError",
+      "body": {
+       "/code": "service_unauthorized"
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "startLogin",
+      "body": {
+       "email": "alice@example.test",
+       "origin": "https://reader.example.test",
+       "sec_fetch_site": "same-origin"
+      },
+      "service_token": "absent"
+     },
+     "expect": {
+      "status": 401,
+      "schema": "ServiceError"
+     }
+    }
+   ]
+  },
+  {
+   "id": "transport-02",
+   "title": "A wrong service token answers 401 and records nothing",
+   "world": "two-fleets",
+   "steps": [
+    {
+     "action": "issue-session",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "a_ref"
+    },
+    {
+     "action": "user-id",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "a_uid"
+    },
+    {
+     "request": {
+      "operation": "listIdentities",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       }
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "IdentityList"
+     },
+     "capture": {
+      "a_idn": "/items/0/id"
+     }
+    },
+    {
+     "request": {
+      "operation": "listContacts",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       }
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "ContactList"
+     },
+     "capture": {
+      "a_peer": {
+       "at": "/items",
+       "where": {
+        "/display_name": "Bob (synthetic)"
+       },
+       "field": "/id"
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "listChannels",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       }
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "ChannelList"
+     },
+     "capture": {
+      "a_public": {
+       "at": "/items",
+       "where": {
+        "/name": "Public (synthetic)"
+       },
+       "field": "/id"
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "createSendAttempt",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       },
+       "request": {
+        "client_draft_id": "drf_synthetic_t02",
+        "client_attempt_id": "cat_synthetic_t02",
+        "identity_id": "${a_idn}",
+        "target": {
+         "kind": "contact",
+         "id": "${a_peer}"
+        },
+        "content": {
+         "kind": "text",
+         "text": "hello (synthetic)"
+        }
+       }
+      },
+      "service_token": "wrong"
+     },
+     "expect": {
+      "status": 401,
+      "schema": "ServiceError",
+      "body": {
+       "/code": "service_unauthorized"
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "logout",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       }
+      },
+      "service_token": "wrong"
+     },
+     "expect": {
+      "status": 401,
+      "schema": "ServiceError"
+     }
+    },
+    {
+     "request": {
+      "operation": "createSendAttempt",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       },
+       "request": {
+        "client_draft_id": "drf_synthetic_t02",
+        "client_attempt_id": "cat_synthetic_t02",
+        "identity_id": "${a_idn}",
+        "target": {
+         "kind": "contact",
+         "id": "${a_peer}"
+        },
+        "content": {
+         "kind": "text",
+         "text": "another (synthetic)"
+        }
+       }
+      }
+     },
+     "expect": {
+      "status": 201,
+      "schema": "SendAttempt"
+     }
+    },
+    {
+     "request": {
+      "operation": "listDevices",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       }
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "DeviceList"
+     }
+    }
+   ]
+  },
+  {
+   "id": "transport-03",
+   "title": "A body outside the request schema answers 422 malformed_request with a fixed body",
+   "world": "two-fleets",
+   "steps": [
+    {
+     "action": "issue-session",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "a_ref"
+    },
+    {
+     "action": "user-id",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "a_uid"
+    },
+    {
+     "request": {
+      "operation": "listDevices",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       },
+       "limit": 0
+      },
+      "invalid": true
+     },
+     "expect": {
+      "status": 422,
+      "schema": "Refusal",
+      "body": {
+       "/code": "malformed_request",
+       "/retryable": false
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "listConversations",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       },
+       "limit": 201
+      },
+      "invalid": true
+     },
+     "expect": {
+      "status": 422,
+      "schema": "Refusal",
+      "body": {
+       "/code": "malformed_request",
+       "/retryable": false
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "listContacts",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       },
+       "cursor": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      },
+      "invalid": true
+     },
+     "expect": {
+      "status": 422,
+      "schema": "Refusal",
+      "body": {
+       "/code": "malformed_request",
+       "/retryable": false
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "listChannels",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       },
+       "extra": 1
+      },
+      "invalid": true
+     },
+     "expect": {
+      "status": 422,
+      "schema": "Refusal",
+      "body": {
+       "/code": "malformed_request",
+       "/retryable": false
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "listIdentities",
+      "body": {},
+      "invalid": true
+     },
+     "expect": {
+      "status": 422,
+      "schema": "Refusal",
+      "body": {
+       "/code": "malformed_request",
+       "/retryable": false
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "getSendAttempt",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}"
+       },
+       "attempt_id": "att_synthetic_x"
+      },
+      "invalid": true
+     },
+     "expect": {
+      "status": 422,
+      "schema": "Refusal",
+      "body": {
+       "/code": "malformed_request",
+       "/retryable": false
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "pollLogin",
+      "body": {
+       "request_id": "short"
+      },
+      "invalid": true
+     },
+     "expect": {
+      "status": 422,
+      "schema": "Refusal",
+      "body": {
+       "/code": "malformed_request",
+       "/retryable": false
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "transport-04",
+   "title": "The service token is checked before the body, the body before availability",
+   "world": "two-fleets",
+   "steps": [
+    {
+     "action": "issue-session",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "a_ref"
+    },
+    {
+     "action": "user-id",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "a_uid"
+    },
+    {
+     "request": {
+      "operation": "listDevices",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       }
+      },
+      "service_token": "wrong"
+     },
+     "expect": {
+      "status": 401,
+      "schema": "ServiceError"
+     }
+    },
+    {
+     "action": "core-degraded",
+     "args": {}
+    },
+    {
+     "request": {
+      "operation": "listDevices",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       }
+      },
+      "service_token": "absent"
+     },
+     "expect": {
+      "status": 401,
+      "schema": "ServiceError"
+     }
+    },
+    {
+     "request": {
+      "operation": "listDevices",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       },
+       "limit": 0
+      },
+      "invalid": true
+     },
+     "expect": {
+      "status": 422,
+      "schema": "Refusal",
+      "body": {
+       "/code": "malformed_request",
+       "/retryable": false
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "listDevices",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       }
+      }
+     },
+     "expect": {
+      "status": 503,
+      "schema": "Refusal",
+      "body": {
+       "/code": "core_unavailable",
+       "/retryable": true
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "transport-05",
+   "title": "readEvents bounds wait_s at 25 seconds and refuses an empty cursor",
+   "world": "two-fleets",
+   "steps": [
+    {
+     "action": "issue-session",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "a_ref"
+    },
+    {
+     "action": "user-id",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "a_uid"
+    },
+    {
+     "request": {
+      "operation": "readEvents",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       },
+       "cursor": null,
+       "wait_s": 26
+      },
+      "invalid": true
+     },
+     "expect": {
+      "status": 422,
+      "schema": "Refusal",
+      "body": {
+       "/code": "malformed_request",
+       "/retryable": false
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "readEvents",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       },
+       "cursor": null,
+       "wait_s": -1
+      },
+      "invalid": true
+     },
+     "expect": {
+      "status": 422,
+      "schema": "Refusal",
+      "body": {
+       "/code": "malformed_request",
+       "/retryable": false
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "readEvents",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       },
+       "cursor": "",
+       "wait_s": 0
+      },
+      "invalid": true
+     },
+     "expect": {
+      "status": 422,
+      "schema": "Refusal",
+      "body": {
+       "/code": "malformed_request",
+       "/retryable": false
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "readEvents",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       },
+       "wait_s": 0
+      },
+      "invalid": true
+     },
+     "expect": {
+      "status": 422,
+      "schema": "Refusal",
+      "body": {
+       "/code": "malformed_request",
+       "/retryable": false
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "transport-06",
+   "title": "A degraded core answers 503 core_unavailable everywhere, then recovers",
+   "world": "two-fleets",
+   "steps": [
+    {
+     "action": "issue-session",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "a_ref"
+    },
+    {
+     "action": "user-id",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "a_uid"
+    },
+    {
+     "action": "core-degraded",
+     "args": {}
+    },
+    {
+     "request": {
+      "operation": "getHealth"
+     },
+     "expect": {
+      "status": 503,
+      "schema": "Refusal",
+      "body": {
+       "/code": "core_unavailable",
+       "/retryable": true
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "startLogin",
+      "body": {
+       "email": "alice@example.test",
+       "origin": "https://reader.example.test",
+       "sec_fetch_site": "same-origin"
+      }
+     },
+     "expect": {
+      "status": 503,
+      "schema": "Refusal",
+      "body": {
+       "/code": "core_unavailable",
+       "/retryable": true
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "listConversations",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       }
+      }
+     },
+     "expect": {
+      "status": 503,
+      "schema": "Refusal",
+      "body": {
+       "/code": "core_unavailable",
+       "/retryable": true
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "logout",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       }
+      }
+     },
+     "expect": {
+      "status": 503,
+      "schema": "Refusal",
+      "body": {
+       "/code": "core_unavailable",
+       "/retryable": true
+      }
+     }
+    },
+    {
+     "action": "core-recovered",
+     "args": {}
+    },
+    {
+     "request": {
+      "operation": "getHealth"
+     },
+     "expect": {
+      "status": 200,
+      "schema": "Health",
+      "body": {
+       "/status": "ok"
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "listConversations",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       }
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "ConversationList"
+     }
+    }
+   ]
+  },
+  {
+   "id": "transport-07",
+   "title": "Availability is checked before the session",
+   "world": "two-fleets",
+   "steps": [
+    {
+     "action": "issue-session",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "a_ref"
+    },
+    {
+     "action": "user-id",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "a_uid"
+    },
+    {
+     "action": "end-session",
+     "args": {
+      "session_ref": "${a_ref}"
+     }
+    },
+    {
+     "action": "core-degraded",
+     "args": {}
+    },
+    {
+     "request": {
+      "operation": "listDevices",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       }
+      }
+     },
+     "expect": {
+      "status": 503,
+      "schema": "Refusal",
+      "body": {
+       "/code": "core_unavailable",
+       "/retryable": true
+      }
+     }
+    },
+    {
+     "action": "core-recovered",
+     "args": {}
+    },
+    {
+     "request": {
+      "operation": "listDevices",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       }
+      }
+     },
+     "expect": {
+      "status": 403,
+      "schema": "Refusal",
+      "body": {
+       "/code": "session_ended",
+       "/retryable": false
+      }
+     }
+    }
+   ]
+  }
+ ]
+}

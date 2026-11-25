@@ -75,6 +75,9 @@ async def event_stream(core: ReaderCore | None, sessions: SessionResolver, calle
             try:
                 batch = pending.result()
             except CoreError as e:
+                if e.code == "session_ended":
+                    yield revoked_frame_for(cursor)  # the core saw the session end before the revocation feed did
+                    return
                 if e.kind == "forbidden" and forbidden_frame_for is not None:
                     yield forbidden_frame_for(cursor)  # rights withdrawn mid-stream: said once, then closed
                     return

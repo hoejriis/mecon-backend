@@ -36,24 +36,35 @@ class FakeReaderCore:
         self.world = world
         self.tick = poll_wait_tick_s
         self.login_origins = login_origins  # None: the Reader's own origin(s), as the world records them
+        self.unavailable = False  # tests flip this to model a core that cannot answer (contracts/reader-core/v1)
 
     def _login_origin_allowed(self, origin: str | None, sec_fetch_site: str | None) -> bool:
         # The core's rule: a listed Origin (trailing "/" stripped) OR Sec-Fetch-Site "same-origin".
         allow = list(self.world.reader_origins) if self.login_origins is None else self.login_origins
         return (origin is not None and origin.rstrip("/") in allow) or sec_fetch_site == "same-origin"
 
+    def _available(self) -> None:
+        if self.unavailable:
+            raise CoreError("unavailable", "core_unavailable", "the core cannot answer now")
+
     def _user(self, caller: Caller):
+        """The caller's user, once the caller reference names a live session of that user (reader-core v1: the
+        core re-checks it on every call). Only `user_id` and `session_ref` of the Caller are read."""
+        self._available()
         u = self.world.user_by_id(caller.user_id)
-        if u is None:
-            raise CoreError("forbidden")
+        s = self.world.session_by_ref(caller.session_ref)
+        if u is None or s is None or s.user != u.name or s.revoked or s.expires_at <= now():
+            raise CoreError("forbidden", "session_ended", "the session has ended", retryable=False)
         return u
 
     # ---- session ----
 
     async def health(self) -> dict[str, Any]:
+        self._available()
         return {"status": "ok", "commit": None}
 
     async def start_login(self, email: str, *, origin: str | None, sec_fetch_site: str | None) -> dict[str, Any]:
+        self._available()
         w = self.world
         if not self._login_origin_allowed(origin, sec_fetch_site):
             raise CoreError("forbidden", "origin_rejected", "origin not allowed")
@@ -71,6 +82,7 @@ class FakeReaderCore:
             r.state = "approved"
 
     async def poll_login(self, request_id: str) -> LoginPoll:
+        self._available()
         w = self.world
         r = w.logins.get(request_id)
         if r is None or r.expires_at <= now():
@@ -84,9 +96,12 @@ class FakeReaderCore:
         return LoginPoll("pending", poll_after_ms=2000)
 
     async def logout(self, caller: Caller) -> None:
-        for s in self.world.sessions.values():
-            if self.world.session_ref(s) == caller.session_ref:
-                self.world.revoke(s, "logout")
+        # Ends the session only when it is the caller's user's; never session_ended (a repeat is not an error).
+        self._available()
+        u = self.world.user_by_id(caller.user_id)
+        s = self.world.session_by_ref(caller.session_ref)
+        if u is not None and s is not None and s.user == u.name and not s.revoked:
+            self.world.revoke(s, "logout")
 
     # ---- devices and messaging reads ----
 
@@ -192,10 +207,10 @@ class FakeReaderCore:
 
     async def create_send_attempt(self, caller: Caller, request: dict[str, Any]) -> SendResult:
         w = self.world
+        u = self._user(caller)  # the session first (reader-core v1's order of checks)
         if w.switches.get("sending") != "on":
-            # Before anything is read or recorded.
+            # Before anything about the attempt is read or recorded.
             raise CoreError("forbidden", "sending_disabled", "Reader sending is switched off", retryable=False)
-        u = self._user(caller)
         key = (u.name, request["client_attempt_id"])
         if key in w.attempt_index:
             aid = w.attempt_index[key]
@@ -278,12 +293,12 @@ class FakeReaderCore:
             raise CoreError("not_found", "not_found", "this Backend does not issue leases")
 
     async def create_lease(self, caller: Caller) -> dict[str, Any]:
+        u = self._user(caller)  # the session first (reader-core v1's order of checks)
         self._lease_switch()
         w = self.world
         key = w.active_key()
         if w.switches.get("lease_signing") != "on" or key is None:
             raise CoreError("unavailable", "lease_signing_unavailable", "lease signing is unavailable", retryable=False)
-        u = self._user(caller)
         sending = w.switches.get("sending") == "on"
         identities = []
         for n in u.identities:
@@ -302,8 +317,8 @@ class FakeReaderCore:
         return {"lease": f"{b64u(body)}.{b64u(sig)}", "expires_at": iso(expires)}
 
     async def list_lease_keys(self, caller: Caller) -> dict[str, Any]:
-        self._lease_switch()
         self._user(caller)
+        self._lease_switch()
         w = self.world
         horizon = now() - LEASE_LIFETIME
         keys = [{"key_id": k.key_id, "algorithm": "Ed25519", "public_key": k.public_b64u,

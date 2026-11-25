@@ -1,0 +1,1017 @@
+{
+ "contract": "mecon-reader-core/1.0.0-draft.1",
+ "synthetic": true,
+ "group": "reads",
+ "cases": [
+  {
+   "id": "reads-01",
+   "title": "Devices: the caller's own, never another fleet's",
+   "world": "two-fleets",
+   "steps": [
+    {
+     "action": "issue-session",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "a_ref"
+    },
+    {
+     "action": "user-id",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "a_uid"
+    },
+    {
+     "request": {
+      "operation": "listDevices",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       }
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "DeviceList",
+      "match": [
+       {
+        "at": "/items",
+        "where": {
+         "/label": "Alice companion (synthetic)"
+        },
+        "count": 1
+       },
+       {
+        "at": "/items",
+        "where": {
+         "/label": "Carol companion (synthetic)"
+        },
+        "count": 0
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "reads-02",
+   "title": "Identities: the caller's own only, as a whole list",
+   "world": "two-fleets",
+   "steps": [
+    {
+     "action": "issue-session",
+     "args": {
+      "user": "carol"
+     },
+     "capture": "c_ref"
+    },
+    {
+     "action": "user-id",
+     "args": {
+      "user": "carol"
+     },
+     "capture": "c_uid"
+    },
+    {
+     "request": {
+      "operation": "listIdentities",
+      "body": {
+       "caller": {
+        "user_id": "${c_uid}",
+        "session_ref": "${c_ref}"
+       }
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "IdentityList",
+      "body": {
+       "/next_cursor": null
+      },
+      "match": [
+       {
+        "at": "/items",
+        "where": {
+         "/public_key_prefix": "c3c3c3c3"
+        },
+        "count": 1
+       },
+       {
+        "at": "/items",
+        "where": {
+         "/public_key_prefix": "a1a1a1a1"
+        },
+        "count": 0
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "reads-03",
+   "title": "Channels: the shared one for both fleets, each fleet's private one only to it",
+   "world": "two-fleets",
+   "steps": [
+    {
+     "action": "issue-session",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "a_ref"
+    },
+    {
+     "action": "user-id",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "a_uid"
+    },
+    {
+     "action": "issue-session",
+     "args": {
+      "user": "carol"
+     },
+     "capture": "c_ref"
+    },
+    {
+     "action": "user-id",
+     "args": {
+      "user": "carol"
+     },
+     "capture": "c_uid"
+    },
+    {
+     "request": {
+      "operation": "listChannels",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       }
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "ChannelList",
+      "body": {
+       "/next_cursor": null
+      },
+      "match": [
+       {
+        "at": "/items",
+        "where": {
+         "/name": "Public (synthetic)"
+        },
+        "count": 1
+       },
+       {
+        "at": "/items",
+        "where": {},
+        "count": 2
+       }
+      ]
+     },
+     "capture": {
+      "a_ops": {
+       "at": "/items",
+       "where": {
+        "/visibility": "private"
+       },
+       "field": "/id"
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "listChannels",
+      "body": {
+       "caller": {
+        "user_id": "${c_uid}",
+        "session_ref": "${c_ref}"
+       }
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "ChannelList",
+      "match": [
+       {
+        "at": "/items",
+        "where": {
+         "/name": "Public (synthetic)"
+        },
+        "count": 1
+       },
+       {
+        "at": "/items",
+        "where": {
+         "/id": "${a_ops}"
+        },
+        "count": 0
+       },
+       {
+        "at": "/items",
+        "where": {},
+        "count": 2
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "reads-04",
+   "title": "Contacts: shared within a fleet, never across",
+   "world": "two-fleets",
+   "steps": [
+    {
+     "action": "issue-session",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "a_ref"
+    },
+    {
+     "action": "user-id",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "a_uid"
+    },
+    {
+     "request": {
+      "operation": "listContacts",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       }
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "ContactList",
+      "match": [
+       {
+        "at": "/items",
+        "where": {
+         "/display_name": "Bob (synthetic)"
+        },
+        "count": 1
+       },
+       {
+        "at": "/items",
+        "where": {
+         "/display_name": "Erin (synthetic)"
+        },
+        "count": 0
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "reads-05",
+   "title": "Another user's conversation answers exactly as a missing one",
+   "world": "two-fleets",
+   "steps": [
+    {
+     "action": "issue-session",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "a_ref"
+    },
+    {
+     "action": "user-id",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "a_uid"
+    },
+    {
+     "action": "issue-session",
+     "args": {
+      "user": "carol"
+     },
+     "capture": "c_ref"
+    },
+    {
+     "action": "user-id",
+     "args": {
+      "user": "carol"
+     },
+     "capture": "c_uid"
+    },
+    {
+     "request": {
+      "operation": "listConversations",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       }
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "ConversationList"
+     },
+     "capture": {
+      "a_bob": {
+       "at": "/items",
+       "where": {
+        "/title": "Bob (synthetic)"
+       },
+       "field": "/id"
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "getConversation",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       },
+       "conversation_id": "${a_bob}"
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "Conversation",
+      "body": {
+       "/id": "${a_bob}",
+       "/title": "Bob (synthetic)",
+       "/target/kind": "contact"
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "getConversation",
+      "body": {
+       "caller": {
+        "user_id": "${c_uid}",
+        "session_ref": "${c_ref}"
+       },
+       "conversation_id": "${a_bob}"
+      }
+     },
+     "expect": {
+      "status": 404,
+      "schema": "Refusal",
+      "body": {
+       "/code": "not_found",
+       "/retryable": false
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "getConversation",
+      "body": {
+       "caller": {
+        "user_id": "${c_uid}",
+        "session_ref": "${c_ref}"
+       },
+       "conversation_id": "cnv_synthetic_missing"
+      }
+     },
+     "expect": {
+      "status": 404,
+      "schema": "Refusal",
+      "body": {
+       "/code": "not_found",
+       "/retryable": false
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "listConversations",
+      "body": {
+       "caller": {
+        "user_id": "${c_uid}",
+        "session_ref": "${c_ref}"
+       }
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "ConversationList",
+      "match": [
+       {
+        "at": "/items",
+        "where": {
+         "/id": "${a_bob}"
+        },
+        "count": 0
+       },
+       {
+        "at": "/items",
+        "where": {},
+        "count": 2
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "reads-06",
+   "title": "Another user's messages answer exactly as a missing conversation",
+   "world": "two-fleets",
+   "steps": [
+    {
+     "action": "issue-session",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "a_ref"
+    },
+    {
+     "action": "user-id",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "a_uid"
+    },
+    {
+     "action": "issue-session",
+     "args": {
+      "user": "carol"
+     },
+     "capture": "c_ref"
+    },
+    {
+     "action": "user-id",
+     "args": {
+      "user": "carol"
+     },
+     "capture": "c_uid"
+    },
+    {
+     "request": {
+      "operation": "listConversations",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       }
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "ConversationList"
+     },
+     "capture": {
+      "a_bob": {
+       "at": "/items",
+       "where": {
+        "/title": "Bob (synthetic)"
+       },
+       "field": "/id"
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "listMessages",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       },
+       "conversation_id": "${a_bob}"
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "MessageList",
+      "match": [
+       {
+        "at": "/items",
+        "where": {
+         "/conversation_id": "${a_bob}"
+        },
+        "count": 2
+       }
+      ]
+     }
+    },
+    {
+     "request": {
+      "operation": "listMessages",
+      "body": {
+       "caller": {
+        "user_id": "${c_uid}",
+        "session_ref": "${c_ref}"
+       },
+       "conversation_id": "${a_bob}"
+      }
+     },
+     "expect": {
+      "status": 404,
+      "schema": "Refusal",
+      "body": {
+       "/code": "not_found",
+       "/retryable": false
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "listMessages",
+      "body": {
+       "caller": {
+        "user_id": "${c_uid}",
+        "session_ref": "${c_ref}"
+       },
+       "conversation_id": "cnv_synthetic_missing"
+      }
+     },
+     "expect": {
+      "status": 404,
+      "schema": "Refusal",
+      "body": {
+       "/code": "not_found",
+       "/retryable": false
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "reads-07",
+   "title": "Mark read: the owner's mark moves, another user gets 404, a foreign up_to is validation_failed",
+   "world": "two-fleets",
+   "steps": [
+    {
+     "action": "issue-session",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "a_ref"
+    },
+    {
+     "action": "user-id",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "a_uid"
+    },
+    {
+     "action": "issue-session",
+     "args": {
+      "user": "carol"
+     },
+     "capture": "c_ref"
+    },
+    {
+     "action": "user-id",
+     "args": {
+      "user": "carol"
+     },
+     "capture": "c_uid"
+    },
+    {
+     "request": {
+      "operation": "listConversations",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       }
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "ConversationList"
+     },
+     "capture": {
+      "a_bob": {
+       "at": "/items",
+       "where": {
+        "/title": "Bob (synthetic)"
+       },
+       "field": "/id"
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "listConversations",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       }
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "ConversationList"
+     },
+     "capture": {
+      "a_ops": {
+       "at": "/items",
+       "where": {
+        "/title": "Ops (synthetic)"
+       },
+       "field": "/id"
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "listMessages",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       },
+       "conversation_id": "${a_bob}"
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "MessageList"
+     },
+     "capture": {
+      "newest": "/items/0/message_id"
+     }
+    },
+    {
+     "request": {
+      "operation": "listMessages",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       },
+       "conversation_id": "${a_ops}"
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "MessageList"
+     },
+     "capture": {
+      "ops_msg": "/items/0/message_id"
+     }
+    },
+    {
+     "request": {
+      "operation": "markConversationRead",
+      "body": {
+       "caller": {
+        "user_id": "${c_uid}",
+        "session_ref": "${c_ref}"
+       },
+       "conversation_id": "${a_bob}",
+       "up_to": "${newest}"
+      }
+     },
+     "expect": {
+      "status": 404,
+      "schema": "Refusal",
+      "body": {
+       "/code": "not_found",
+       "/retryable": false
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "markConversationRead",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       },
+       "conversation_id": "${a_bob}",
+       "up_to": "${ops_msg}"
+      }
+     },
+     "expect": {
+      "status": 422,
+      "schema": "Refusal",
+      "body": {
+       "/code": "validation_failed",
+       "/retryable": false
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "markConversationRead",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       },
+       "conversation_id": "${a_bob}",
+       "up_to": "${newest}"
+      }
+     },
+     "expect": {
+      "status": 204,
+      "schema": null
+     }
+    },
+    {
+     "request": {
+      "operation": "getConversation",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       },
+       "conversation_id": "${a_bob}"
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "Conversation",
+      "body": {
+       "/unread_count": 0
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "reads-08",
+   "title": "Conversations page by cursor: two pages of one, then null",
+   "world": "two-fleets",
+   "steps": [
+    {
+     "action": "issue-session",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "a_ref"
+    },
+    {
+     "action": "user-id",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "a_uid"
+    },
+    {
+     "request": {
+      "operation": "listConversations",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       },
+       "limit": 1
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "ConversationList",
+      "match": [
+       {
+        "at": "/items",
+        "where": {},
+        "count": 1
+       }
+      ]
+     },
+     "capture": {
+      "first": "/items/0/id",
+      "next": "/next_cursor"
+     }
+    },
+    {
+     "request": {
+      "operation": "listConversations",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       },
+       "limit": 1,
+       "cursor": "${next}"
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "ConversationList",
+      "body": {
+       "/next_cursor": null
+      },
+      "match": [
+       {
+        "at": "/items",
+        "where": {},
+        "count": 1
+       },
+       {
+        "at": "/items",
+        "where": {
+         "/id": "${first}"
+        },
+        "count": 0
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "reads-09",
+   "title": "Messages page by cursor, newest first",
+   "world": "two-fleets",
+   "steps": [
+    {
+     "action": "issue-session",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "a_ref"
+    },
+    {
+     "action": "user-id",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "a_uid"
+    },
+    {
+     "request": {
+      "operation": "listConversations",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       }
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "ConversationList"
+     },
+     "capture": {
+      "a_bob": {
+       "at": "/items",
+       "where": {
+        "/title": "Bob (synthetic)"
+       },
+       "field": "/id"
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "listMessages",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       },
+       "conversation_id": "${a_bob}",
+       "limit": 1
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "MessageList",
+      "match": [
+       {
+        "at": "/items",
+        "where": {
+         "/direction": "inbound"
+        },
+        "count": 1
+       }
+      ]
+     },
+     "capture": {
+      "next": "/next_cursor"
+     }
+    },
+    {
+     "request": {
+      "operation": "listMessages",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       },
+       "conversation_id": "${a_bob}",
+       "limit": 1,
+       "cursor": "${next}"
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "MessageList",
+      "body": {
+       "/next_cursor": null
+      },
+      "match": [
+       {
+        "at": "/items",
+        "where": {
+         "/direction": "outbound"
+        },
+        "count": 1
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "reads-10",
+   "title": "A well-formed cursor the list did not issue answers 422 invalid, never the first page",
+   "world": "two-fleets",
+   "steps": [
+    {
+     "action": "issue-session",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "a_ref"
+    },
+    {
+     "action": "user-id",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "a_uid"
+    },
+    {
+     "request": {
+      "operation": "listConversations",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       },
+       "cursor": "synthetic_cursor_never_issued"
+      }
+     },
+     "expect": {
+      "status": 422,
+      "schema": "Refusal",
+      "body": {
+       "/code": "invalid",
+       "/retryable": false
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "listDevices",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       },
+       "cursor": "synthetic_cursor_never_issued"
+      }
+     },
+     "expect": {
+      "status": 422,
+      "schema": "Refusal",
+      "body": {
+       "/code": "invalid",
+       "/retryable": false
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "listContacts",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       },
+       "cursor": "synthetic_cursor_never_issued"
+      }
+     },
+     "expect": {
+      "status": 422,
+      "schema": "Refusal",
+      "body": {
+       "/code": "invalid",
+       "/retryable": false
+      }
+     }
+    }
+   ]
+  }
+ ]
+}

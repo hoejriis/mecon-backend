@@ -1,0 +1,334 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mecon:reader-core:v1:cases",
+  "title": "Reader core conformance cases (synthetic)",
+  "description": "One file of replayable cases. See README.md for how an implementation replays them.",
+  "type": "object",
+  "required": [
+    "contract",
+    "synthetic",
+    "group",
+    "cases"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "contract": {
+      "type": "string",
+      "pattern": "^mecon-reader-core/\\d+\\.\\d+\\.\\d+(-draft\\.\\d+)?$"
+    },
+    "synthetic": {
+      "const": true
+    },
+    "group": {
+      "type": "string",
+      "pattern": "^[a-z][a-z-]*$"
+    },
+    "cases": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/case"
+      }
+    }
+  },
+  "$defs": {
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "case": {
+      "type": "object",
+      "required": [
+        "id",
+        "title",
+        "world",
+        "steps"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z]+-[0-9]{2}$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "world": {
+          "type": "string"
+        },
+        "steps": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/action"
+              },
+              {
+                "$ref": "#/$defs/request"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "action": {
+      "type": "object",
+      "required": [
+        "action"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "type": "string"
+        },
+        "args": {
+          "type": "object"
+        },
+        "capture": {
+          "$ref": "#/$defs/name"
+        }
+      }
+    },
+    "request": {
+      "type": "object",
+      "required": [
+        "request",
+        "expect"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "request": {
+          "type": "object",
+          "required": [
+            "operation"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "operation": {
+              "type": "string",
+              "description": "An operationId of openapi.yaml."
+            },
+            "path": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "query": {
+              "type": "object",
+              "additionalProperties": {
+                "type": [
+                  "string",
+                  "integer"
+                ]
+              }
+            },
+            "headers": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "body": {
+              "description": "The JSON body of the call. A caller reference is built from captured `user_id` and `session_ref` values."
+            },
+            "invalid": {
+              "type": "boolean",
+              "description": "The body deliberately fails the request schema; the validator checks that it does."
+            },
+            "service_token": {
+              "enum": [
+                "valid",
+                "absent",
+                "wrong"
+              ],
+              "default": "valid",
+              "description": "The Authorization header the facade sends: the deployment's service token, none, or a different string."
+            }
+          }
+        },
+        "expect": {
+          "$ref": "#/$defs/expect"
+        },
+        "capture": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/name"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/selector"
+          }
+        }
+      }
+    },
+    "selector": {
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^(/[^/]*)*$",
+          "description": "A JSON pointer into the response body."
+        },
+        {
+          "type": "object",
+          "required": [
+            "at",
+            "where",
+            "field"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "at": {
+              "type": "string",
+              "pattern": "^(/[^/]*)*$"
+            },
+            "where": {
+              "$ref": "#/$defs/where"
+            },
+            "field": {
+              "type": "string",
+              "pattern": "^(/[^/]*)+$"
+            }
+          },
+          "description": "The field of the first array item at `at` matching `where`."
+        }
+      ]
+    },
+    "where": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^(/[^/]*)+$"
+      },
+      "description": "JSON pointer (relative to the item) to value; every pair must equal."
+    },
+    "match": {
+      "type": "object",
+      "required": [
+        "at",
+        "where"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "at": {
+          "type": "string",
+          "pattern": "^(/[^/]*)*$"
+        },
+        "where": {
+          "$ref": "#/$defs/where"
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "at_least": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "count"
+          ]
+        },
+        {
+          "required": [
+            "at_least"
+          ]
+        }
+      ]
+    },
+    "expect": {
+      "type": "object",
+      "required": [
+        "status",
+        "schema"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 599
+        },
+        "schema": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Component schema name of the declared response body, or null when none is declared."
+        },
+        "headers": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "\"present\", \"absent\" or an exact value."
+        },
+        "body": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^(/[^/]*)+$"
+          },
+          "description": "JSON pointer to exact value."
+        },
+        "match": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/match"
+          }
+        },
+        "stream": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "A bounded read of an event stream: the frames the Backend holds for the cursor, then stop. Every frame validates against `schema`.",
+          "properties": {
+            "match": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/match"
+              }
+            }
+          }
+        },
+        "lease": {
+          "type": "object",
+          "required": [
+            "keys"
+          ],
+          "additionalProperties": false,
+          "description": "The `lease` token of the body (or `token`) verifies under `keys` and its payload obeys the rules below.",
+          "properties": {
+            "token": {
+              "type": "string"
+            },
+            "keys": {
+              "type": "string",
+              "description": "A JSON pointer into this response (a LeaseKeyList's `keys`), or a `${capture}` holding such a list."
+            },
+            "user_id": {
+              "type": "string"
+            },
+            "max_lifetime_s": {
+              "type": "integer",
+              "maximum": 604800
+            },
+            "operations_exclude": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "operations_include": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

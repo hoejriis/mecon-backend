@@ -241,6 +241,9 @@ class World:
         # The stored reference: a hash of the session record's id, never the cookie value.
         return "sr_" + hashlib.sha256(b"session-ref\x00" + session.id.encode()).hexdigest()[:32]
 
+    def session_by_ref(self, session_ref: str) -> Session | None:
+        return next((s for s in self.sessions.values() if self.session_ref(s) == session_ref), None)
+
     def csrf_for(self, session: Session) -> str:
         return b64u(hmac.new(self.csrf_secret, b"csrf\x00" + session.id.encode(), hashlib.sha256).digest())
 

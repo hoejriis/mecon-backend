@@ -158,6 +158,11 @@ def create_app(lookup: SessionLookup, core: ReaderCore, config: FacadeConfig | N
         try:
             return await asyncio.wait_for(fn, cfg.core_timeout_s)
         except CoreError as e:
+            if e.code == "session_ended":
+                # The session ended after the lookup answered (a cached Caller): as a session that no longer resolves.
+                raise Refusal(401, "unauthenticated", "no valid session", clear_cookie=True) from None
+            if e.code == "core_unavailable":
+                raise Refusal(503, "unavailable", "core unavailable", retryable=True) from None
             status = KIND_STATUS[e.kind]
             if status not in DECLARED[op]:
                 if e.kind in ("forbidden", "not_found") and 404 in DECLARED[op]:

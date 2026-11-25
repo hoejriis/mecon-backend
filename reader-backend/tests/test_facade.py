@@ -9,7 +9,7 @@ import pytest
 from mecon_reader_backend import FacadeConfig, create_app
 from mecon_reader_backend.app import COOKIE, PREFIX
 from mecon_reader_backend.fakes import build
-from mecon_reader_backend.ports import Denied
+from mecon_reader_backend.ports import Denied, Revocation
 from replay import BASE, SAME_ORIGIN, WORLDS, asgi_get_stream, parse_sse, schema_validator
 
 ERROR_KEYS = {"code", "message", "request_id", "retryable"}
@@ -208,7 +208,10 @@ def test_reads_are_cached_briefly_and_dropped_on_logout():
             assert (await c.post(PREFIX + "/logout", headers={"X-CSRF-Token": token})).status_code == 204
             c.cookies.set(COOKIE, rig.session.credential, domain="reader.example.test", path="/")
             # A plain read goes through the read cache: only a dropped entry makes it ask the lookup and get 401.
+            # (The core would refuse the ended session too; the lookup call proves the facade's own drop.)
+            rig.port.calls.clear()
             assert_error(await c.get(PREFIX + "/devices"), 401, "unauthenticated")
+            assert [x["purpose"] for x in rig.port.calls] == ["read"], "the cached caller was served after logout"
             assert_error(await c.get(PREFIX + "/session"), 401, "unauthenticated")
     run(go())
 
@@ -592,4 +595,64 @@ def test_a_write_is_never_served_from_the_read_cache():
             assert_error(await c.post(PREFIX + "/leases", headers={"Origin": "https://foreign.example.test"}),
                          403, "origin_rejected")
             assert rig.world.sessions[rig.session.credential].revoked is False
+    run(go())
+
+
+# ---- the core's own session check (contracts/reader-core/v1: 403 session_ended) ----
+
+def test_a_session_the_core_finds_ended_is_401_and_clears_the_cookie():
+    """A cached Caller can outlive its session; the core then answers session_ended, never data."""
+    async def go():
+        rig = Rig()
+        async with rig.client("alice") as c:
+            await rig.feed_up(c)
+            assert (await c.get(PREFIX + "/devices")).status_code == 200  # the Caller is now cached
+            rig.session.expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)  # ended core-side only
+            r = await c.get(PREFIX + "/devices")
+            assert_error(r, 401, "unauthenticated", retryable=False)
+            assert "max-age=0" in r.headers.get("set-cookie", "").lower()
+    run(go())
+
+
+def test_a_stream_whose_session_the_core_finds_ended_sends_session_revoked():
+    async def go():
+        rig = Rig(heartbeat_s=0.2)
+        async with rig.client("alice"):
+            pass
+        headers = await _open_stream(rig)
+
+        async def end_soon():
+            await asyncio.sleep(0.4)
+            rig.session.expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)  # no revocation item
+        t = asyncio.ensure_future(end_soon())
+        status, _, raw, ended = await asgi_get_stream(rig.app, PREFIX + "/events", headers, bound_s=3.0,
+                                                      until_heartbeat=False)
+        await t
+        assert status == 200 and ended
+        frames = parse_sse(raw)
+        assert frames and frames[-1]["kind"] == "session_revoked" and frames[-1]["resource_id"] is None
+    run(go())
+
+
+def test_a_feed_revocation_closes_the_stream_while_the_core_still_answers():
+    """The facade's own close, with the core's session re-check out of the way: the revocation item arrives on the
+    feed while the core still holds the session live, so only the facade can end the stream."""
+    async def go():
+        rig = Rig(heartbeat_s=0.2)
+        async with rig.client("alice"):
+            pass
+        headers = await _open_stream(rig)
+
+        async def announce_soon():
+            await asyncio.sleep(0.4)
+            for q in list(rig.world.revocation_queues):
+                q.put_nowait(Revocation(rig.world.session_ref(rig.session)))
+        t = asyncio.ensure_future(announce_soon())
+        status, _, raw, ended = await asgi_get_stream(rig.app, PREFIX + "/events", headers, bound_s=3.0,
+                                                      until_heartbeat=False)
+        await t
+        assert not rig.session.revoked  # the core never saw it end
+        assert status == 200 and ended, "the stream stayed open after the feed announced its revocation"
+        frames = parse_sse(raw)
+        assert frames and frames[-1]["kind"] == "session_revoked"
     run(go())

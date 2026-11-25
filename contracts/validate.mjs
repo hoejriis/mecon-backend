@@ -11,8 +11,10 @@ import { validateObservationProcessing } from './validate-observation-processing
 import { validateObservationSubscription } from './validate-observation-subscription.mjs';
 import { validateRawCapture } from './validate-raw-capture.mjs';
 import { validateReaderCases } from './validate-reader-cases.mjs';
+import { validateReaderCore } from './validate-reader-core.mjs';
 
-const docs = ['reader-api/v1/openapi.yaml', 'observations/v1/openapi.yaml', 'session-lookup/v1/openapi.yaml'];
+const docs = ['reader-api/v1/openapi.yaml', 'observations/v1/openapi.yaml', 'session-lookup/v1/openapi.yaml',
+  'reader-core/v1/openapi.yaml'];
 // Privacy: no observation fixture or schema may carry these fields (see the contract's description).
 const FORBIDDEN_KEY = /route|path|hop|relay|hash|payload|content|text|transmitter|sender|raw|bytes/i;
 const forbiddenKeys = (v, trail = '') =>
@@ -115,6 +117,12 @@ failures += obsCases.failures;
 const lookupCases = validateReaderCases('session-lookup/v1', 'mecon-session-lookup');
 checked += lookupCases.checked;
 failures += lookupCases.failures;
+// The reader-core contract's conformance cases, in the same format, and its own rules (schemas shared with the
+// Reader API identical, the caller reference and transport answers on every operation).
+for (const r of [validateReaderCases('reader-core/v1', 'mecon-reader-core'), validateReaderCore()]) {
+  checked += r.checked;
+  failures += r.failures;
+}
 // The WebSocket hold contract: frame schemas, fixtures A-F, rejected frames, and the README's references.
 const hold = validateHold();
 checked += hold.checked;

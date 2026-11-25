@@ -1,0 +1,761 @@
+{
+ "contract": "mecon-reader-core/1.0.0-draft.1",
+ "synthetic": true,
+ "group": "events",
+ "cases": [
+  {
+   "id": "events-01",
+   "title": "A read from now gives a cursor; a send after it is read back",
+   "world": "two-fleets",
+   "steps": [
+    {
+     "action": "issue-session",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "a_ref"
+    },
+    {
+     "action": "user-id",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "a_uid"
+    },
+    {
+     "request": {
+      "operation": "listIdentities",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       }
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "IdentityList"
+     },
+     "capture": {
+      "a_idn": "/items/0/id"
+     }
+    },
+    {
+     "request": {
+      "operation": "listContacts",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       }
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "ContactList"
+     },
+     "capture": {
+      "a_peer": {
+       "at": "/items",
+       "where": {
+        "/display_name": "Bob (synthetic)"
+       },
+       "field": "/id"
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "listChannels",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       }
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "ChannelList"
+     },
+     "capture": {
+      "a_public": {
+       "at": "/items",
+       "where": {
+        "/name": "Public (synthetic)"
+       },
+       "field": "/id"
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "readEvents",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       },
+       "cursor": null,
+       "wait_s": 0
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "EventBatch"
+     },
+     "capture": {
+      "cur": "/cursor"
+     }
+    },
+    {
+     "request": {
+      "operation": "createSendAttempt",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       },
+       "request": {
+        "client_draft_id": "drf_synthetic_e01",
+        "client_attempt_id": "cat_synthetic_e01",
+        "identity_id": "${a_idn}",
+        "target": {
+         "kind": "contact",
+         "id": "${a_peer}"
+        },
+        "content": {
+         "kind": "text",
+         "text": "hello (synthetic)"
+        }
+       }
+      }
+     },
+     "expect": {
+      "status": 201,
+      "schema": "SendAttempt"
+     },
+     "capture": {
+      "att": "/id"
+     }
+    },
+    {
+     "request": {
+      "operation": "readEvents",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       },
+       "cursor": "${cur}",
+       "wait_s": 0
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "EventBatch",
+      "match": [
+       {
+        "at": "/events",
+        "where": {
+         "/kind": "attempt_status",
+         "/resource_id": "${att}"
+        },
+        "count": 1
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "events-02",
+   "title": "Each user reads only their own events",
+   "world": "two-fleets",
+   "steps": [
+    {
+     "action": "issue-session",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "a_ref"
+    },
+    {
+     "action": "user-id",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "a_uid"
+    },
+    {
+     "action": "issue-session",
+     "args": {
+      "user": "carol"
+     },
+     "capture": "c_ref"
+    },
+    {
+     "action": "user-id",
+     "args": {
+      "user": "carol"
+     },
+     "capture": "c_uid"
+    },
+    {
+     "request": {
+      "operation": "listIdentities",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       }
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "IdentityList"
+     },
+     "capture": {
+      "a_idn": "/items/0/id"
+     }
+    },
+    {
+     "request": {
+      "operation": "listContacts",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       }
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "ContactList"
+     },
+     "capture": {
+      "a_peer": {
+       "at": "/items",
+       "where": {
+        "/display_name": "Bob (synthetic)"
+       },
+       "field": "/id"
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "listChannels",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       }
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "ChannelList"
+     },
+     "capture": {
+      "a_public": {
+       "at": "/items",
+       "where": {
+        "/name": "Public (synthetic)"
+       },
+       "field": "/id"
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "listIdentities",
+      "body": {
+       "caller": {
+        "user_id": "${c_uid}",
+        "session_ref": "${c_ref}"
+       }
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "IdentityList"
+     },
+     "capture": {
+      "c_idn": "/items/0/id"
+     }
+    },
+    {
+     "request": {
+      "operation": "listContacts",
+      "body": {
+       "caller": {
+        "user_id": "${c_uid}",
+        "session_ref": "${c_ref}"
+       }
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "ContactList"
+     },
+     "capture": {
+      "c_peer": {
+       "at": "/items",
+       "where": {
+        "/display_name": "Erin (synthetic)"
+       },
+       "field": "/id"
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "listChannels",
+      "body": {
+       "caller": {
+        "user_id": "${c_uid}",
+        "session_ref": "${c_ref}"
+       }
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "ChannelList"
+     },
+     "capture": {
+      "c_public": {
+       "at": "/items",
+       "where": {
+        "/name": "Public (synthetic)"
+       },
+       "field": "/id"
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "readEvents",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       },
+       "cursor": null,
+       "wait_s": 0
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "EventBatch"
+     },
+     "capture": {
+      "a_cur": "/cursor"
+     }
+    },
+    {
+     "request": {
+      "operation": "readEvents",
+      "body": {
+       "caller": {
+        "user_id": "${c_uid}",
+        "session_ref": "${c_ref}"
+       },
+       "cursor": null,
+       "wait_s": 0
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "EventBatch"
+     },
+     "capture": {
+      "c_cur": "/cursor"
+     }
+    },
+    {
+     "request": {
+      "operation": "createSendAttempt",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       },
+       "request": {
+        "client_draft_id": "drf_synthetic_e02",
+        "client_attempt_id": "cat_synthetic_e02",
+        "identity_id": "${a_idn}",
+        "target": {
+         "kind": "contact",
+         "id": "${a_peer}"
+        },
+        "content": {
+         "kind": "text",
+         "text": "hello (synthetic)"
+        }
+       }
+      }
+     },
+     "expect": {
+      "status": 201,
+      "schema": "SendAttempt"
+     },
+     "capture": {
+      "a_att": "/id"
+     }
+    },
+    {
+     "request": {
+      "operation": "createSendAttempt",
+      "body": {
+       "caller": {
+        "user_id": "${c_uid}",
+        "session_ref": "${c_ref}"
+       },
+       "request": {
+        "client_draft_id": "drf_synthetic_e02",
+        "client_attempt_id": "cat_synthetic_e02",
+        "identity_id": "${c_idn}",
+        "target": {
+         "kind": "contact",
+         "id": "${c_peer}"
+        },
+        "content": {
+         "kind": "text",
+         "text": "hello (synthetic)"
+        }
+       }
+      }
+     },
+     "expect": {
+      "status": 201,
+      "schema": "SendAttempt"
+     },
+     "capture": {
+      "c_att": "/id"
+     }
+    },
+    {
+     "request": {
+      "operation": "readEvents",
+      "body": {
+       "caller": {
+        "user_id": "${c_uid}",
+        "session_ref": "${c_ref}"
+       },
+       "cursor": "${c_cur}",
+       "wait_s": 0
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "EventBatch",
+      "match": [
+       {
+        "at": "/events",
+        "where": {
+         "/resource_id": "${c_att}"
+        },
+        "count": 1
+       },
+       {
+        "at": "/events",
+        "where": {
+         "/resource_id": "${a_att}"
+        },
+        "count": 0
+       }
+      ]
+     }
+    },
+    {
+     "request": {
+      "operation": "readEvents",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       },
+       "cursor": "${a_cur}",
+       "wait_s": 0
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "EventBatch",
+      "match": [
+       {
+        "at": "/events",
+        "where": {
+         "/resource_id": "${a_att}"
+        },
+        "count": 1
+       },
+       {
+        "at": "/events",
+        "where": {
+         "/resource_id": "${c_att}"
+        },
+        "count": 0
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "events-03",
+   "title": "A cursor aged out of retention answers 410 cursor_expired; a read from now still works",
+   "world": "two-fleets",
+   "steps": [
+    {
+     "action": "issue-session",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "a_ref"
+    },
+    {
+     "action": "user-id",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "a_uid"
+    },
+    {
+     "request": {
+      "operation": "readEvents",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       },
+       "cursor": null,
+       "wait_s": 0
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "EventBatch"
+     },
+     "capture": {
+      "cur": "/cursor"
+     }
+    },
+    {
+     "action": "age-out-events",
+     "args": {}
+    },
+    {
+     "request": {
+      "operation": "readEvents",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       },
+       "cursor": "${cur}",
+       "wait_s": 0
+      }
+     },
+     "expect": {
+      "status": 410,
+      "schema": "Refusal",
+      "body": {
+       "/code": "cursor_expired",
+       "/retryable": false
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "readEvents",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       },
+       "cursor": null,
+       "wait_s": 0
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "EventBatch"
+     }
+    }
+   ]
+  },
+  {
+   "id": "events-04",
+   "title": "A cursor the core never issued answers 410 cursor_expired",
+   "world": "two-fleets",
+   "steps": [
+    {
+     "action": "issue-session",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "a_ref"
+    },
+    {
+     "action": "user-id",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "a_uid"
+    },
+    {
+     "request": {
+      "operation": "readEvents",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       },
+       "cursor": "synthetic_event_cursor_never_issued",
+       "wait_s": 0
+      }
+     },
+     "expect": {
+      "status": 410,
+      "schema": "Refusal",
+      "body": {
+       "/code": "cursor_expired",
+       "/retryable": false
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "events-05",
+   "title": "With nothing held a read waits at most wait_s and answers an empty batch",
+   "world": "two-fleets",
+   "steps": [
+    {
+     "action": "issue-session",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "a_ref"
+    },
+    {
+     "action": "user-id",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "a_uid"
+    },
+    {
+     "request": {
+      "operation": "readEvents",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       },
+       "cursor": null,
+       "wait_s": 0
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "EventBatch"
+     },
+     "capture": {
+      "cur": "/cursor"
+     }
+    },
+    {
+     "request": {
+      "operation": "readEvents",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       },
+       "cursor": "${cur}",
+       "wait_s": 1
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "EventBatch",
+      "body": {
+       "/events": []
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "events-06",
+   "title": "A read for an ended session answers session_ended, never a batch",
+   "world": "two-fleets",
+   "steps": [
+    {
+     "action": "issue-session",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "a_ref"
+    },
+    {
+     "action": "user-id",
+     "args": {
+      "user": "alice"
+     },
+     "capture": "a_uid"
+    },
+    {
+     "request": {
+      "operation": "readEvents",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       },
+       "cursor": null,
+       "wait_s": 0
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "EventBatch"
+     },
+     "capture": {
+      "cur": "/cursor"
+     }
+    },
+    {
+     "action": "end-session",
+     "args": {
+      "session_ref": "${a_ref}"
+     }
+    },
+    {
+     "request": {
+      "operation": "readEvents",
+      "body": {
+       "caller": {
+        "user_id": "${a_uid}",
+        "session_ref": "${a_ref}"
+       },
+       "cursor": "${cur}",
+       "wait_s": 0
+      }
+     },
+     "expect": {
+      "status": 403,
+      "schema": "Refusal",
+      "body": {
+       "/code": "session_ended",
+       "/retryable": false
+      }
+     }
+    }
+   ]
+  }
+ ]
+}

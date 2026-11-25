@@ -1,0 +1,1 @@
+{"items":[{"id":"dev_synthetic_c1","role":"companion","label":"Synthetic Companion","capability_evidence":{"ble":true,"wifi":false},"battery_pct":82,"reachability":"online","observed_at":"2030-01-01T00:00:00Z"}],"next_cursor":null,"as_of":"2030-01-01T00:00:00Z"}

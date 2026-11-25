@@ -1,6 +1,6 @@
 # Target architecture — public MECON application
 
-**Target specification, not current implementation.** MVP1 is only the Device User Reader GUI. No issues should be opened for the later architecture until MVP1 is complete or the product owner changes priority.
+**Target specification, not current implementation.** MVP1 was only the Device User Reader GUI. As of 2026-11-25 the staged migration of Backend blocks into this repository is approved and under way (see [migration status](MIGRATION_STATUS.md)); it does not mean the public Backend replaces the hosted Backend, and the later architecture below remains target design until evidenced.
 
 ## Design goals
 

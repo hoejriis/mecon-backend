@@ -236,7 +236,7 @@ MUTANTS = [
     ("hl7", "a 403 Denied marked retryable is accepted", "http_lookup.py",
      [('    if obj["retryable"] is not False:\n', "    if False:\n")]),
     ("hl8", "the feed's silence bound is ignored", "http_lookup.py",
-     [("chunks.__anext__(), self.feed_silence_s)", "chunks.__anext__(), None)")]),
+     [("            wait = self.feed_silence_s\n", "            wait = 1e9\n")]),
     ("hl9", "the lookup is sent without the service token", "http_lookup.py",
      [('headers=self._headers("application/json")', 'headers={"Accept": "application/json"}')]),
     ("hl10", "the revocation feed is opened without the service token", "http_lookup.py",

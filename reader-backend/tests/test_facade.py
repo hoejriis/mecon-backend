@@ -744,31 +744,53 @@ def test_a_send_to_an_identity_the_core_does_not_show_is_403_forbidden():
 
 # ---- the per-user cap on concurrent event streams (the facade's, since it holds them) ----
 
-def test_the_stream_cap_is_per_user_and_frees_on_close():
+def _hold(rig, headers, bound_s):
+    return asyncio.ensure_future(asgi_get_stream(rig.app, PREFIX + "/events", headers, bound_s=bound_s,
+                                                 until_heartbeat=False))
+
+
+def test_over_the_stream_cap_the_oldest_ends_and_the_newest_is_served():
     async def go():
-        rig = Rig(heartbeat_s=0.2, max_streams_per_user=2)
+        rig = Rig(heartbeat_s=0.2)  # the default cap, 5
         async with rig.client("carol"):
             pass
         carol = await _open_stream(rig)
-        async with rig.client("alice") as c:
-            alice = await _open_stream(rig)
-            held = [asyncio.ensure_future(asgi_get_stream(rig.app, PREFIX + "/events", alice, bound_s=1.0,
-                                                          until_heartbeat=False)) for _ in range(2)]
-            await asyncio.sleep(0.3)
-            # Bounded, so a missing cap fails here instead of hanging on an endless stream.
-            status, hdrs, raw, _ = await asgi_get_stream(rig.app, PREFIX + "/events", alice, bound_s=1.0,
-                                                         until_heartbeat=False)
-            assert status == 503, (status, raw[:200])
-            body = json.loads(raw)
-            assert body["code"] == "too_many_streams" and body["retryable"] is True
-            status, _, _ = await asgi_get_stream(rig.app, PREFIX + "/events", carol, bound_s=1.0,
-                                                 until_heartbeat=True)
-            assert status == 200  # another user's streams do not count
-            for h in held:
-                assert (await h)[0] == 200
-            status, _, _ = await asgi_get_stream(rig.app, PREFIX + "/events", alice, bound_s=1.0,
-                                                 until_heartbeat=True)
-            assert status == 200  # the closed streams freed their places
+        async with rig.client("alice"):
+            pass
+        alice = await _open_stream(rig)
+        held = []
+        for _ in range(5):
+            held.append(_hold(rig, alice, 2.5))
+            await asyncio.sleep(0.1)  # opened in order: held[0] is the oldest
+        other = _hold(rig, carol, 2.5)
+        await asyncio.sleep(0.1)
+        sixth = _hold(rig, alice, 1.0)
+        first = await asyncio.wait_for(asyncio.shield(held[0]), 1.5)  # ends long before its own bound
+        status, _, raw, ended = first
+        assert status == 200 and ended, "the oldest stream was not ended"
+        assert b"session_revoked" not in raw  # closed cleanly, never as a sign-out
+        status, _, _, ended = await sixth
+        assert status == 200 and not ended  # the newest is served, nothing refused
+        for h in held[1:]:
+            assert (await h)[3] is False, "a stream other than the oldest was ended"
+        assert (await other)[3] is False  # another user's stream is unaffected
+    run(go())
+
+
+def test_a_closed_stream_frees_its_place_under_the_cap():
+    async def go():
+        rig = Rig(heartbeat_s=0.2, max_streams_per_user=2)
+        async with rig.client("alice"):
+            pass
+        alice = await _open_stream(rig)
+        oldest = _hold(rig, alice, 2.5)
+        await asyncio.sleep(0.1)
+        await asyncio.wait_for(_hold(rig, alice, 0.3), 3)  # the newest closes on its own
+        await asyncio.sleep(0.1)
+        third = _hold(rig, alice, 0.8)
+        assert (await third)[0] == 200
+        status, _, _, ended = await oldest
+        assert status == 200 and not ended, "a freed place was still counted: the oldest stream was ended"
     run(go())
 
 

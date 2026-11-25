@@ -132,7 +132,11 @@ info:
 
     **Stream cap.** The facade holds the browser streams and enforces the
     per-user cap on concurrent streams; the core sees only reads and keeps no
-    stream count.
+    stream count. When a user opens one stream over the cap, the facade ends
+    that user's oldest stream and serves the new one: the newest wins and
+    nothing is refused. The ended stream closes cleanly with no frame (the
+    Reader API has no frame for it; `session_revoked` would sign the user
+    out), and a Reader reconnects it as after any close.
 
     ## Login rate limits
 

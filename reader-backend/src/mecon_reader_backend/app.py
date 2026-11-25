@@ -73,7 +73,7 @@ class FacadeConfig:
     # address for the core's per-client login limits. Empty: the connection's peer address is the client's.
     trusted_proxies: tuple[str, ...] = ()
     login_decoy_lifetime_s: int = 900  # the expires_at of the 202 answered when the core says rate_limited
-    max_streams_per_user: int = 5  # concurrent GET /events streams one user may hold (the facade holds them)
+    max_streams_per_user: int = 5  # concurrent GET /events streams per user; one more ends that user's oldest
     extra: dict[str, Any] = field(default_factory=dict)
 
 
@@ -159,7 +159,7 @@ def create_app(lookup: SessionLookup, core: ReaderCore, config: FacadeConfig | N
     """The Reader API app. Given both observation ports it also serves contracts/observations/v1."""
     cfg = config or FacadeConfig()
     trusted = tuple(ipaddress.ip_network(n, strict=False) for n in cfg.trusted_proxies)
-    open_streams: dict[str, int] = {}  # user_id -> GET /events streams held open
+    open_streams: dict[str, list[asyncio.Event]] = {}  # user_id -> its open GET /events streams, oldest first
     sessions = SessionResolver(lookup, cache_s=cfg.lookup_cache_s, cache_max=cfg.lookup_cache_max, timeout_s=cfg.lookup_timeout_s,
                                feed_retry_s=cfg.feed_retry_s)
 
@@ -240,25 +240,22 @@ def create_app(lookup: SessionLookup, core: ReaderCore, config: FacadeConfig | N
         return client_address(request.client.host if request.client else None,
                               request.headers.get("x-forwarded-for"), trusted)
 
-    def reserve_stream(user_id: str) -> Callable[[], None]:
-        """Count one GET /events stream against the user's cap; the returned release is idempotent."""
-        n = open_streams.get(user_id, 0)
-        if n >= cfg.max_streams_per_user:
-            raise Refusal(503, "too_many_streams", "too many open event streams for this user", retryable=True)
-        open_streams[user_id] = n + 1
-        done = False
+    def reserve_stream(user_id: str) -> tuple[asyncio.Event, Callable[[], None]]:
+        """Count one GET /events stream against the user's cap. Over the cap the user's oldest stream is told to
+        end (its event is set), so the newest wins and nothing is refused. The returned release is idempotent."""
+        ended = asyncio.Event()
+        streams = open_streams.setdefault(user_id, [])
+        streams.append(ended)
+        while len(streams) > cfg.max_streams_per_user:
+            streams.pop(0).set()
 
         def release() -> None:
-            nonlocal done
-            if done:
-                return
-            done = True
-            left = open_streams.get(user_id, 1) - 1
-            if left > 0:
-                open_streams[user_id] = left
-            else:
-                open_streams.pop(user_id, None)
-        return release
+            mine = open_streams.get(user_id)
+            if mine is not None and ended in mine:
+                mine.remove(ended)
+                if not mine:
+                    del open_streams[user_id]
+        return ended, release
 
     async def capped(gen, release):
         try:
@@ -406,14 +403,16 @@ def create_app(lookup: SessionLookup, core: ReaderCore, config: FacadeConfig | N
         header = request.headers.get("last-event-id")
         cursor = header if header is not None else request.query_params.get("cursor")
         v.cursor_param(cursor)
-        release = reserve_stream(c.user_id)
+        ended, release = reserve_stream(c.user_id)
         try:
             first = await call_core("streamEvents", core.read_events(c, cursor, 0.0))
         except BaseException:
             release()
             raise
+        # Ended by the cap (`ended` set) the stream closes cleanly with no frame: the Reader API has none for it, and
+        # session_revoked would sign the user out.
         gen = capped(event_stream(core, sessions, c, first, heartbeat_s=cfg.heartbeat_s,
-                                  feed_down_close_s=cfg.feed_down_close_s), release)
+                                  feed_down_close_s=cfg.feed_down_close_s, superseded=ended), release)
         weakref.finalize(gen, release)  # a stream whose body never started still frees its place
         return StreamingResponse(gen, media_type="text/event-stream",
                                  headers=_base_headers() | {"X-Accel-Buffering": "no"})

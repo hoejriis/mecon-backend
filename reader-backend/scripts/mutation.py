@@ -251,7 +251,9 @@ MUTANTS = [
     ("hl14", "a refused service token is treated as an ordinary outage (no ERROR, health says unavailable)",
      "http_lookup.py", [("        if status == 401:\n", "        if False:\n")]),
     ("hl15", "the service token ERROR is logged on every refusal, not once per change", "http_lookup.py",
-     [("        if new == old:\n            return\n", "")]),
+     [('        if old == "service_unauthorized" and new != "ok":\n',
+       '        if old == "service_unauthorized" and new not in ("ok", "service_unauthorized"):\n'),
+      ("        if new == old:\n            return\n", "")]),
     ("hl16", "a feed that never sends subscribed is kept open", "http_lookup.py",
      [("subscribe_by = loop.time() + self.subscribe_timeout_s", "subscribe_by = loop.time() + 1e9")]),
     ("hl17", "the public health output names a refused service token", "app.py",
@@ -266,6 +268,10 @@ MUTANTS = [
      [('_is_str(obj["csrf_token"], 16, 512)', '_is_str(obj["csrf_token"], 1, 512)')]),
     ("hl21", "a user_id over 128 characters is accepted", "http_lookup.py",
      [('_is_str(obj["user_id"], 1, 128)', '_is_str(obj["user_id"], 1)')]),
+    ("hl22", "an unavailable answer clears the refused-token state", "http_lookup.py",
+     [('        if old == "service_unauthorized" and new != "ok":\n', "        if False:\n")]),
+    ("hl23", "the data lines of one feed event are not bounded in total", "http_lookup.py",
+     [("                    if data_bytes > MAX_FEED_EVENT:\n", "                    if False:\n")]),
 ]
 
 

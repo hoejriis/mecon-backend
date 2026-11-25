@@ -66,9 +66,9 @@ Read answers are cached for at most `lookup_cache_s` (5 s), never past the calle
   - no bytes for `feed_silence_s`, heartbeats included;
   - no `subscribed` item within `subscribe_timeout_s` (30 s) of connecting, whatever other bytes arrive (logged as a warning), so caching cannot stay off unnoticed;
   - any status but 200, or a body that is not an event stream;
-  - an item it cannot read (not JSON, an unknown `type`, a missing, extra or invalid member) or an over-long line;
+  - an item it cannot read (not JSON, an unknown `type`, a missing, extra or invalid member) an over-long line, or data lines of one event over 16 KiB together;
   - any transport error.
-- **A refused service token** (401 `service_unauthorized`, on a lookup or on the feed) is a configuration fault, not an outage. It is still answered as `core_unavailable`, so the cookie is kept. It is logged at ERROR once when it starts and once when it stops, never once per request; a 503 is logged as a warning.
+- **A refused service token** (401 `service_unauthorized`, on a lookup or on the feed) is a configuration fault, not an outage. It is still answered as `core_unavailable`, so the cookie is kept. It is logged at ERROR once when it starts and once when it stops, never once per request. Only a valid answer (a `Caller`, a `Denied`, or `subscribed` on the feed) ends it: a timeout, a 503 or a refused connection shows nothing about the token; a 503 is logged as a warning.
 - **`health_state`** is `unknown` until the core first answers, then `ok`, `unavailable` or `service_unauthorized`. `GET /health` reports it as `session_lookup`, a member the Reader API's `Health` schema allows, but only as `unknown`, `ok` or `unavailable`: `/health` is unauthenticated, so a refused token shows there as `unavailable` and is named only in the ERROR log. A lookup without that attribute, such as the fake, adds nothing.
 - **The client** is httpx with explicit timeouts. It ignores proxy settings from the environment, because the core is on the deployment's private network, over plain HTTP.
 

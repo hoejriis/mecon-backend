@@ -525,11 +525,11 @@ def test_a_refused_token_is_logged_at_error_once_per_change_of_state(tmp_path, c
         return states, answers
     states, answers = run(go())
     assert states == ["unknown", "service_unauthorized", "service_unauthorized", "service_unauthorized", "ok", "ok",
-                      "service_unauthorized", "service_unauthorized", "unavailable"]
+                      "service_unauthorized", "service_unauthorized", "service_unauthorized"]
     assert [x == UNAVAILABLE for x in answers] == [s != 200 for s in statuses], "a 401 still answers core_unavailable"
     errors = [r.getMessage() for r in _errors(caplog)]
-    assert len(errors) == 4, errors  # starts, stops (ok), starts again, stops (unavailable)
-    assert "refuses" in errors[0] and "again" in errors[1] and "refuses" in errors[2] and "again" in errors[3]
+    assert len(errors) == 3, errors  # starts, stops (a valid answer), starts again; the 503 ends nothing
+    assert "refuses" in errors[0] and "again" in errors[1] and "refuses" in errors[2]
     warnings = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
     assert warnings == ["session lookup answered 503"], "the 401s are not logged as an outage, the 503 is"
 
@@ -651,3 +651,61 @@ def test_the_feed_item_check_agrees_with_the_document():
             return False
     disagreements = [i for i in items if val.is_valid(i) != readable(i)]
     assert not disagreements, disagreements
+
+
+def test_only_a_valid_answer_ends_the_refused_token_state(tmp_path, caplog):
+    """A timeout, a 503 or a refused connection shows nothing about the token: the state holds, no ERROR."""
+    caplog.set_level(logging.DEBUG)
+    steps = ["401", "timeout", "503", "401", "200", "200"]
+
+    async def go():
+        pending = list(steps)
+
+        async def handler(req, receive, send):
+            step = pending.pop(0)
+            if step == "timeout":
+                await asyncio.sleep(1.0)
+                return await respond(send, 200, json.dumps(CALLER).encode())
+            st = int(step)
+            body = CALLER if st == 200 else {"code": "service_unauthorized"} if st == 401 else \
+                {"reason": "core_unavailable", "retryable": True}
+            await respond(send, st, json.dumps(body).encode())
+        states, errors_seen = [], []
+        async with serve(Scripted(handler)) as base:
+            a = HttpSessionLookup(base, token_file(tmp_path), timeout_s=0.3)
+            for _ in steps:
+                await a.resolve(CRED, "read")
+                states.append(a.health_state)
+                errors_seen.append(len(_errors(caplog)))
+            await a.aclose()
+        b = HttpSessionLookup(base, token_file(tmp_path), timeout_s=0.3)  # the port is closed: refused
+        b.health_state = "service_unauthorized"
+        await b.resolve(CRED, "read")
+        refused_state = b.health_state
+        await b.aclose()
+        return states, errors_seen, refused_state
+    states, errors_seen, refused_state = run(go())
+    assert states == ["service_unauthorized"] * 4 + ["ok", "ok"]
+    assert errors_seen == [1, 1, 1, 1, 2, 2], "one ERROR when it starts, one when a valid answer ends it"
+    errors = [r.getMessage() for r in _errors(caplog)]
+    assert "refuses" in errors[0] and "again" in errors[1] and len(errors) == 2
+    assert refused_state == "service_unauthorized", "a refused connection ends nothing"
+
+
+def _spaced_revocation(pad_lines):
+    lines = [b'data: {"type":"revocation",'] + [b"data:  " + b" " * 1000] * pad_lines \
+        + [b'data: "session_ref":"ses_synthetic_0006","reason":"revoked"}']
+    return b"\n".join(lines) + b"\n\n"
+
+
+def test_an_event_under_the_bound_is_read(tmp_path):
+    chunks = [sse({"type": "subscribed"}), _spaced_revocation(10)]
+    items, _, _, _ = run(collect(tmp_path, feed(chunks)))
+    assert items == [Subscribed(), Revocation("ses_synthetic_0006", "revoked")]
+
+
+def test_an_event_whose_data_lines_exceed_the_bound_ends_the_feed(tmp_path):
+    """Each line is short; together they pass 16 KiB. The item is valid JSON, so only the bound ends it."""
+    chunks = [sse({"type": "subscribed"}), _spaced_revocation(20)]
+    items, ended, _, _ = run(collect(tmp_path, feed(chunks, then_silent=True)))
+    assert items == [Subscribed()] and ended

@@ -42,6 +42,7 @@ _DATE_TIME = re.compile(r"\d{4}-\d{2}-\d{2}[Tt]\d{2}:\d{2}:\d{2}(\.\d+)?([Zz]|[+
 MAX_CREDENTIAL, MAX_ORIGIN, MAX_SEC_FETCH_SITE, MAX_CSRF = 4096, 2048, 32, 512
 MAX_ANSWER_BYTES = 64 * 1024  # a lookup answer is a few hundred bytes; a larger one is malformed
 MAX_FEED_LINE = 64 * 1024  # one SSE line; a longer one ends the feed
+MAX_FEED_EVENT = 16 * 1024  # the data lines of one SSE event together; more ends the feed
 
 _UNAVAILABLE = Denied("core_unavailable")
 
@@ -128,10 +129,12 @@ class HttpSessionLookup:
     (bytes such as heartbeats do not count) before it is ended and resubscribed. `client` is for tests; without one the adapter makes its own, which ignores proxy
     settings from the environment.
 
-    `health_state` is what the facade's health output reports for the lookup: `unknown` before the core
-    has answered, `ok` after a valid answer, `unavailable` after a failed one, and `service_unauthorized`
-    while the core refuses our service token. The last is a configuration fault, not an outage: it is
-    logged at ERROR once when it starts and once when it stops, and is still answered as core_unavailable.
+    `health_state` is the lookup's own state: `unknown` before the core has answered, `ok` after a valid
+    answer, `unavailable` after a failed one, and `service_unauthorized` while the core refuses our service
+    token. The last is a configuration fault, not an outage: it is logged at ERROR once when it starts and
+    once when it stops, and is still answered as core_unavailable. Only a valid answer (a Caller, a Denied,
+    or `subscribed` on the feed) ends it; a timeout or a 503 shows nothing about the token. The facade's
+    unauthenticated health output never names it: it reports `unknown`, `ok` or `unavailable` only.
     """
 
     def __init__(self, base_url: str, token_file: str | os.PathLike, *, timeout_s: float,
@@ -155,6 +158,8 @@ class HttpSessionLookup:
 
     def _set_state(self, new: str) -> None:
         old = self.health_state
+        if old == "service_unauthorized" and new != "ok":
+            return  # still refused, or nothing about the token shown: only a valid answer ends the state
         if new == old:
             return
         if new == "service_unauthorized":
@@ -293,6 +298,7 @@ class HttpSessionLookup:
         chunks = resp.aiter_bytes()
         buf = b""
         data: list[str] = []
+        data_bytes = 0
         loop = asyncio.get_running_loop()
         subscribe_by = loop.time() + self.subscribe_timeout_s
         subscribed = False
@@ -326,7 +332,7 @@ class HttpSessionLookup:
                 if line == "":
                     if data:
                         item = parse_revocation_item(_json("\n".join(data).encode(), strict=True))
-                        data = []
+                        data, data_bytes = [], 0
                         if isinstance(item, Subscribed):
                             subscribed = True
                             self._set_state("ok")
@@ -335,6 +341,9 @@ class HttpSessionLookup:
                     continue  # a comment: the heartbeat
                 elif line.startswith("data:"):
                     data.append(line[5:].removeprefix(" "))
+                    data_bytes += len(data[-1]) + 1
+                    if data_bytes > MAX_FEED_EVENT:
+                        raise _Malformed("feed event too large")
                 # event:, id: and retry: lines carry nothing this feed uses
             if len(buf) > MAX_FEED_LINE:
                 raise _Malformed("feed line too long")

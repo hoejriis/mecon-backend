@@ -69,7 +69,7 @@ Read answers are cached for at most `lookup_cache_s` (5 s), never past the calle
   - an item it cannot read (not JSON, an unknown `type`, a missing, extra or invalid member) or an over-long line;
   - any transport error.
 - **A refused service token** (401 `service_unauthorized`, on a lookup or on the feed) is a configuration fault, not an outage. It is still answered as `core_unavailable`, so the cookie is kept. It is logged at ERROR once when it starts and once when it stops, never once per request; a 503 is logged as a warning.
-- **`health_state`** is `unknown` until the core first answers, then `ok`, `unavailable` or `service_unauthorized`. `GET /health` reports it as `session_lookup`, a member the Reader API's `Health` schema allows. A lookup without that attribute, such as the fake, adds nothing.
+- **`health_state`** is `unknown` until the core first answers, then `ok`, `unavailable` or `service_unauthorized`. `GET /health` reports it as `session_lookup`, a member the Reader API's `Health` schema allows, but only as `unknown`, `ok` or `unavailable`: `/health` is unauthenticated, so a refused token shows there as `unavailable` and is named only in the ERROR log. A lookup without that attribute, such as the fake, adds nothing.
 - **The client** is httpx with explicit timeouts. It ignores proxy settings from the environment, because the core is on the deployment's private network, over plain HTTP.
 
 ## Fake adapters
@@ -110,7 +110,7 @@ The adapter's own tests ([`tests/test_http_lookup.py`](tests/test_http_lookup.py
 - a redirect, a timeout and a refused connection;
 - the request body and the token header, a token file that changes, and no token;
 - the feed: comments, unreadable items (unknown types included, cross-checked against `RevocationItem`), split frames, silence past the bound, heartbeats that keep it up, no `subscribed` within its bound and the resolver resubscribing, every non-200 status, malformed items, and the resolver marking it down;
-- the refused-token state: ERROR once per change, and `session_lookup` in the health output;
+- the refused-token state: ERROR once per change, and `session_lookup` in the health output, which never names a refused token;
 - that neither the token nor the cookie value appears in the logs.
 
 This proves the adapter against a stub that serves the contract, not against a real core. No real core has served these cases to this adapter, so CI does not prove the adapter and a core agree on anything the cases leave open, and it does not prove the adapter's behaviour under real network faults beyond a loopback socket.

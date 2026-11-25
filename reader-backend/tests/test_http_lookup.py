@@ -548,7 +548,7 @@ def test_a_feed_refused_its_token_reports_the_state_once(tmp_path, caplog):
     assert len(_errors(caplog)) == 1
 
 
-def test_the_health_output_reports_the_lookup_state(tmp_path):
+def test_the_health_output_reports_the_lookup_state_without_naming_a_refused_token(tmp_path):
     from mecon_reader_backend import FacadeConfig, create_app
     from mecon_reader_backend.app import PREFIX
     from mecon_reader_backend.fakes import build
@@ -564,23 +564,28 @@ def test_the_health_output_reports_the_lookup_state(tmp_path):
             st = pending.pop(0)
             body = CALLER if st == 200 else {"code": "service_unauthorized"} if st == 401 else {}
             await respond(send, st, json.dumps(body).encode())
-        bodies = []
+        bodies, raws, internal = [], [], []
         _, fake_lookup, core = build(WORLDS["worlds"]["two-fleets"])
         async with serve(Scripted(handler)) as base:
             a = HttpSessionLookup(base, token_file(tmp_path), timeout_s=2.0)
             app = create_app(a, core, FacadeConfig())
             async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url=BASE) as c:
-                bodies.append((await c.get(PREFIX + "/health")).json())
-                for _ in statuses:
-                    await a.resolve(CRED, "read")
-                    bodies.append((await c.get(PREFIX + "/health")).json())
+                for i in range(len(statuses) + 1):
+                    if i:
+                        await a.resolve(CRED, "read")
+                    internal.append(a.health_state)
+                    r = await c.get(PREFIX + "/health")
+                    raws.append(r.text)
+                    bodies.append(r.json())
             await a.aclose()
         fake_app = create_app(fake_lookup, core, FacadeConfig())
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=fake_app), base_url=BASE) as c:
             fake_body = (await c.get(PREFIX + "/health")).json()
-        return bodies, fake_body
-    bodies, fake_body = run(go())
-    assert [b["session_lookup"] for b in bodies] == ["unknown", "service_unauthorized", "ok", "unavailable"]
+        return bodies, raws, internal, fake_body
+    bodies, raws, internal, fake_body = run(go())
+    assert internal == ["unknown", "service_unauthorized", "ok", "unavailable"], "the adapter keeps the distinct state"
+    assert [b["session_lookup"] for b in bodies] == ["unknown", "unavailable", "ok", "unavailable"]
+    assert not [r for r in raws if "service_unauthorized" in r], "the public health output never names it"
     val = schema_validator("Health")
     assert all(val.is_valid(b) for b in bodies + [fake_body])
     assert "session_lookup" not in fake_body, "a lookup without a state adds nothing"

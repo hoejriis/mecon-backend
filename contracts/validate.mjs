@@ -12,7 +12,7 @@ import { validateObservationSubscription } from './validate-observation-subscrip
 import { validateRawCapture } from './validate-raw-capture.mjs';
 import { validateReaderCases } from './validate-reader-cases.mjs';
 
-const docs = ['reader-api/v1/openapi.yaml', 'observations/v1/openapi.yaml'];
+const docs = ['reader-api/v1/openapi.yaml', 'observations/v1/openapi.yaml', 'session-lookup/v1/openapi.yaml'];
 // Privacy: no observation fixture or schema may carry these fields (see the contract's description).
 const FORBIDDEN_KEY = /route|path|hop|relay|hash|payload|content|text|transmitter|sender|raw|bytes/i;
 const forbiddenKeys = (v, trail = '') =>
@@ -111,6 +111,10 @@ failures += cases.failures;
 const obsCases = validateReaderCases('observations/v1', 'mecon-observations');
 checked += obsCases.checked;
 failures += obsCases.failures;
+// The session lookup contract's conformance cases, in the same format.
+const lookupCases = validateReaderCases('session-lookup/v1', 'mecon-session-lookup');
+checked += lookupCases.checked;
+failures += lookupCases.failures;
 // The WebSocket hold contract: frame schemas, fixtures A-F, rejected frames, and the README's references.
 const hold = validateHold();
 checked += hold.checked;

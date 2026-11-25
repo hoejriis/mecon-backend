@@ -1,0 +1,310 @@
+openapi: 3.1.0
+info:
+  title: MECON Session Lookup (facade to core)
+  version: 1.0.0-draft.1
+  summary: How a public facade asks the private core who a caller is and what it may do.
+  description: |
+    Target specification, not a claim that any core serves it today. This
+    document is a draft and may change by pull request until a core implements
+    it.
+
+    A public component, the **facade** (for example the public Reader API), never
+    parses, stores or judges a browser's session cookie. It hands the cookie value
+    to the **core** and acts on the answer: a `Caller`, or a `Denied` with a
+    `reason`. The core owns sessions, roles, grants, the origin allow-list, the
+    CSRF secret and every resource scope.
+
+    **Transport.** Plain HTTP on the deployment's private network between the
+    facade and core containers. These operations are never routed through the
+    public reverse proxy and are never reachable from a browser. The facade
+    authenticates to the core with a per-deployment service token,
+    `Authorization: Bearer <service token>`, read from a mode-600 file mounted
+    read-only into both containers. Without the header, or with a wrong token,
+    the core answers 401 `service_unauthorized` and looks nothing up.
+
+    **No resource scope in the answer.** A `Caller` names who the caller is and
+    which API areas are on offer to it; it carries no fleet, device, channel or
+    observer list. Scope stays core-side: every core call the facade makes
+    carries the caller reference (`user_id` and `session_ref`), and the core
+    decides what it returns. The facade never filters.
+
+    **Isolation.** Instance Admin and Fleet Owner grant no access to other users'
+    private messages or keys. That is the core's rule. The facade holds no such
+    data and nothing in this contract carries any.
+
+    ## What the facade does with each Denied reason
+
+    | `reason` | Core status | Browser sees | Cookie | Retry |
+    | --- | --- | --- | --- | --- |
+    | `expired` | 403 | 401 `unauthenticated` | cleared | no |
+    | `revoked` | 403 | 401 `unauthenticated` | cleared | no |
+    | `unknown` | 403 | 401 `unauthenticated` | cleared | no |
+    | `csrf_failed` | 403 | 403 `csrf_failed` | kept | no |
+    | `origin_rejected` | 403 | 403 `origin_rejected` | kept | no |
+    | `core_unavailable` | 503 | 503 with `retryable: true` | kept | yes |
+
+    `core_unavailable` is also the facade's own answer when the core times out,
+    answers something that is not a valid `Caller` or `Denied`, or refuses the
+    facade's service token (401 `service_unauthorized`). A core that cannot be
+    reached never signs anyone out: only the three session reasons clear the
+    cookie.
+
+    ## Origin rule
+
+    The core checks it on every `write` lookup. The request is accepted if
+    `origin`, with one trailing `/` removed, is in the core's allow-list, **or**
+    `sec_fetch_site` is `same-origin`. Otherwise the answer is `origin_rejected`.
+    There is one allow-list only, the core's. A facade may pre-check the same
+    rule, but a pre-check is never the only check. The facade passes
+    `sec_fetch_site` on every `write` lookup.
+
+    Login start's Origin check is not done through `/lookup`: it is the same OR,
+    checked by the core in its own login-start call.
+
+    ## CSRF
+
+    The core derives the token (an HMAC of the session under a secret the core
+    holds; the token is not stored) and the key never leaves the core. On every
+    `write` lookup the core checks `csrf_token` and answers `csrf_failed` when it
+    is missing or wrong. The core returns `Caller.csrf_token` only on a lookup with
+    `purpose: session`, the one that serves `GET /session`, so the browser can
+    learn its token there; on every other purpose the field is absent.
+
+    ## Revocations
+
+    `GET /revocations` is a Server-Sent Events stream (`text/event-stream`), as
+    the Reader API's and the observation API's streams are. Each `data:` line is
+    one `RevocationItem`. The first item on every subscription and
+    resubscription is `{"type":"subscribed"}`. Then one `revocation` item follows
+    for each session that ended, with its `session_ref` and `reason` (`expired`
+    or `revoked`).
+
+    The facade, on a revocation for a session that holds an open stream, sends
+    that API's revocation frame and closes the stream. The frame is per API:
+    `session_revoked` on the Reader API, `access_revoked` on the observation API.
+    If the feed is down, the facade closes every open stream after its bound, and
+    every reconnect looks the session up again.
+
+    ## Caching
+
+    A facade may cache a `Caller` for at most 5 seconds, never past its
+    `expires_at`, never across a revocation item for that `session_ref`, and only
+    while the revocation feed has said `subscribed`. Nothing is cached before the
+    first `subscribed` or after the feed ends.
+
+    ## Behaviours the case runner cannot replay
+
+    Cache timing, the facade's stream close on a revocation, and closing every
+    stream when the feed is down need a clock and a held-open stream. They are
+    proved by the implementations' own tests; see `cases/README.md`.
+  license:
+    name: Apache-2.0
+    identifier: Apache-2.0
+servers:
+  - url: http://core.internal
+    description: The core, on the deployment's private network only
+security:
+  - serviceToken: []
+tags:
+  - name: lookup
+    description: Resolve a session cookie to a caller.
+  - name: revocations
+    description: The feed of sessions that ended.
+paths:
+  /lookup:
+    post:
+      tags: [lookup]
+      operationId: lookupCaller
+      summary: Resolve a session cookie to a caller and decide this request
+      description: |
+        Returns the `Caller` when the credential is a live session and, for a
+        `write`, the origin and CSRF checks pass. Otherwise it returns a `Denied`
+        with the reason. Order of checks: the service token, then the session,
+        then (for `write`) the origin, then the CSRF token.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LookupRequest' }
+            examples:
+              read: { externalValue: fixtures/request-read.json }
+              write: { externalValue: fixtures/request-write.json }
+      responses:
+        '200':
+          description: The caller
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Caller' }
+              examples:
+                caller: { externalValue: fixtures/caller.json }
+                callerWithCsrf: { externalValue: fixtures/caller-with-csrf.json }
+        '401':
+          description: The service token is missing or wrong
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ServiceError' }
+              examples:
+                serviceUnauthorized: { externalValue: fixtures/service-unauthorized.json }
+        '403':
+          description: Denied. The reason says what the facade does next (table above).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Denied' }
+              examples:
+                expired: { externalValue: fixtures/denied-expired.json }
+                revoked: { externalValue: fixtures/denied-revoked.json }
+                unknown: { externalValue: fixtures/denied-unknown.json }
+                csrfFailed: { externalValue: fixtures/denied-csrf-failed.json }
+                originRejected: { externalValue: fixtures/denied-origin-rejected.json }
+        '503':
+          description: The core cannot answer now
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Unavailable' }
+              examples:
+                coreUnavailable: { externalValue: fixtures/denied-core-unavailable.json }
+  /revocations:
+    get:
+      tags: [revocations]
+      operationId: streamRevocations
+      summary: Sessions that ended (SSE)
+      description: |
+        `text/event-stream`. Each `data:` line is one `RevocationItem`. The first
+        item on every (re)subscription is `subscribed`. While idle the core sends
+        an SSE comment line (`: heartbeat`) at least every 25 seconds; a facade
+        that sees no bytes for 50 seconds treats the feed as down.
+      responses:
+        '200':
+          description: Revocation feed
+          content:
+            text/event-stream:
+              schema: { $ref: '#/components/schemas/RevocationItem' }
+              examples:
+                subscribed: { externalValue: fixtures/item-subscribed.json }
+                revocation: { externalValue: fixtures/item-revocation.json }
+        '401':
+          description: The service token is missing or wrong
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ServiceError' }
+              examples:
+                serviceUnauthorized: { externalValue: fixtures/service-unauthorized.json }
+
+components:
+  securitySchemes:
+    serviceToken:
+      type: http
+      scheme: bearer
+      description: Per-deployment service token, a mode-600 file mounted read-only into the facade and the core.
+
+  schemas:
+    LookupRequest:
+      type: object
+      required: [credential, purpose, origin, sec_fetch_site]
+      additionalProperties: false
+      properties:
+        credential:
+          type: string
+          minLength: 1
+          maxLength: 4096
+          description: The browser's session cookie value. Opaque to the facade, which never parses or stores it.
+        purpose:
+          type: string
+          enum: [read, write, stream, session]
+          description: '`session` is a read that serves `GET /session`; only it returns `Caller.csrf_token`.'
+        origin:
+          type: [string, 'null']
+          maxLength: 2048
+          description: The request's Origin header, or null when it has none.
+        sec_fetch_site:
+          type: [string, 'null']
+          maxLength: 32
+          description: The request's Sec-Fetch-Site header, or null when it has none. Passed on every write lookup.
+        csrf_token:
+          type: string
+          minLength: 1
+          maxLength: 512
+          description: The facade sends it on every `write` lookup. The core checks it then and answers `csrf_failed` when it is missing or wrong, so a request without it is well-formed.
+
+    Capability:
+      type: string
+      enum: [available, unavailable, forbidden]
+      description: '`forbidden` is reserved: a core does not send it in this version. A facade that receives it answers as the area''s own API says (for example 403 on the observation API, where `unavailable` is a 503), never as `unavailable`.'
+
+    Caller:
+      type: object
+      required: [user_id, session_ref, role, break_glass, display_name, capabilities, expires_at]
+      additionalProperties: false
+      properties:
+        user_id:
+          type: string
+          minLength: 1
+          description: Opaque.
+        session_ref:
+          type: string
+          minLength: 1
+          description: Opaque, non-secret reference to the session. Never the cookie value. Matches the `session_ref` of a revocation item.
+        role:
+          type: string
+          enum: [instance_admin, user]
+        break_glass:
+          type: boolean
+        display_name:
+          type: string
+        capabilities:
+          type: object
+          required: [devices, messaging, send, events, observations]
+          additionalProperties: false
+          properties:
+            devices: { $ref: '#/components/schemas/Capability' }
+            messaging: { $ref: '#/components/schemas/Capability' }
+            send: { $ref: '#/components/schemas/Capability' }
+            events: { $ref: '#/components/schemas/Capability' }
+            observations: { $ref: '#/components/schemas/Capability' }
+        expires_at:
+          type: string
+          format: date-time
+        csrf_token:
+          type: string
+          minLength: 1
+          description: 'Present only on a lookup with `purpose: session`; absent otherwise.'
+
+    Denied:
+      type: object
+      required: [reason, retryable]
+      additionalProperties: false
+      properties:
+        reason:
+          type: string
+          enum: [expired, revoked, unknown, csrf_failed, origin_rejected]
+        retryable: { type: boolean, const: false }
+
+    Unavailable:
+      type: object
+      required: [reason, retryable]
+      additionalProperties: false
+      properties:
+        reason: { type: string, const: core_unavailable }
+        retryable: { type: boolean, const: true }
+
+    ServiceError:
+      type: object
+      required: [code]
+      additionalProperties: false
+      properties:
+        code: { type: string, const: service_unauthorized }
+
+    RevocationItem:
+      oneOf:
+        - type: object
+          required: [type]
+          additionalProperties: false
+          properties:
+            type: { type: string, const: subscribed }
+        - type: object
+          required: [type, session_ref, reason]
+          additionalProperties: false
+          properties:
+            type: { type: string, const: revocation }
+            session_ref: { type: string, minLength: 1 }
+            reason: { type: string, enum: [expired, revoked] }

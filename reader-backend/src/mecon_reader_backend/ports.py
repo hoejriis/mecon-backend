@@ -34,7 +34,7 @@ class Caller:
     break_glass: bool
     capabilities: Mapping[str, str]
     expires_at: datetime  # timezone-aware
-    csrf_token: str  # derived by the lookup; returned by GET /session only
+    csrf_token: str | None = None  # derived by the core; only on a lookup with include_csrf (GET /session)
 
 
 @dataclass(frozen=True)
@@ -56,11 +56,15 @@ class Subscribed:
 @runtime_checkable
 class SessionLookup(Protocol):
     async def resolve(self, credential: str, purpose: Purpose, *, csrf_token: str | None = None,
-                      origin: str | None = None) -> Union[Caller, Denied]:
+                      origin: str | None = None, sec_fetch_site: str | None = None,
+                      include_csrf: bool = False) -> Union[Caller, Denied]:
         """Resolve the raw session cookie value.
 
-        For purpose="write" the facade passes the request's X-CSRF-Token and Origin values (None when
-        absent) and the lookup checks both, answering Denied("csrf_failed") or Denied("origin_rejected").
+        For purpose="write" the facade passes the request's X-CSRF-Token, Origin and Sec-Fetch-Site values
+        (None when absent). The lookup checks them: the Origin rule (an allow-listed Origin, trailing "/"
+        stripped, or Sec-Fetch-Site "same-origin") and the CSRF token, answering Denied("origin_rejected")
+        or Denied("csrf_failed"). `include_csrf` asks for the session's CSRF token in the Caller; the facade
+        asks only on the lookup behind GET /session, and the Caller carries none otherwise.
         """
         ...
 

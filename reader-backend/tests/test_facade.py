@@ -55,13 +55,16 @@ class Recording:
     """Wraps a lookup and records every resolve call."""
 
     def __init__(self, inner):
-        self.inner, self.calls = inner, []
+        self.inner, self.calls, self.extra = inner, [], []
 
-    async def resolve(self, credential, purpose, *, csrf_token=None, origin=None):
+    async def resolve(self, credential, purpose, *, csrf_token=None, origin=None, sec_fetch_site=None,
+                      include_csrf=False):
         self.calls.append({"purpose": purpose, "csrf_token": csrf_token, "origin": origin})
+        self.extra.append({"sec_fetch_site": sec_fetch_site, "include_csrf": include_csrf})
         if purpose == "write":
-            return await self.inner.resolve(credential, purpose, csrf_token=csrf_token, origin=origin)
-        return await self.inner.resolve(credential, purpose)
+            return await self.inner.resolve(credential, purpose, csrf_token=csrf_token, origin=origin,
+                                            sec_fetch_site=sec_fetch_site)
+        return await self.inner.resolve(credential, purpose, include_csrf=include_csrf)
 
     def revocations(self):
         return self.inner.revocations()

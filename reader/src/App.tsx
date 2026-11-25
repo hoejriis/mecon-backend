@@ -133,7 +133,9 @@ function AuthGate() {
   // The Backend cannot be reached and no session could be loaded: if this device has an offline
   // cache, offer it (locked: unlock form only). A reachable Backend that says "signed out" gets the login screen.
   const unreachable = status === 'signedOut' && (loginPhase === 'error' || !navigator.onLine);
-  if (unreachable && off.profiles.length > 0) return <OfflineScreen />;
+  // Offline at start with a cache on this device: show it at once instead of waiting on the session read.
+  const offlineAtStart = status === 'loading' && !navigator.onLine;
+  if ((unreachable || offlineAtStart) && off.profiles.length > 0) return <OfflineScreen />;
   if (status === 'loading') {
     return (
       <div className="shell">

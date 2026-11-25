@@ -229,7 +229,7 @@ components:
     Capability:
       type: string
       enum: [available, unavailable, forbidden]
-      description: '`forbidden` is reserved: a core does not send it in this version, and a facade treats it like `unavailable`.'
+      description: '`forbidden` is reserved: a core does not send it in this version. A facade that receives it answers as the area''s own API says (for example 403 on the observation API, where `unavailable` is a 503), never as `unavailable`.'
 
     Caller:
       type: object

@@ -138,6 +138,7 @@ class StubReaderCore:
                            if (name := request_schema(op_id)) is not None}
         self.caller_validator = CORE.schema_validator("CallerRef")
         self.served: list[tuple[str, int]] = []
+        self.requests: list[dict[str, Any]] = []  # every routed request: operation, parsed body, token accepted
 
     def _send_envelope_ok(self, body: Any) -> bool:
         """createSendAttempt's body is `{caller, request}` with a valid caller and an object `request`."""
@@ -155,7 +156,13 @@ class StubReaderCore:
         op = self.routes.get((scope["method"], scope["path"]))
         if op is None:
             return await respond(send, 404, json.dumps({"code": "not_found", "retryable": False}).encode())
-        if not self._authorized(dict(scope["headers"])):
+        authorized = self._authorized(dict(scope["headers"]))
+        try:
+            parsed = json.loads(raw) if raw else None
+        except ValueError:
+            parsed = _NOT_JSON
+        self.requests.append({"operation": op, "body": parsed, "auth_ok": authorized})
+        if not authorized:
             self.served.append((op, 401))
             return await respond(send, 401, json.dumps(SERVICE_UNAUTHORIZED).encode())
         body = None

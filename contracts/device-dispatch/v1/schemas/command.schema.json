@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.test/mecon/device-dispatch/v1/command",
+  "title": "A typed device command",
+  "description": "An op and its args. Whether the op exists, fits the device's role and has valid args is decided by the catalogue (README section 1), not by this schema.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["op", "args"],
+  "properties": {
+    "op": { "type": "string", "pattern": "^[a-z]+\\.[a-z]+$" },
+    "args": { "type": "object" }
+  }
+}

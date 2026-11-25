@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.test/mecon/device-dispatch/v1/dispositions",
+  "title": "The dispositions of one attempt",
+  "description": "Five separate facts, each with its own timestamp or null. None implies another.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["signed", "transport_accepted", "device_answered", "rf_transmitted", "native_ack"],
+  "properties": {
+    "signed": { "$ref": "#/$defs/at" },
+    "transport_accepted": { "$ref": "#/$defs/at" },
+    "device_answered": {
+      "oneOf": [
+        { "type": "null" },
+        { "type": "object", "additionalProperties": false, "required": ["status", "at"],
+          "properties": { "status": { "$ref": "https://example.test/mecon/device-dispatch/v1/result#/properties/status" }, "at": { "$ref": "#/$defs/ts" } } }
+      ]
+    },
+    "rf_transmitted": {
+      "oneOf": [
+        { "type": "null" },
+        { "type": "object", "additionalProperties": false, "required": ["count", "first_at", "last_at"],
+          "properties": { "count": { "type": "integer", "minimum": 1 }, "first_at": { "$ref": "#/$defs/ts" }, "last_at": { "$ref": "#/$defs/ts" } } }
+      ]
+    },
+    "native_ack": { "$ref": "#/$defs/at" }
+  },
+  "$defs": {
+    "ts": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$" },
+    "at": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/ts" }] }
+  }
+}

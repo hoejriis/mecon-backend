@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.test/mecon/job-lifecycle/v1/delivery",
+  "title": "One delivery handed to a transport",
+  "description": "bytes stands for the stored signed bytes: a re-delivery carries the same value, never new bytes.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["job", "target", "kind", "op", "job_number", "request_id", "bytes", "delivery"],
+  "properties": {
+    "job": { "type": "string", "pattern": "^job_[1-9][0-9]*$" },
+    "target": { "type": "string", "pattern": "^(att|ctl)_[1-9][0-9]*$" },
+    "kind": { "enum": ["attempt", "control"] },
+    "op": { "type": "string", "pattern": "^[a-z]+\\.[a-z]+$" },
+    "job_number": { "type": "integer", "minimum": 1, "maximum": 4294967295 },
+    "request_id": { "type": "string", "pattern": "^rq_[1-9][0-9]*$" },
+    "bytes": { "type": "string", "minLength": 1 },
+    "delivery": { "type": "integer", "minimum": 1 }
+  }
+}

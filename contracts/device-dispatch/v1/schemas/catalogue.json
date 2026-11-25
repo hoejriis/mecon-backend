@@ -1,0 +1,89 @@
+{
+  "catalogue_version": "1.0.0-draft.1",
+  "description": "The typed commands a Backend may sign for a device. A synthetic subset: a real catalogue adds ops by pull request. Internal ops are signed by the Backend itself and cannot be requested by a caller.",
+  "ops": [
+    {
+      "op": "contact.put",
+      "roles": ["companion"],
+      "changes_state": true,
+      "internal": false,
+      "args": {
+        "type": "object", "additionalProperties": false, "required": ["contact_ref", "name"],
+        "properties": {
+          "contact_ref": { "type": "string", "pattern": "^[a-z0-9_-]{1,32}$" },
+          "name": { "type": "string", "minLength": 1, "maxLength": 32 }
+        }
+      }
+    },
+    {
+      "op": "contact.remove",
+      "roles": ["companion"],
+      "changes_state": true,
+      "internal": false,
+      "args": {
+        "type": "object", "additionalProperties": false, "required": ["contact_ref"],
+        "properties": { "contact_ref": { "type": "string", "pattern": "^[a-z0-9_-]{1,32}$" } }
+      }
+    },
+    {
+      "op": "message.send",
+      "roles": ["companion"],
+      "changes_state": true,
+      "internal": false,
+      "args": {
+        "type": "object", "additionalProperties": false, "required": ["kind", "target", "text"],
+        "properties": {
+          "kind": { "enum": ["direct", "channel"] },
+          "target": { "type": "string", "pattern": "^[a-z0-9_-]{1,32}$" },
+          "text": { "type": "string", "minLength": 1, "maxLength": 160 }
+        }
+      }
+    },
+    {
+      "op": "packet.transmit",
+      "roles": ["companion", "repeater"],
+      "changes_state": true,
+      "internal": false,
+      "args": {
+        "type": "object", "additionalProperties": false, "required": ["packet_hex"],
+        "properties": { "packet_hex": { "type": "string", "pattern": "^([0-9a-f]{2}){2,184}$" } }
+      }
+    },
+    {
+      "op": "config.apply",
+      "roles": ["companion", "repeater"],
+      "changes_state": true,
+      "internal": false,
+      "args": {
+        "type": "object", "additionalProperties": false, "required": ["settings"],
+        "properties": {
+          "settings": {
+            "type": "object", "minProperties": 1, "maxProperties": 16,
+            "propertyNames": { "pattern": "^[a-z][a-z0-9_]{0,31}$" },
+            "additionalProperties": { "type": ["string", "number", "boolean"] }
+          }
+        }
+      }
+    },
+    {
+      "op": "job.cancel",
+      "roles": ["companion", "repeater"],
+      "changes_state": true,
+      "internal": true,
+      "args": {
+        "type": "object", "additionalProperties": false, "required": ["target_job_number"],
+        "properties": { "target_job_number": { "type": "integer", "minimum": 1, "maximum": 4294967295 } }
+      }
+    },
+    {
+      "op": "job.get",
+      "roles": ["companion", "repeater"],
+      "changes_state": false,
+      "internal": true,
+      "args": {
+        "type": "object", "additionalProperties": false, "required": ["target_job_number"],
+        "properties": { "target_job_number": { "type": "integer", "minimum": 1, "maximum": 4294967295 } }
+      }
+    }
+  ]
+}

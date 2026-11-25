@@ -1,0 +1,686 @@
+{
+ "fixture": "I",
+ "title": "Dispositions kept distinct: broker acceptance, duty hold, transmission, a native ACK on a direct message and never on a channel",
+ "kind": "dispatch",
+ "contract_version": "1.0.0-draft.1",
+ "setup": {
+  "start": "2026-01-01T00:00:00Z",
+  "attempts": [
+   {
+    "request_id": "rq_1",
+    "device": "dev_1",
+    "role": "companion",
+    "job_number": 1,
+    "command": {
+     "op": "message.send",
+     "args": {
+      "kind": "direct",
+      "target": "ctc_2",
+      "text": "synthetic hello"
+     }
+    }
+   },
+   {
+    "request_id": "rq_2",
+    "device": "dev_1",
+    "role": "companion",
+    "job_number": 2,
+    "command": {
+     "op": "message.send",
+     "args": {
+      "kind": "channel",
+      "target": "chan_1",
+      "text": "synthetic broadcast"
+     }
+    }
+   },
+   {
+    "request_id": "rq_3",
+    "device": "dev_1",
+    "role": "companion",
+    "job_number": 3,
+    "command": {
+     "op": "contact.put",
+     "args": {
+      "contact_ref": "ctc_1",
+      "name": "Synthetic One"
+     }
+    }
+   }
+  ]
+ },
+ "steps": [
+  {
+   "step": "sign",
+   "t": 0,
+   "request_id": "rq_1",
+   "expect": {
+    "applied": null,
+    "ignored_results": 0,
+    "attempts": {
+     "rq_1": {
+      "signed": "2026-01-01T00:00:00Z",
+      "transport_accepted": null,
+      "device_answered": null,
+      "rf_transmitted": null,
+      "native_ack": null
+     },
+     "rq_2": {
+      "signed": null,
+      "transport_accepted": null,
+      "device_answered": null,
+      "rf_transmitted": null,
+      "native_ack": null
+     },
+     "rq_3": {
+      "signed": null,
+      "transport_accepted": null,
+      "device_answered": null,
+      "rf_transmitted": null,
+      "native_ack": null
+     }
+    }
+   }
+  },
+  {
+   "step": "sign",
+   "t": 0,
+   "request_id": "rq_2",
+   "expect": {
+    "applied": null,
+    "ignored_results": 0,
+    "attempts": {
+     "rq_1": {
+      "signed": "2026-01-01T00:00:00Z",
+      "transport_accepted": null,
+      "device_answered": null,
+      "rf_transmitted": null,
+      "native_ack": null
+     },
+     "rq_2": {
+      "signed": "2026-01-01T00:00:00Z",
+      "transport_accepted": null,
+      "device_answered": null,
+      "rf_transmitted": null,
+      "native_ack": null
+     },
+     "rq_3": {
+      "signed": null,
+      "transport_accepted": null,
+      "device_answered": null,
+      "rf_transmitted": null,
+      "native_ack": null
+     }
+    }
+   }
+  },
+  {
+   "step": "transport_accept",
+   "t": 1,
+   "request_id": "rq_1",
+   "expect": {
+    "applied": true,
+    "ignored_results": 0,
+    "attempts": {
+     "rq_1": {
+      "signed": "2026-01-01T00:00:00Z",
+      "transport_accepted": "2026-01-01T00:00:01Z",
+      "device_answered": null,
+      "rf_transmitted": null,
+      "native_ack": null
+     },
+     "rq_2": {
+      "signed": "2026-01-01T00:00:00Z",
+      "transport_accepted": null,
+      "device_answered": null,
+      "rf_transmitted": null,
+      "native_ack": null
+     },
+     "rq_3": {
+      "signed": null,
+      "transport_accepted": null,
+      "device_answered": null,
+      "rf_transmitted": null,
+      "native_ack": null
+     }
+    }
+   }
+  },
+  {
+   "step": "transport_accept",
+   "t": 1,
+   "request_id": "rq_2",
+   "expect": {
+    "applied": true,
+    "ignored_results": 0,
+    "attempts": {
+     "rq_1": {
+      "signed": "2026-01-01T00:00:00Z",
+      "transport_accepted": "2026-01-01T00:00:01Z",
+      "device_answered": null,
+      "rf_transmitted": null,
+      "native_ack": null
+     },
+     "rq_2": {
+      "signed": "2026-01-01T00:00:00Z",
+      "transport_accepted": "2026-01-01T00:00:01Z",
+      "device_answered": null,
+      "rf_transmitted": null,
+      "native_ack": null
+     },
+     "rq_3": {
+      "signed": null,
+      "transport_accepted": null,
+      "device_answered": null,
+      "rf_transmitted": null,
+      "native_ack": null
+     }
+    }
+   }
+  },
+  {
+   "step": "transport_accept",
+   "t": 1,
+   "request_id": "rq_3",
+   "expect": {
+    "applied": false,
+    "ignored_results": 0,
+    "attempts": {
+     "rq_1": {
+      "signed": "2026-01-01T00:00:00Z",
+      "transport_accepted": "2026-01-01T00:00:01Z",
+      "device_answered": null,
+      "rf_transmitted": null,
+      "native_ack": null
+     },
+     "rq_2": {
+      "signed": "2026-01-01T00:00:00Z",
+      "transport_accepted": "2026-01-01T00:00:01Z",
+      "device_answered": null,
+      "rf_transmitted": null,
+      "native_ack": null
+     },
+     "rq_3": {
+      "signed": null,
+      "transport_accepted": null,
+      "device_answered": null,
+      "rf_transmitted": null,
+      "native_ack": null
+     }
+    }
+   }
+  },
+  {
+   "step": "result",
+   "t": 2,
+   "result": {
+    "signed_by": "dev_1",
+    "request_id": "rq_1",
+    "job_number": 1,
+    "status": "queued"
+   },
+   "expect": {
+    "applied": true,
+    "ignored_results": 0,
+    "attempts": {
+     "rq_1": {
+      "signed": "2026-01-01T00:00:00Z",
+      "transport_accepted": "2026-01-01T00:00:01Z",
+      "device_answered": {
+       "status": "queued",
+       "at": "2026-01-01T00:00:02Z"
+      },
+      "rf_transmitted": null,
+      "native_ack": null
+     },
+     "rq_2": {
+      "signed": "2026-01-01T00:00:00Z",
+      "transport_accepted": "2026-01-01T00:00:01Z",
+      "device_answered": null,
+      "rf_transmitted": null,
+      "native_ack": null
+     },
+     "rq_3": {
+      "signed": null,
+      "transport_accepted": null,
+      "device_answered": null,
+      "rf_transmitted": null,
+      "native_ack": null
+     }
+    }
+   }
+  },
+  {
+   "step": "result",
+   "t": 3,
+   "result": {
+    "signed_by": "dev_1",
+    "request_id": "rq_3",
+    "job_number": 3,
+    "status": "ok"
+   },
+   "expect": {
+    "applied": false,
+    "ignored_results": 1,
+    "attempts": {
+     "rq_1": {
+      "signed": "2026-01-01T00:00:00Z",
+      "transport_accepted": "2026-01-01T00:00:01Z",
+      "device_answered": {
+       "status": "queued",
+       "at": "2026-01-01T00:00:02Z"
+      },
+      "rf_transmitted": null,
+      "native_ack": null
+     },
+     "rq_2": {
+      "signed": "2026-01-01T00:00:00Z",
+      "transport_accepted": "2026-01-01T00:00:01Z",
+      "device_answered": null,
+      "rf_transmitted": null,
+      "native_ack": null
+     },
+     "rq_3": {
+      "signed": null,
+      "transport_accepted": null,
+      "device_answered": null,
+      "rf_transmitted": null,
+      "native_ack": null
+     }
+    }
+   }
+  },
+  {
+   "step": "result",
+   "t": 5,
+   "result": {
+    "signed_by": "dev_1",
+    "request_id": "rq_1",
+    "job_number": 1,
+    "status": "duty_held"
+   },
+   "expect": {
+    "applied": true,
+    "ignored_results": 1,
+    "attempts": {
+     "rq_1": {
+      "signed": "2026-01-01T00:00:00Z",
+      "transport_accepted": "2026-01-01T00:00:01Z",
+      "device_answered": {
+       "status": "duty_held",
+       "at": "2026-01-01T00:00:05Z"
+      },
+      "rf_transmitted": null,
+      "native_ack": null
+     },
+     "rq_2": {
+      "signed": "2026-01-01T00:00:00Z",
+      "transport_accepted": "2026-01-01T00:00:01Z",
+      "device_answered": null,
+      "rf_transmitted": null,
+      "native_ack": null
+     },
+     "rq_3": {
+      "signed": null,
+      "transport_accepted": null,
+      "device_answered": null,
+      "rf_transmitted": null,
+      "native_ack": null
+     }
+    }
+   }
+  },
+  {
+   "step": "result",
+   "t": 10,
+   "result": {
+    "signed_by": "dev_1",
+    "request_id": "rq_1",
+    "job_number": 1,
+    "status": "transmitted",
+    "rf_count": 1
+   },
+   "expect": {
+    "applied": true,
+    "ignored_results": 1,
+    "attempts": {
+     "rq_1": {
+      "signed": "2026-01-01T00:00:00Z",
+      "transport_accepted": "2026-01-01T00:00:01Z",
+      "device_answered": {
+       "status": "transmitted",
+       "at": "2026-01-01T00:00:10Z"
+      },
+      "rf_transmitted": {
+       "count": 1,
+       "first_at": "2026-01-01T00:00:10Z",
+       "last_at": "2026-01-01T00:00:10Z"
+      },
+      "native_ack": null
+     },
+     "rq_2": {
+      "signed": "2026-01-01T00:00:00Z",
+      "transport_accepted": "2026-01-01T00:00:01Z",
+      "device_answered": null,
+      "rf_transmitted": null,
+      "native_ack": null
+     },
+     "rq_3": {
+      "signed": null,
+      "transport_accepted": null,
+      "device_answered": null,
+      "rf_transmitted": null,
+      "native_ack": null
+     }
+    }
+   }
+  },
+  {
+   "step": "result",
+   "t": 11,
+   "result": {
+    "signed_by": "dev_1",
+    "request_id": "rq_2",
+    "job_number": 2,
+    "status": "transmitted"
+   },
+   "expect": {
+    "applied": true,
+    "ignored_results": 1,
+    "attempts": {
+     "rq_1": {
+      "signed": "2026-01-01T00:00:00Z",
+      "transport_accepted": "2026-01-01T00:00:01Z",
+      "device_answered": {
+       "status": "transmitted",
+       "at": "2026-01-01T00:00:10Z"
+      },
+      "rf_transmitted": {
+       "count": 1,
+       "first_at": "2026-01-01T00:00:10Z",
+       "last_at": "2026-01-01T00:00:10Z"
+      },
+      "native_ack": null
+     },
+     "rq_2": {
+      "signed": "2026-01-01T00:00:00Z",
+      "transport_accepted": "2026-01-01T00:00:01Z",
+      "device_answered": {
+       "status": "transmitted",
+       "at": "2026-01-01T00:00:11Z"
+      },
+      "rf_transmitted": {
+       "count": 1,
+       "first_at": "2026-01-01T00:00:11Z",
+       "last_at": "2026-01-01T00:00:11Z"
+      },
+      "native_ack": null
+     },
+     "rq_3": {
+      "signed": null,
+      "transport_accepted": null,
+      "device_answered": null,
+      "rf_transmitted": null,
+      "native_ack": null
+     }
+    }
+   }
+  },
+  {
+   "step": "result",
+   "t": 12,
+   "result": {
+    "signed_by": "dev_1",
+    "request_id": "rq_1",
+    "job_number": 1,
+    "status": "transmitted",
+    "rf_count": 1
+   },
+   "expect": {
+    "applied": true,
+    "ignored_results": 1,
+    "attempts": {
+     "rq_1": {
+      "signed": "2026-01-01T00:00:00Z",
+      "transport_accepted": "2026-01-01T00:00:01Z",
+      "device_answered": {
+       "status": "transmitted",
+       "at": "2026-01-01T00:00:12Z"
+      },
+      "rf_transmitted": {
+       "count": 2,
+       "first_at": "2026-01-01T00:00:10Z",
+       "last_at": "2026-01-01T00:00:12Z"
+      },
+      "native_ack": null
+     },
+     "rq_2": {
+      "signed": "2026-01-01T00:00:00Z",
+      "transport_accepted": "2026-01-01T00:00:01Z",
+      "device_answered": {
+       "status": "transmitted",
+       "at": "2026-01-01T00:00:11Z"
+      },
+      "rf_transmitted": {
+       "count": 1,
+       "first_at": "2026-01-01T00:00:11Z",
+       "last_at": "2026-01-01T00:00:11Z"
+      },
+      "native_ack": null
+     },
+     "rq_3": {
+      "signed": null,
+      "transport_accepted": null,
+      "device_answered": null,
+      "rf_transmitted": null,
+      "native_ack": null
+     }
+    }
+   }
+  },
+  {
+   "step": "result",
+   "t": 13,
+   "result": {
+    "signed_by": "dev_1",
+    "request_id": "rq_2",
+    "job_number": 2,
+    "status": "native_ack"
+   },
+   "expect": {
+    "applied": false,
+    "ignored_results": 2,
+    "attempts": {
+     "rq_1": {
+      "signed": "2026-01-01T00:00:00Z",
+      "transport_accepted": "2026-01-01T00:00:01Z",
+      "device_answered": {
+       "status": "transmitted",
+       "at": "2026-01-01T00:00:12Z"
+      },
+      "rf_transmitted": {
+       "count": 2,
+       "first_at": "2026-01-01T00:00:10Z",
+       "last_at": "2026-01-01T00:00:12Z"
+      },
+      "native_ack": null
+     },
+     "rq_2": {
+      "signed": "2026-01-01T00:00:00Z",
+      "transport_accepted": "2026-01-01T00:00:01Z",
+      "device_answered": {
+       "status": "transmitted",
+       "at": "2026-01-01T00:00:11Z"
+      },
+      "rf_transmitted": {
+       "count": 1,
+       "first_at": "2026-01-01T00:00:11Z",
+       "last_at": "2026-01-01T00:00:11Z"
+      },
+      "native_ack": null
+     },
+     "rq_3": {
+      "signed": null,
+      "transport_accepted": null,
+      "device_answered": null,
+      "rf_transmitted": null,
+      "native_ack": null
+     }
+    }
+   }
+  },
+  {
+   "step": "result",
+   "t": 14,
+   "result": {
+    "signed_by": "dev_1",
+    "request_id": "rq_1",
+    "job_number": 1,
+    "status": "native_ack"
+   },
+   "expect": {
+    "applied": true,
+    "ignored_results": 2,
+    "attempts": {
+     "rq_1": {
+      "signed": "2026-01-01T00:00:00Z",
+      "transport_accepted": "2026-01-01T00:00:01Z",
+      "device_answered": {
+       "status": "native_ack",
+       "at": "2026-01-01T00:00:14Z"
+      },
+      "rf_transmitted": {
+       "count": 2,
+       "first_at": "2026-01-01T00:00:10Z",
+       "last_at": "2026-01-01T00:00:12Z"
+      },
+      "native_ack": "2026-01-01T00:00:14Z"
+     },
+     "rq_2": {
+      "signed": "2026-01-01T00:00:00Z",
+      "transport_accepted": "2026-01-01T00:00:01Z",
+      "device_answered": {
+       "status": "transmitted",
+       "at": "2026-01-01T00:00:11Z"
+      },
+      "rf_transmitted": {
+       "count": 1,
+       "first_at": "2026-01-01T00:00:11Z",
+       "last_at": "2026-01-01T00:00:11Z"
+      },
+      "native_ack": null
+     },
+     "rq_3": {
+      "signed": null,
+      "transport_accepted": null,
+      "device_answered": null,
+      "rf_transmitted": null,
+      "native_ack": null
+     }
+    }
+   }
+  },
+  {
+   "step": "result",
+   "t": 20,
+   "result": {
+    "signed_by": "dev_1",
+    "request_id": "rq_1",
+    "job_number": 1,
+    "status": "ok"
+   },
+   "expect": {
+    "applied": true,
+    "ignored_results": 2,
+    "attempts": {
+     "rq_1": {
+      "signed": "2026-01-01T00:00:00Z",
+      "transport_accepted": "2026-01-01T00:00:01Z",
+      "device_answered": {
+       "status": "ok",
+       "at": "2026-01-01T00:00:20Z"
+      },
+      "rf_transmitted": {
+       "count": 2,
+       "first_at": "2026-01-01T00:00:10Z",
+       "last_at": "2026-01-01T00:00:12Z"
+      },
+      "native_ack": "2026-01-01T00:00:14Z"
+     },
+     "rq_2": {
+      "signed": "2026-01-01T00:00:00Z",
+      "transport_accepted": "2026-01-01T00:00:01Z",
+      "device_answered": {
+       "status": "transmitted",
+       "at": "2026-01-01T00:00:11Z"
+      },
+      "rf_transmitted": {
+       "count": 1,
+       "first_at": "2026-01-01T00:00:11Z",
+       "last_at": "2026-01-01T00:00:11Z"
+      },
+      "native_ack": null
+     },
+     "rq_3": {
+      "signed": null,
+      "transport_accepted": null,
+      "device_answered": null,
+      "rf_transmitted": null,
+      "native_ack": null
+     }
+    }
+   }
+  },
+  {
+   "step": "result",
+   "t": 21,
+   "result": {
+    "signed_by": "dev_1",
+    "request_id": "rq_2",
+    "job_number": 2,
+    "status": "ok"
+   },
+   "expect": {
+    "applied": true,
+    "ignored_results": 2,
+    "attempts": {
+     "rq_1": {
+      "signed": "2026-01-01T00:00:00Z",
+      "transport_accepted": "2026-01-01T00:00:01Z",
+      "device_answered": {
+       "status": "ok",
+       "at": "2026-01-01T00:00:20Z"
+      },
+      "rf_transmitted": {
+       "count": 2,
+       "first_at": "2026-01-01T00:00:10Z",
+       "last_at": "2026-01-01T00:00:12Z"
+      },
+      "native_ack": "2026-01-01T00:00:14Z"
+     },
+     "rq_2": {
+      "signed": "2026-01-01T00:00:00Z",
+      "transport_accepted": "2026-01-01T00:00:01Z",
+      "device_answered": {
+       "status": "ok",
+       "at": "2026-01-01T00:00:21Z"
+      },
+      "rf_transmitted": {
+       "count": 1,
+       "first_at": "2026-01-01T00:00:11Z",
+       "last_at": "2026-01-01T00:00:11Z"
+      },
+      "native_ack": null
+     },
+     "rq_3": {
+      "signed": null,
+      "transport_accepted": null,
+      "device_answered": null,
+      "rf_transmitted": null,
+      "native_ack": null
+     }
+    }
+   }
+  }
+ ]
+}

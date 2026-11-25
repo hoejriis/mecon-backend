@@ -1,0 +1,3397 @@
+{
+ "fixture": "F",
+ "title": "Cancel before dispatch, after dispatch (the outcome may still be succeeded), confirmed by the device, and when the device cannot cancel",
+ "kind": "lifecycle",
+ "contract_version": "1.0.0-draft.1",
+ "setup": {
+  "start": "2026-01-01T00:00:00Z",
+  "devices": {
+   "dev_1": {
+    "role": "companion",
+    "member": true,
+    "blocked": false
+   },
+   "dev_2": {
+    "role": "companion",
+    "member": true,
+    "blocked": false
+   }
+  },
+  "rights": {
+   "cal_1": [
+    "dev_1"
+   ],
+   "cal_2": [
+    "dev_2"
+   ]
+  }
+ },
+ "steps": [
+  {
+   "step": "create",
+   "caller": "cal_1",
+   "device": "dev_1",
+   "command": {
+    "op": "contact.put",
+    "args": {
+     "contact_ref": "ctc_1",
+     "name": "Synthetic One"
+    }
+   },
+   "expect": {
+    "response": {
+     "outcome": "created",
+     "job_id": "job_1"
+    },
+    "out": [],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_1",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "accepted",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": null,
+      "lease_until": null,
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [],
+      "controls": [],
+      "events": [],
+      "outcome": null
+     }
+    ]
+   }
+  },
+  {
+   "step": "cancel",
+   "caller": "cal_1",
+   "job_id": "job_1",
+   "expect": {
+    "response": {
+     "outcome": "cancelled"
+    },
+    "out": [],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_1",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "cancelled",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": null,
+      "lease_until": null,
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [],
+      "controls": [],
+      "events": [],
+      "outcome": {
+       "reason": "caller_before_dispatch",
+       "device_status": null,
+       "at": "2026-01-01T00:00:00Z"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "step": "claim",
+   "worker": "worker_1",
+   "job": "job_1",
+   "expect": {
+    "response": {
+     "outcome": "not_claimable"
+    },
+    "out": [],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_1",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "cancelled",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": null,
+      "lease_until": null,
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [],
+      "controls": [],
+      "events": [],
+      "outcome": {
+       "reason": "caller_before_dispatch",
+       "device_status": null,
+       "at": "2026-01-01T00:00:00Z"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "step": "cancel",
+   "caller": "cal_1",
+   "job_id": "job_1",
+   "expect": {
+    "response": {
+     "outcome": "error",
+     "error": {
+      "code": "conflict",
+      "message": "The request conflicts with an earlier request."
+     }
+    },
+    "out": [],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_1",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "cancelled",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": null,
+      "lease_until": null,
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [],
+      "controls": [],
+      "events": [],
+      "outcome": {
+       "reason": "caller_before_dispatch",
+       "device_status": null,
+       "at": "2026-01-01T00:00:00Z"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "step": "create",
+   "caller": "cal_1",
+   "device": "dev_1",
+   "command": {
+    "op": "contact.put",
+    "args": {
+     "contact_ref": "ctc_2",
+     "name": "Synthetic One"
+    }
+   },
+   "expect": {
+    "response": {
+     "outcome": "created",
+     "job_id": "job_2"
+    },
+    "out": [],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_1",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "cancelled",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": null,
+      "lease_until": null,
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [],
+      "controls": [],
+      "events": [],
+      "outcome": {
+       "reason": "caller_before_dispatch",
+       "device_status": null,
+       "at": "2026-01-01T00:00:00Z"
+      }
+     },
+     {
+      "id": "job_2",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_2",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "accepted",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": null,
+      "lease_until": null,
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [],
+      "controls": [],
+      "events": [],
+      "outcome": null
+     }
+    ]
+   }
+  },
+  {
+   "step": "claim",
+   "worker": "worker_1",
+   "job": "job_2",
+   "expect": {
+    "response": {
+     "outcome": "claimed"
+    },
+    "out": [],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_1",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "cancelled",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": null,
+      "lease_until": null,
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [],
+      "controls": [],
+      "events": [],
+      "outcome": {
+       "reason": "caller_before_dispatch",
+       "device_status": null,
+       "at": "2026-01-01T00:00:00Z"
+      }
+     },
+     {
+      "id": "job_2",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_2",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "accepted",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": "worker_1",
+      "lease_until": "2026-01-01T00:00:30Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [],
+      "controls": [],
+      "events": [],
+      "outcome": null
+     }
+    ]
+   }
+  },
+  {
+   "step": "deliver",
+   "worker": "worker_1",
+   "job": "job_2",
+   "expect": {
+    "response": {
+     "outcome": "delivered",
+     "attempt": "att_1",
+     "delivery": 1
+    },
+    "out": [
+     {
+      "job": "job_2",
+      "target": "att_1",
+      "kind": "attempt",
+      "op": "contact.put",
+      "job_number": 1,
+      "request_id": "rq_1",
+      "bytes": "signed:rq_1",
+      "delivery": 1
+     }
+    ],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_1",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "cancelled",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": null,
+      "lease_until": null,
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [],
+      "controls": [],
+      "events": [],
+      "outcome": {
+       "reason": "caller_before_dispatch",
+       "device_status": null,
+       "at": "2026-01-01T00:00:00Z"
+      }
+     },
+     {
+      "id": "job_2",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_2",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "dispatched",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": "worker_1",
+      "lease_until": "2026-01-01T00:00:30Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_1",
+        "request_id": "rq_1",
+        "job_number": 1,
+        "bytes": "signed:rq_1",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": null,
+         "device_answered": null,
+         "rf_transmitted": null,
+         "native_ack": null
+        }
+       }
+      ],
+      "controls": [],
+      "events": [],
+      "outcome": null
+     }
+    ]
+   }
+  },
+  {
+   "step": "cancel",
+   "caller": "cal_1",
+   "job_id": "job_2",
+   "expect": {
+    "response": {
+     "outcome": "cancel_requested"
+    },
+    "out": [],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_1",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "cancelled",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": null,
+      "lease_until": null,
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [],
+      "controls": [],
+      "events": [],
+      "outcome": {
+       "reason": "caller_before_dispatch",
+       "device_status": null,
+       "at": "2026-01-01T00:00:00Z"
+      }
+     },
+     {
+      "id": "job_2",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_2",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "dispatched",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": "worker_1",
+      "lease_until": "2026-01-01T00:00:30Z",
+      "cancel_requested_at": "2026-01-01T00:00:00Z",
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_1",
+        "request_id": "rq_1",
+        "job_number": 1,
+        "bytes": "signed:rq_1",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": null,
+         "device_answered": null,
+         "rf_transmitted": null,
+         "native_ack": null
+        }
+       }
+      ],
+      "controls": [],
+      "events": [],
+      "outcome": null
+     }
+    ]
+   }
+  },
+  {
+   "step": "deliver",
+   "worker": "worker_1",
+   "job": "job_2",
+   "expect": {
+    "response": {
+     "outcome": "sent",
+     "control": "ctl_1",
+     "op": "job.cancel"
+    },
+    "out": [
+     {
+      "job": "job_2",
+      "target": "ctl_1",
+      "kind": "control",
+      "op": "job.cancel",
+      "job_number": 2,
+      "request_id": "rq_2",
+      "bytes": "signed:rq_2",
+      "delivery": 1
+     }
+    ],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_1",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "cancelled",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": null,
+      "lease_until": null,
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [],
+      "controls": [],
+      "events": [],
+      "outcome": {
+       "reason": "caller_before_dispatch",
+       "device_status": null,
+       "at": "2026-01-01T00:00:00Z"
+      }
+     },
+     {
+      "id": "job_2",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_2",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "dispatched",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": "worker_1",
+      "lease_until": "2026-01-01T00:00:30Z",
+      "cancel_requested_at": "2026-01-01T00:00:00Z",
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_1",
+        "request_id": "rq_1",
+        "job_number": 1,
+        "bytes": "signed:rq_1",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": null,
+         "device_answered": null,
+         "rf_transmitted": null,
+         "native_ack": null
+        }
+       }
+      ],
+      "controls": [
+       {
+        "id": "ctl_1",
+        "op": "job.cancel",
+        "request_id": "rq_2",
+        "job_number": 2,
+        "attempt": "att_1",
+        "bytes": "signed:rq_2",
+        "deliveries": 1,
+        "transport_accepted": null,
+        "device_answered": null
+       }
+      ],
+      "events": [],
+      "outcome": null
+     }
+    ]
+   }
+  },
+  {
+   "step": "cancel",
+   "caller": "cal_1",
+   "job_id": "job_2",
+   "expect": {
+    "response": {
+     "outcome": "error",
+     "error": {
+      "code": "conflict",
+      "message": "The request conflicts with an earlier request."
+     }
+    },
+    "out": [],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_1",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "cancelled",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": null,
+      "lease_until": null,
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [],
+      "controls": [],
+      "events": [],
+      "outcome": {
+       "reason": "caller_before_dispatch",
+       "device_status": null,
+       "at": "2026-01-01T00:00:00Z"
+      }
+     },
+     {
+      "id": "job_2",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_2",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "dispatched",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": "worker_1",
+      "lease_until": "2026-01-01T00:00:30Z",
+      "cancel_requested_at": "2026-01-01T00:00:00Z",
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_1",
+        "request_id": "rq_1",
+        "job_number": 1,
+        "bytes": "signed:rq_1",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": null,
+         "device_answered": null,
+         "rf_transmitted": null,
+         "native_ack": null
+        }
+       }
+      ],
+      "controls": [
+       {
+        "id": "ctl_1",
+        "op": "job.cancel",
+        "request_id": "rq_2",
+        "job_number": 2,
+        "attempt": "att_1",
+        "bytes": "signed:rq_2",
+        "deliveries": 1,
+        "transport_accepted": null,
+        "device_answered": null
+       }
+      ],
+      "events": [],
+      "outcome": null
+     }
+    ]
+   }
+  },
+  {
+   "step": "transport_ack",
+   "job": "job_2",
+   "target": "ctl_1",
+   "expect": {
+    "response": {
+     "outcome": "recorded"
+    },
+    "out": [],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_1",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "cancelled",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": null,
+      "lease_until": null,
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [],
+      "controls": [],
+      "events": [],
+      "outcome": {
+       "reason": "caller_before_dispatch",
+       "device_status": null,
+       "at": "2026-01-01T00:00:00Z"
+      }
+     },
+     {
+      "id": "job_2",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_2",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "dispatched",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": "worker_1",
+      "lease_until": "2026-01-01T00:00:30Z",
+      "cancel_requested_at": "2026-01-01T00:00:00Z",
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_1",
+        "request_id": "rq_1",
+        "job_number": 1,
+        "bytes": "signed:rq_1",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": null,
+         "device_answered": null,
+         "rf_transmitted": null,
+         "native_ack": null
+        }
+       }
+      ],
+      "controls": [
+       {
+        "id": "ctl_1",
+        "op": "job.cancel",
+        "request_id": "rq_2",
+        "job_number": 2,
+        "attempt": "att_1",
+        "bytes": "signed:rq_2",
+        "deliveries": 1,
+        "transport_accepted": "2026-01-01T00:00:00Z",
+        "device_answered": null
+       }
+      ],
+      "events": [],
+      "outcome": null
+     }
+    ]
+   }
+  },
+  {
+   "step": "device_answer",
+   "result": {
+    "signed_by": "dev_1",
+    "request_id": "rq_1",
+    "job_number": 1,
+    "status": "ok"
+   },
+   "expect": {
+    "response": {
+     "outcome": "applied"
+    },
+    "out": [],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_1",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "cancelled",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": null,
+      "lease_until": null,
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [],
+      "controls": [],
+      "events": [],
+      "outcome": {
+       "reason": "caller_before_dispatch",
+       "device_status": null,
+       "at": "2026-01-01T00:00:00Z"
+      }
+     },
+     {
+      "id": "job_2",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_2",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "succeeded",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": null,
+      "lease_until": null,
+      "cancel_requested_at": "2026-01-01T00:00:00Z",
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_1",
+        "request_id": "rq_1",
+        "job_number": 1,
+        "bytes": "signed:rq_1",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "ok",
+          "at": "2026-01-01T00:00:00Z"
+         },
+         "rf_transmitted": null,
+         "native_ack": null
+        }
+       }
+      ],
+      "controls": [
+       {
+        "id": "ctl_1",
+        "op": "job.cancel",
+        "request_id": "rq_2",
+        "job_number": 2,
+        "attempt": "att_1",
+        "bytes": "signed:rq_2",
+        "deliveries": 1,
+        "transport_accepted": "2026-01-01T00:00:00Z",
+        "device_answered": null
+       }
+      ],
+      "events": [],
+      "outcome": {
+       "reason": "device_final",
+       "device_status": "ok",
+       "at": "2026-01-01T00:00:00Z"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "step": "cancel",
+   "caller": "cal_1",
+   "job_id": "job_2",
+   "expect": {
+    "response": {
+     "outcome": "error",
+     "error": {
+      "code": "conflict",
+      "message": "The request conflicts with an earlier request."
+     }
+    },
+    "out": [],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_1",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "cancelled",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": null,
+      "lease_until": null,
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [],
+      "controls": [],
+      "events": [],
+      "outcome": {
+       "reason": "caller_before_dispatch",
+       "device_status": null,
+       "at": "2026-01-01T00:00:00Z"
+      }
+     },
+     {
+      "id": "job_2",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_2",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "succeeded",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": null,
+      "lease_until": null,
+      "cancel_requested_at": "2026-01-01T00:00:00Z",
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_1",
+        "request_id": "rq_1",
+        "job_number": 1,
+        "bytes": "signed:rq_1",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "ok",
+          "at": "2026-01-01T00:00:00Z"
+         },
+         "rf_transmitted": null,
+         "native_ack": null
+        }
+       }
+      ],
+      "controls": [
+       {
+        "id": "ctl_1",
+        "op": "job.cancel",
+        "request_id": "rq_2",
+        "job_number": 2,
+        "attempt": "att_1",
+        "bytes": "signed:rq_2",
+        "deliveries": 1,
+        "transport_accepted": "2026-01-01T00:00:00Z",
+        "device_answered": null
+       }
+      ],
+      "events": [],
+      "outcome": {
+       "reason": "device_final",
+       "device_status": "ok",
+       "at": "2026-01-01T00:00:00Z"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "step": "create",
+   "caller": "cal_1",
+   "device": "dev_1",
+   "command": {
+    "op": "contact.put",
+    "args": {
+     "contact_ref": "ctc_3",
+     "name": "Synthetic One"
+    }
+   },
+   "expect": {
+    "response": {
+     "outcome": "created",
+     "job_id": "job_3"
+    },
+    "out": [],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_1",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "cancelled",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": null,
+      "lease_until": null,
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [],
+      "controls": [],
+      "events": [],
+      "outcome": {
+       "reason": "caller_before_dispatch",
+       "device_status": null,
+       "at": "2026-01-01T00:00:00Z"
+      }
+     },
+     {
+      "id": "job_2",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_2",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "succeeded",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": null,
+      "lease_until": null,
+      "cancel_requested_at": "2026-01-01T00:00:00Z",
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_1",
+        "request_id": "rq_1",
+        "job_number": 1,
+        "bytes": "signed:rq_1",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "ok",
+          "at": "2026-01-01T00:00:00Z"
+         },
+         "rf_transmitted": null,
+         "native_ack": null
+        }
+       }
+      ],
+      "controls": [
+       {
+        "id": "ctl_1",
+        "op": "job.cancel",
+        "request_id": "rq_2",
+        "job_number": 2,
+        "attempt": "att_1",
+        "bytes": "signed:rq_2",
+        "deliveries": 1,
+        "transport_accepted": "2026-01-01T00:00:00Z",
+        "device_answered": null
+       }
+      ],
+      "events": [],
+      "outcome": {
+       "reason": "device_final",
+       "device_status": "ok",
+       "at": "2026-01-01T00:00:00Z"
+      }
+     },
+     {
+      "id": "job_3",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_3",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "accepted",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": null,
+      "lease_until": null,
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [],
+      "controls": [],
+      "events": [],
+      "outcome": null
+     }
+    ]
+   }
+  },
+  {
+   "step": "claim",
+   "worker": "worker_1",
+   "job": "job_3",
+   "expect": {
+    "response": {
+     "outcome": "claimed"
+    },
+    "out": [],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_1",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "cancelled",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": null,
+      "lease_until": null,
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [],
+      "controls": [],
+      "events": [],
+      "outcome": {
+       "reason": "caller_before_dispatch",
+       "device_status": null,
+       "at": "2026-01-01T00:00:00Z"
+      }
+     },
+     {
+      "id": "job_2",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_2",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "succeeded",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": null,
+      "lease_until": null,
+      "cancel_requested_at": "2026-01-01T00:00:00Z",
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_1",
+        "request_id": "rq_1",
+        "job_number": 1,
+        "bytes": "signed:rq_1",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "ok",
+          "at": "2026-01-01T00:00:00Z"
+         },
+         "rf_transmitted": null,
+         "native_ack": null
+        }
+       }
+      ],
+      "controls": [
+       {
+        "id": "ctl_1",
+        "op": "job.cancel",
+        "request_id": "rq_2",
+        "job_number": 2,
+        "attempt": "att_1",
+        "bytes": "signed:rq_2",
+        "deliveries": 1,
+        "transport_accepted": "2026-01-01T00:00:00Z",
+        "device_answered": null
+       }
+      ],
+      "events": [],
+      "outcome": {
+       "reason": "device_final",
+       "device_status": "ok",
+       "at": "2026-01-01T00:00:00Z"
+      }
+     },
+     {
+      "id": "job_3",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_3",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "accepted",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": "worker_1",
+      "lease_until": "2026-01-01T00:00:30Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [],
+      "controls": [],
+      "events": [],
+      "outcome": null
+     }
+    ]
+   }
+  },
+  {
+   "step": "deliver",
+   "worker": "worker_1",
+   "job": "job_3",
+   "expect": {
+    "response": {
+     "outcome": "delivered",
+     "attempt": "att_2",
+     "delivery": 1
+    },
+    "out": [
+     {
+      "job": "job_3",
+      "target": "att_2",
+      "kind": "attempt",
+      "op": "contact.put",
+      "job_number": 3,
+      "request_id": "rq_3",
+      "bytes": "signed:rq_3",
+      "delivery": 1
+     }
+    ],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_1",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "cancelled",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": null,
+      "lease_until": null,
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [],
+      "controls": [],
+      "events": [],
+      "outcome": {
+       "reason": "caller_before_dispatch",
+       "device_status": null,
+       "at": "2026-01-01T00:00:00Z"
+      }
+     },
+     {
+      "id": "job_2",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_2",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "succeeded",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": null,
+      "lease_until": null,
+      "cancel_requested_at": "2026-01-01T00:00:00Z",
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_1",
+        "request_id": "rq_1",
+        "job_number": 1,
+        "bytes": "signed:rq_1",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "ok",
+          "at": "2026-01-01T00:00:00Z"
+         },
+         "rf_transmitted": null,
+         "native_ack": null
+        }
+       }
+      ],
+      "controls": [
+       {
+        "id": "ctl_1",
+        "op": "job.cancel",
+        "request_id": "rq_2",
+        "job_number": 2,
+        "attempt": "att_1",
+        "bytes": "signed:rq_2",
+        "deliveries": 1,
+        "transport_accepted": "2026-01-01T00:00:00Z",
+        "device_answered": null
+       }
+      ],
+      "events": [],
+      "outcome": {
+       "reason": "device_final",
+       "device_status": "ok",
+       "at": "2026-01-01T00:00:00Z"
+      }
+     },
+     {
+      "id": "job_3",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_3",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "dispatched",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": "worker_1",
+      "lease_until": "2026-01-01T00:00:30Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_2",
+        "request_id": "rq_3",
+        "job_number": 3,
+        "bytes": "signed:rq_3",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": null,
+         "device_answered": null,
+         "rf_transmitted": null,
+         "native_ack": null
+        }
+       }
+      ],
+      "controls": [],
+      "events": [],
+      "outcome": null
+     }
+    ]
+   }
+  },
+  {
+   "step": "cancel",
+   "caller": "cal_1",
+   "job_id": "job_3",
+   "expect": {
+    "response": {
+     "outcome": "cancel_requested"
+    },
+    "out": [],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_1",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "cancelled",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": null,
+      "lease_until": null,
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [],
+      "controls": [],
+      "events": [],
+      "outcome": {
+       "reason": "caller_before_dispatch",
+       "device_status": null,
+       "at": "2026-01-01T00:00:00Z"
+      }
+     },
+     {
+      "id": "job_2",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_2",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "succeeded",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": null,
+      "lease_until": null,
+      "cancel_requested_at": "2026-01-01T00:00:00Z",
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_1",
+        "request_id": "rq_1",
+        "job_number": 1,
+        "bytes": "signed:rq_1",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "ok",
+          "at": "2026-01-01T00:00:00Z"
+         },
+         "rf_transmitted": null,
+         "native_ack": null
+        }
+       }
+      ],
+      "controls": [
+       {
+        "id": "ctl_1",
+        "op": "job.cancel",
+        "request_id": "rq_2",
+        "job_number": 2,
+        "attempt": "att_1",
+        "bytes": "signed:rq_2",
+        "deliveries": 1,
+        "transport_accepted": "2026-01-01T00:00:00Z",
+        "device_answered": null
+       }
+      ],
+      "events": [],
+      "outcome": {
+       "reason": "device_final",
+       "device_status": "ok",
+       "at": "2026-01-01T00:00:00Z"
+      }
+     },
+     {
+      "id": "job_3",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_3",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "dispatched",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": "worker_1",
+      "lease_until": "2026-01-01T00:00:30Z",
+      "cancel_requested_at": "2026-01-01T00:00:00Z",
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_2",
+        "request_id": "rq_3",
+        "job_number": 3,
+        "bytes": "signed:rq_3",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": null,
+         "device_answered": null,
+         "rf_transmitted": null,
+         "native_ack": null
+        }
+       }
+      ],
+      "controls": [],
+      "events": [],
+      "outcome": null
+     }
+    ]
+   }
+  },
+  {
+   "step": "deliver",
+   "worker": "worker_1",
+   "job": "job_3",
+   "expect": {
+    "response": {
+     "outcome": "sent",
+     "control": "ctl_2",
+     "op": "job.cancel"
+    },
+    "out": [
+     {
+      "job": "job_3",
+      "target": "ctl_2",
+      "kind": "control",
+      "op": "job.cancel",
+      "job_number": 4,
+      "request_id": "rq_4",
+      "bytes": "signed:rq_4",
+      "delivery": 1
+     }
+    ],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_1",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "cancelled",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": null,
+      "lease_until": null,
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [],
+      "controls": [],
+      "events": [],
+      "outcome": {
+       "reason": "caller_before_dispatch",
+       "device_status": null,
+       "at": "2026-01-01T00:00:00Z"
+      }
+     },
+     {
+      "id": "job_2",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_2",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "succeeded",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": null,
+      "lease_until": null,
+      "cancel_requested_at": "2026-01-01T00:00:00Z",
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_1",
+        "request_id": "rq_1",
+        "job_number": 1,
+        "bytes": "signed:rq_1",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "ok",
+          "at": "2026-01-01T00:00:00Z"
+         },
+         "rf_transmitted": null,
+         "native_ack": null
+        }
+       }
+      ],
+      "controls": [
+       {
+        "id": "ctl_1",
+        "op": "job.cancel",
+        "request_id": "rq_2",
+        "job_number": 2,
+        "attempt": "att_1",
+        "bytes": "signed:rq_2",
+        "deliveries": 1,
+        "transport_accepted": "2026-01-01T00:00:00Z",
+        "device_answered": null
+       }
+      ],
+      "events": [],
+      "outcome": {
+       "reason": "device_final",
+       "device_status": "ok",
+       "at": "2026-01-01T00:00:00Z"
+      }
+     },
+     {
+      "id": "job_3",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_3",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "dispatched",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": "worker_1",
+      "lease_until": "2026-01-01T00:00:30Z",
+      "cancel_requested_at": "2026-01-01T00:00:00Z",
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_2",
+        "request_id": "rq_3",
+        "job_number": 3,
+        "bytes": "signed:rq_3",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": null,
+         "device_answered": null,
+         "rf_transmitted": null,
+         "native_ack": null
+        }
+       }
+      ],
+      "controls": [
+       {
+        "id": "ctl_2",
+        "op": "job.cancel",
+        "request_id": "rq_4",
+        "job_number": 4,
+        "attempt": "att_2",
+        "bytes": "signed:rq_4",
+        "deliveries": 1,
+        "transport_accepted": null,
+        "device_answered": null
+       }
+      ],
+      "events": [],
+      "outcome": null
+     }
+    ]
+   }
+  },
+  {
+   "step": "device_answer",
+   "result": {
+    "signed_by": "dev_1",
+    "request_id": "rq_3",
+    "job_number": 3,
+    "status": "cancelled"
+   },
+   "expect": {
+    "response": {
+     "outcome": "applied"
+    },
+    "out": [],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_1",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "cancelled",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": null,
+      "lease_until": null,
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [],
+      "controls": [],
+      "events": [],
+      "outcome": {
+       "reason": "caller_before_dispatch",
+       "device_status": null,
+       "at": "2026-01-01T00:00:00Z"
+      }
+     },
+     {
+      "id": "job_2",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_2",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "succeeded",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": null,
+      "lease_until": null,
+      "cancel_requested_at": "2026-01-01T00:00:00Z",
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_1",
+        "request_id": "rq_1",
+        "job_number": 1,
+        "bytes": "signed:rq_1",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "ok",
+          "at": "2026-01-01T00:00:00Z"
+         },
+         "rf_transmitted": null,
+         "native_ack": null
+        }
+       }
+      ],
+      "controls": [
+       {
+        "id": "ctl_1",
+        "op": "job.cancel",
+        "request_id": "rq_2",
+        "job_number": 2,
+        "attempt": "att_1",
+        "bytes": "signed:rq_2",
+        "deliveries": 1,
+        "transport_accepted": "2026-01-01T00:00:00Z",
+        "device_answered": null
+       }
+      ],
+      "events": [],
+      "outcome": {
+       "reason": "device_final",
+       "device_status": "ok",
+       "at": "2026-01-01T00:00:00Z"
+      }
+     },
+     {
+      "id": "job_3",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_3",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "cancelled",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": null,
+      "lease_until": null,
+      "cancel_requested_at": "2026-01-01T00:00:00Z",
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_2",
+        "request_id": "rq_3",
+        "job_number": 3,
+        "bytes": "signed:rq_3",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "cancelled",
+          "at": "2026-01-01T00:00:00Z"
+         },
+         "rf_transmitted": null,
+         "native_ack": null
+        }
+       }
+      ],
+      "controls": [
+       {
+        "id": "ctl_2",
+        "op": "job.cancel",
+        "request_id": "rq_4",
+        "job_number": 4,
+        "attempt": "att_2",
+        "bytes": "signed:rq_4",
+        "deliveries": 1,
+        "transport_accepted": null,
+        "device_answered": null
+       }
+      ],
+      "events": [],
+      "outcome": {
+       "reason": "device_confirmed",
+       "device_status": "cancelled",
+       "at": "2026-01-01T00:00:00Z"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "step": "create",
+   "caller": "cal_1",
+   "device": "dev_1",
+   "command": {
+    "op": "contact.put",
+    "args": {
+     "contact_ref": "ctc_4",
+     "name": "Synthetic One"
+    }
+   },
+   "expect": {
+    "response": {
+     "outcome": "created",
+     "job_id": "job_4"
+    },
+    "out": [],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_1",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "cancelled",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": null,
+      "lease_until": null,
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [],
+      "controls": [],
+      "events": [],
+      "outcome": {
+       "reason": "caller_before_dispatch",
+       "device_status": null,
+       "at": "2026-01-01T00:00:00Z"
+      }
+     },
+     {
+      "id": "job_2",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_2",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "succeeded",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": null,
+      "lease_until": null,
+      "cancel_requested_at": "2026-01-01T00:00:00Z",
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_1",
+        "request_id": "rq_1",
+        "job_number": 1,
+        "bytes": "signed:rq_1",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "ok",
+          "at": "2026-01-01T00:00:00Z"
+         },
+         "rf_transmitted": null,
+         "native_ack": null
+        }
+       }
+      ],
+      "controls": [
+       {
+        "id": "ctl_1",
+        "op": "job.cancel",
+        "request_id": "rq_2",
+        "job_number": 2,
+        "attempt": "att_1",
+        "bytes": "signed:rq_2",
+        "deliveries": 1,
+        "transport_accepted": "2026-01-01T00:00:00Z",
+        "device_answered": null
+       }
+      ],
+      "events": [],
+      "outcome": {
+       "reason": "device_final",
+       "device_status": "ok",
+       "at": "2026-01-01T00:00:00Z"
+      }
+     },
+     {
+      "id": "job_3",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_3",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "cancelled",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": null,
+      "lease_until": null,
+      "cancel_requested_at": "2026-01-01T00:00:00Z",
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_2",
+        "request_id": "rq_3",
+        "job_number": 3,
+        "bytes": "signed:rq_3",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "cancelled",
+          "at": "2026-01-01T00:00:00Z"
+         },
+         "rf_transmitted": null,
+         "native_ack": null
+        }
+       }
+      ],
+      "controls": [
+       {
+        "id": "ctl_2",
+        "op": "job.cancel",
+        "request_id": "rq_4",
+        "job_number": 4,
+        "attempt": "att_2",
+        "bytes": "signed:rq_4",
+        "deliveries": 1,
+        "transport_accepted": null,
+        "device_answered": null
+       }
+      ],
+      "events": [],
+      "outcome": {
+       "reason": "device_confirmed",
+       "device_status": "cancelled",
+       "at": "2026-01-01T00:00:00Z"
+      }
+     },
+     {
+      "id": "job_4",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_4",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "accepted",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": null,
+      "lease_until": null,
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [],
+      "controls": [],
+      "events": [],
+      "outcome": null
+     }
+    ]
+   }
+  },
+  {
+   "step": "claim",
+   "worker": "worker_1",
+   "job": "job_4",
+   "expect": {
+    "response": {
+     "outcome": "claimed"
+    },
+    "out": [],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_1",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "cancelled",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": null,
+      "lease_until": null,
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [],
+      "controls": [],
+      "events": [],
+      "outcome": {
+       "reason": "caller_before_dispatch",
+       "device_status": null,
+       "at": "2026-01-01T00:00:00Z"
+      }
+     },
+     {
+      "id": "job_2",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_2",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "succeeded",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": null,
+      "lease_until": null,
+      "cancel_requested_at": "2026-01-01T00:00:00Z",
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_1",
+        "request_id": "rq_1",
+        "job_number": 1,
+        "bytes": "signed:rq_1",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "ok",
+          "at": "2026-01-01T00:00:00Z"
+         },
+         "rf_transmitted": null,
+         "native_ack": null
+        }
+       }
+      ],
+      "controls": [
+       {
+        "id": "ctl_1",
+        "op": "job.cancel",
+        "request_id": "rq_2",
+        "job_number": 2,
+        "attempt": "att_1",
+        "bytes": "signed:rq_2",
+        "deliveries": 1,
+        "transport_accepted": "2026-01-01T00:00:00Z",
+        "device_answered": null
+       }
+      ],
+      "events": [],
+      "outcome": {
+       "reason": "device_final",
+       "device_status": "ok",
+       "at": "2026-01-01T00:00:00Z"
+      }
+     },
+     {
+      "id": "job_3",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_3",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "cancelled",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": null,
+      "lease_until": null,
+      "cancel_requested_at": "2026-01-01T00:00:00Z",
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_2",
+        "request_id": "rq_3",
+        "job_number": 3,
+        "bytes": "signed:rq_3",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "cancelled",
+          "at": "2026-01-01T00:00:00Z"
+         },
+         "rf_transmitted": null,
+         "native_ack": null
+        }
+       }
+      ],
+      "controls": [
+       {
+        "id": "ctl_2",
+        "op": "job.cancel",
+        "request_id": "rq_4",
+        "job_number": 4,
+        "attempt": "att_2",
+        "bytes": "signed:rq_4",
+        "deliveries": 1,
+        "transport_accepted": null,
+        "device_answered": null
+       }
+      ],
+      "events": [],
+      "outcome": {
+       "reason": "device_confirmed",
+       "device_status": "cancelled",
+       "at": "2026-01-01T00:00:00Z"
+      }
+     },
+     {
+      "id": "job_4",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_4",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "accepted",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": "worker_1",
+      "lease_until": "2026-01-01T00:00:30Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [],
+      "controls": [],
+      "events": [],
+      "outcome": null
+     }
+    ]
+   }
+  },
+  {
+   "step": "deliver",
+   "worker": "worker_1",
+   "job": "job_4",
+   "expect": {
+    "response": {
+     "outcome": "delivered",
+     "attempt": "att_3",
+     "delivery": 1
+    },
+    "out": [
+     {
+      "job": "job_4",
+      "target": "att_3",
+      "kind": "attempt",
+      "op": "contact.put",
+      "job_number": 5,
+      "request_id": "rq_5",
+      "bytes": "signed:rq_5",
+      "delivery": 1
+     }
+    ],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_1",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "cancelled",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": null,
+      "lease_until": null,
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [],
+      "controls": [],
+      "events": [],
+      "outcome": {
+       "reason": "caller_before_dispatch",
+       "device_status": null,
+       "at": "2026-01-01T00:00:00Z"
+      }
+     },
+     {
+      "id": "job_2",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_2",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "succeeded",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": null,
+      "lease_until": null,
+      "cancel_requested_at": "2026-01-01T00:00:00Z",
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_1",
+        "request_id": "rq_1",
+        "job_number": 1,
+        "bytes": "signed:rq_1",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "ok",
+          "at": "2026-01-01T00:00:00Z"
+         },
+         "rf_transmitted": null,
+         "native_ack": null
+        }
+       }
+      ],
+      "controls": [
+       {
+        "id": "ctl_1",
+        "op": "job.cancel",
+        "request_id": "rq_2",
+        "job_number": 2,
+        "attempt": "att_1",
+        "bytes": "signed:rq_2",
+        "deliveries": 1,
+        "transport_accepted": "2026-01-01T00:00:00Z",
+        "device_answered": null
+       }
+      ],
+      "events": [],
+      "outcome": {
+       "reason": "device_final",
+       "device_status": "ok",
+       "at": "2026-01-01T00:00:00Z"
+      }
+     },
+     {
+      "id": "job_3",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_3",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "cancelled",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": null,
+      "lease_until": null,
+      "cancel_requested_at": "2026-01-01T00:00:00Z",
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_2",
+        "request_id": "rq_3",
+        "job_number": 3,
+        "bytes": "signed:rq_3",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "cancelled",
+          "at": "2026-01-01T00:00:00Z"
+         },
+         "rf_transmitted": null,
+         "native_ack": null
+        }
+       }
+      ],
+      "controls": [
+       {
+        "id": "ctl_2",
+        "op": "job.cancel",
+        "request_id": "rq_4",
+        "job_number": 4,
+        "attempt": "att_2",
+        "bytes": "signed:rq_4",
+        "deliveries": 1,
+        "transport_accepted": null,
+        "device_answered": null
+       }
+      ],
+      "events": [],
+      "outcome": {
+       "reason": "device_confirmed",
+       "device_status": "cancelled",
+       "at": "2026-01-01T00:00:00Z"
+      }
+     },
+     {
+      "id": "job_4",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_4",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "dispatched",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": "worker_1",
+      "lease_until": "2026-01-01T00:00:30Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_3",
+        "request_id": "rq_5",
+        "job_number": 5,
+        "bytes": "signed:rq_5",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": null,
+         "device_answered": null,
+         "rf_transmitted": null,
+         "native_ack": null
+        }
+       }
+      ],
+      "controls": [],
+      "events": [],
+      "outcome": null
+     }
+    ]
+   }
+  },
+  {
+   "step": "device_answer",
+   "result": {
+    "signed_by": "dev_1",
+    "request_id": "rq_5",
+    "job_number": 5,
+    "status": "applied"
+   },
+   "expect": {
+    "response": {
+     "outcome": "applied"
+    },
+    "out": [],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_1",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "cancelled",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": null,
+      "lease_until": null,
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [],
+      "controls": [],
+      "events": [],
+      "outcome": {
+       "reason": "caller_before_dispatch",
+       "device_status": null,
+       "at": "2026-01-01T00:00:00Z"
+      }
+     },
+     {
+      "id": "job_2",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_2",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "succeeded",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": null,
+      "lease_until": null,
+      "cancel_requested_at": "2026-01-01T00:00:00Z",
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_1",
+        "request_id": "rq_1",
+        "job_number": 1,
+        "bytes": "signed:rq_1",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "ok",
+          "at": "2026-01-01T00:00:00Z"
+         },
+         "rf_transmitted": null,
+         "native_ack": null
+        }
+       }
+      ],
+      "controls": [
+       {
+        "id": "ctl_1",
+        "op": "job.cancel",
+        "request_id": "rq_2",
+        "job_number": 2,
+        "attempt": "att_1",
+        "bytes": "signed:rq_2",
+        "deliveries": 1,
+        "transport_accepted": "2026-01-01T00:00:00Z",
+        "device_answered": null
+       }
+      ],
+      "events": [],
+      "outcome": {
+       "reason": "device_final",
+       "device_status": "ok",
+       "at": "2026-01-01T00:00:00Z"
+      }
+     },
+     {
+      "id": "job_3",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_3",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "cancelled",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": null,
+      "lease_until": null,
+      "cancel_requested_at": "2026-01-01T00:00:00Z",
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_2",
+        "request_id": "rq_3",
+        "job_number": 3,
+        "bytes": "signed:rq_3",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "cancelled",
+          "at": "2026-01-01T00:00:00Z"
+         },
+         "rf_transmitted": null,
+         "native_ack": null
+        }
+       }
+      ],
+      "controls": [
+       {
+        "id": "ctl_2",
+        "op": "job.cancel",
+        "request_id": "rq_4",
+        "job_number": 4,
+        "attempt": "att_2",
+        "bytes": "signed:rq_4",
+        "deliveries": 1,
+        "transport_accepted": null,
+        "device_answered": null
+       }
+      ],
+      "events": [],
+      "outcome": {
+       "reason": "device_confirmed",
+       "device_status": "cancelled",
+       "at": "2026-01-01T00:00:00Z"
+      }
+     },
+     {
+      "id": "job_4",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_4",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "running",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": "worker_1",
+      "lease_until": "2026-01-01T00:00:30Z",
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_3",
+        "request_id": "rq_5",
+        "job_number": 5,
+        "bytes": "signed:rq_5",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "applied",
+          "at": "2026-01-01T00:00:00Z"
+         },
+         "rf_transmitted": null,
+         "native_ack": null
+        }
+       }
+      ],
+      "controls": [],
+      "events": [],
+      "outcome": null
+     }
+    ]
+   }
+  },
+  {
+   "step": "cancel",
+   "caller": "cal_1",
+   "job_id": "job_4",
+   "expect": {
+    "response": {
+     "outcome": "cancel_requested"
+    },
+    "out": [],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_1",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "cancelled",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": null,
+      "lease_until": null,
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [],
+      "controls": [],
+      "events": [],
+      "outcome": {
+       "reason": "caller_before_dispatch",
+       "device_status": null,
+       "at": "2026-01-01T00:00:00Z"
+      }
+     },
+     {
+      "id": "job_2",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_2",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "succeeded",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": null,
+      "lease_until": null,
+      "cancel_requested_at": "2026-01-01T00:00:00Z",
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_1",
+        "request_id": "rq_1",
+        "job_number": 1,
+        "bytes": "signed:rq_1",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "ok",
+          "at": "2026-01-01T00:00:00Z"
+         },
+         "rf_transmitted": null,
+         "native_ack": null
+        }
+       }
+      ],
+      "controls": [
+       {
+        "id": "ctl_1",
+        "op": "job.cancel",
+        "request_id": "rq_2",
+        "job_number": 2,
+        "attempt": "att_1",
+        "bytes": "signed:rq_2",
+        "deliveries": 1,
+        "transport_accepted": "2026-01-01T00:00:00Z",
+        "device_answered": null
+       }
+      ],
+      "events": [],
+      "outcome": {
+       "reason": "device_final",
+       "device_status": "ok",
+       "at": "2026-01-01T00:00:00Z"
+      }
+     },
+     {
+      "id": "job_3",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_3",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "cancelled",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": null,
+      "lease_until": null,
+      "cancel_requested_at": "2026-01-01T00:00:00Z",
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_2",
+        "request_id": "rq_3",
+        "job_number": 3,
+        "bytes": "signed:rq_3",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "cancelled",
+          "at": "2026-01-01T00:00:00Z"
+         },
+         "rf_transmitted": null,
+         "native_ack": null
+        }
+       }
+      ],
+      "controls": [
+       {
+        "id": "ctl_2",
+        "op": "job.cancel",
+        "request_id": "rq_4",
+        "job_number": 4,
+        "attempt": "att_2",
+        "bytes": "signed:rq_4",
+        "deliveries": 1,
+        "transport_accepted": null,
+        "device_answered": null
+       }
+      ],
+      "events": [],
+      "outcome": {
+       "reason": "device_confirmed",
+       "device_status": "cancelled",
+       "at": "2026-01-01T00:00:00Z"
+      }
+     },
+     {
+      "id": "job_4",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_4",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "running",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": "worker_1",
+      "lease_until": "2026-01-01T00:00:30Z",
+      "cancel_requested_at": "2026-01-01T00:00:00Z",
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_3",
+        "request_id": "rq_5",
+        "job_number": 5,
+        "bytes": "signed:rq_5",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "applied",
+          "at": "2026-01-01T00:00:00Z"
+         },
+         "rf_transmitted": null,
+         "native_ack": null
+        }
+       }
+      ],
+      "controls": [],
+      "events": [],
+      "outcome": null
+     }
+    ]
+   }
+  },
+  {
+   "step": "deliver",
+   "worker": "worker_1",
+   "job": "job_4",
+   "expect": {
+    "response": {
+     "outcome": "idle"
+    },
+    "out": [],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_1",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "cancelled",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": null,
+      "lease_until": null,
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [],
+      "controls": [],
+      "events": [],
+      "outcome": {
+       "reason": "caller_before_dispatch",
+       "device_status": null,
+       "at": "2026-01-01T00:00:00Z"
+      }
+     },
+     {
+      "id": "job_2",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_2",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "succeeded",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": null,
+      "lease_until": null,
+      "cancel_requested_at": "2026-01-01T00:00:00Z",
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_1",
+        "request_id": "rq_1",
+        "job_number": 1,
+        "bytes": "signed:rq_1",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "ok",
+          "at": "2026-01-01T00:00:00Z"
+         },
+         "rf_transmitted": null,
+         "native_ack": null
+        }
+       }
+      ],
+      "controls": [
+       {
+        "id": "ctl_1",
+        "op": "job.cancel",
+        "request_id": "rq_2",
+        "job_number": 2,
+        "attempt": "att_1",
+        "bytes": "signed:rq_2",
+        "deliveries": 1,
+        "transport_accepted": "2026-01-01T00:00:00Z",
+        "device_answered": null
+       }
+      ],
+      "events": [],
+      "outcome": {
+       "reason": "device_final",
+       "device_status": "ok",
+       "at": "2026-01-01T00:00:00Z"
+      }
+     },
+     {
+      "id": "job_3",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_3",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "cancelled",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": null,
+      "lease_until": null,
+      "cancel_requested_at": "2026-01-01T00:00:00Z",
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_2",
+        "request_id": "rq_3",
+        "job_number": 3,
+        "bytes": "signed:rq_3",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "cancelled",
+          "at": "2026-01-01T00:00:00Z"
+         },
+         "rf_transmitted": null,
+         "native_ack": null
+        }
+       }
+      ],
+      "controls": [
+       {
+        "id": "ctl_2",
+        "op": "job.cancel",
+        "request_id": "rq_4",
+        "job_number": 4,
+        "attempt": "att_2",
+        "bytes": "signed:rq_4",
+        "deliveries": 1,
+        "transport_accepted": null,
+        "device_answered": null
+       }
+      ],
+      "events": [],
+      "outcome": {
+       "reason": "device_confirmed",
+       "device_status": "cancelled",
+       "at": "2026-01-01T00:00:00Z"
+      }
+     },
+     {
+      "id": "job_4",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_4",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "running",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": "worker_1",
+      "lease_until": "2026-01-01T00:00:30Z",
+      "cancel_requested_at": "2026-01-01T00:00:00Z",
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_3",
+        "request_id": "rq_5",
+        "job_number": 5,
+        "bytes": "signed:rq_5",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "applied",
+          "at": "2026-01-01T00:00:00Z"
+         },
+         "rf_transmitted": null,
+         "native_ack": null
+        }
+       }
+      ],
+      "controls": [],
+      "events": [],
+      "outcome": null
+     }
+    ]
+   }
+  },
+  {
+   "step": "device_answer",
+   "result": {
+    "signed_by": "dev_1",
+    "request_id": "rq_5",
+    "job_number": 5,
+    "status": "applied-final"
+   },
+   "expect": {
+    "response": {
+     "outcome": "applied"
+    },
+    "out": [],
+    "ignored_results": 0,
+    "jobs": [
+     {
+      "id": "job_1",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_1",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "cancelled",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": null,
+      "lease_until": null,
+      "cancel_requested_at": null,
+      "redelivery_halted": false,
+      "attempts": [],
+      "controls": [],
+      "events": [],
+      "outcome": {
+       "reason": "caller_before_dispatch",
+       "device_status": null,
+       "at": "2026-01-01T00:00:00Z"
+      }
+     },
+     {
+      "id": "job_2",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_2",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "succeeded",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": null,
+      "lease_until": null,
+      "cancel_requested_at": "2026-01-01T00:00:00Z",
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_1",
+        "request_id": "rq_1",
+        "job_number": 1,
+        "bytes": "signed:rq_1",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "ok",
+          "at": "2026-01-01T00:00:00Z"
+         },
+         "rf_transmitted": null,
+         "native_ack": null
+        }
+       }
+      ],
+      "controls": [
+       {
+        "id": "ctl_1",
+        "op": "job.cancel",
+        "request_id": "rq_2",
+        "job_number": 2,
+        "attempt": "att_1",
+        "bytes": "signed:rq_2",
+        "deliveries": 1,
+        "transport_accepted": "2026-01-01T00:00:00Z",
+        "device_answered": null
+       }
+      ],
+      "events": [],
+      "outcome": {
+       "reason": "device_final",
+       "device_status": "ok",
+       "at": "2026-01-01T00:00:00Z"
+      }
+     },
+     {
+      "id": "job_3",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_3",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "cancelled",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": null,
+      "lease_until": null,
+      "cancel_requested_at": "2026-01-01T00:00:00Z",
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_2",
+        "request_id": "rq_3",
+        "job_number": 3,
+        "bytes": "signed:rq_3",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "cancelled",
+          "at": "2026-01-01T00:00:00Z"
+         },
+         "rf_transmitted": null,
+         "native_ack": null
+        }
+       }
+      ],
+      "controls": [
+       {
+        "id": "ctl_2",
+        "op": "job.cancel",
+        "request_id": "rq_4",
+        "job_number": 4,
+        "attempt": "att_2",
+        "bytes": "signed:rq_4",
+        "deliveries": 1,
+        "transport_accepted": null,
+        "device_answered": null
+       }
+      ],
+      "events": [],
+      "outcome": {
+       "reason": "device_confirmed",
+       "device_status": "cancelled",
+       "at": "2026-01-01T00:00:00Z"
+      }
+     },
+     {
+      "id": "job_4",
+      "caller": "cal_1",
+      "device": "dev_1",
+      "command": {
+       "op": "contact.put",
+       "args": {
+        "contact_ref": "ctc_4",
+        "name": "Synthetic One"
+       }
+      },
+      "idempotency_key": null,
+      "state": "succeeded",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2026-01-01T00:10:00Z",
+      "claimed_by": null,
+      "lease_until": null,
+      "cancel_requested_at": "2026-01-01T00:00:00Z",
+      "redelivery_halted": false,
+      "attempts": [
+       {
+        "id": "att_3",
+        "request_id": "rq_5",
+        "job_number": 5,
+        "bytes": "signed:rq_5",
+        "deliveries": 1,
+        "nothing_ran": false,
+        "dispositions": {
+         "signed": "2026-01-01T00:00:00Z",
+         "transport_accepted": null,
+         "device_answered": {
+          "status": "applied-final",
+          "at": "2026-01-01T00:00:00Z"
+         },
+         "rf_transmitted": null,
+         "native_ack": null
+        }
+       }
+      ],
+      "controls": [],
+      "events": [],
+      "outcome": {
+       "reason": "device_final",
+       "device_status": "applied-final",
+       "at": "2026-01-01T00:00:00Z"
+      }
+     }
+    ]
+   }
+  }
+ ]
+}

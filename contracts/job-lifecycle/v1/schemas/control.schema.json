@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.test/mecon/job-lifecycle/v1/control",
+  "title": "A signed job.get or job.cancel about an attempt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "op", "request_id", "job_number", "attempt", "bytes", "deliveries", "transport_accepted", "device_answered"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^ctl_[1-9][0-9]*$" },
+    "op": { "enum": ["job.get", "job.cancel"] },
+    "request_id": { "type": "string", "pattern": "^rq_[1-9][0-9]*$" },
+    "job_number": { "type": "integer", "minimum": 1, "maximum": 4294967295 },
+    "attempt": { "type": "string", "pattern": "^att_[1-9][0-9]*$" },
+    "bytes": { "type": "string", "minLength": 1 },
+    "deliveries": { "type": "integer", "minimum": 1 },
+    "transport_accepted": { "oneOf": [{ "type": "null" }, { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$" }] },
+    "device_answered": { "oneOf": [{ "type": "null" }, { "type": "object", "additionalProperties": false, "required": ["status", "at"], "properties": { "status": { "$ref": "https://example.test/mecon/device-dispatch/v1/result#/properties/status" }, "at": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$" } } }] }
+  }
+}

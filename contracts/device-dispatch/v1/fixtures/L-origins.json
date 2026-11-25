@@ -1,0 +1,963 @@
+{
+ "fixture": "L",
+ "title": "Origin rules for a multi-gateway send",
+ "kind": "origin",
+ "contract_version": "1.0.0-draft.1",
+ "runs": [
+  {
+   "note": "A direct message: the companion first; queued and duty-held start no window; a second gateway only after the window, skipping one that heard the packet",
+   "setup": {
+    "start": "2026-01-01T00:00:00Z",
+    "message_kind": "direct",
+    "window_s": 12,
+    "gateways": {
+     "comp": {
+      "kind": "companion",
+      "connected": true,
+      "capable": true,
+      "eligible": true,
+      "reachable": true,
+      "authorized": true,
+      "heard": false
+     },
+     "rep_1": {
+      "kind": "repeater",
+      "connected": false,
+      "capable": false,
+      "eligible": true,
+      "reachable": true,
+      "authorized": true,
+      "heard": false
+     },
+     "rep_2": {
+      "kind": "repeater",
+      "connected": false,
+      "capable": false,
+      "eligible": true,
+      "reachable": true,
+      "authorized": true,
+      "heard": false
+     }
+    }
+   },
+   "steps": [
+    {
+     "step": "start",
+     "t": 0,
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": null,
+        "transmitted_at": null
+       }
+      ],
+      "window_ends_at": null,
+      "scheduled": [
+       "comp"
+      ],
+      "closed": null,
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "result",
+     "t": 1,
+     "gateway": "comp",
+     "status": "queued",
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": "queued",
+        "transmitted_at": null
+       }
+      ],
+      "window_ends_at": null,
+      "scheduled": [],
+      "closed": null,
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "result",
+     "t": 5,
+     "gateway": "comp",
+     "status": "duty_held",
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": "duty_held",
+        "transmitted_at": null
+       }
+      ],
+      "window_ends_at": null,
+      "scheduled": [],
+      "closed": null,
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "tick",
+     "t": 25,
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": "duty_held",
+        "transmitted_at": null
+       }
+      ],
+      "window_ends_at": null,
+      "scheduled": [],
+      "closed": null,
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "result",
+     "t": 30,
+     "gateway": "comp",
+     "status": "transmitted",
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": "transmitted",
+        "transmitted_at": "2026-01-01T00:00:30Z"
+       }
+      ],
+      "window_ends_at": "2026-01-01T00:00:42Z",
+      "scheduled": [],
+      "closed": null,
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "tick",
+     "t": 41,
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": "transmitted",
+        "transmitted_at": "2026-01-01T00:00:30Z"
+       }
+      ],
+      "window_ends_at": "2026-01-01T00:00:42Z",
+      "scheduled": [],
+      "closed": null,
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "heard",
+     "t": 41,
+     "gateway": "rep_1",
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": "transmitted",
+        "transmitted_at": "2026-01-01T00:00:30Z"
+       }
+      ],
+      "window_ends_at": "2026-01-01T00:00:42Z",
+      "scheduled": [],
+      "closed": null,
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "tick",
+     "t": 42,
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": "transmitted",
+        "transmitted_at": "2026-01-01T00:00:30Z"
+       },
+       {
+        "gateway": "rep_2",
+        "result": null,
+        "transmitted_at": null
+       }
+      ],
+      "window_ends_at": "2026-01-01T00:00:42Z",
+      "scheduled": [
+       "rep_2"
+      ],
+      "closed": "second_origin",
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "result",
+     "t": 43,
+     "gateway": "rep_2",
+     "status": "transmitted",
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": "transmitted",
+        "transmitted_at": "2026-01-01T00:00:30Z"
+       },
+       {
+        "gateway": "rep_2",
+        "result": "transmitted",
+        "transmitted_at": "2026-01-01T00:00:43Z"
+       }
+      ],
+      "window_ends_at": "2026-01-01T00:00:42Z",
+      "scheduled": [],
+      "closed": "second_origin",
+      "ignored_results": 0
+     }
+    }
+   ]
+  },
+  {
+   "note": "A native ACK stops scheduling",
+   "setup": {
+    "start": "2026-01-01T00:00:00Z",
+    "message_kind": "direct",
+    "window_s": 12,
+    "gateways": {
+     "comp": {
+      "kind": "companion",
+      "connected": true,
+      "capable": true,
+      "eligible": true,
+      "reachable": true,
+      "authorized": true,
+      "heard": false
+     },
+     "rep_1": {
+      "kind": "repeater",
+      "connected": false,
+      "capable": false,
+      "eligible": true,
+      "reachable": true,
+      "authorized": true,
+      "heard": false
+     }
+    }
+   },
+   "steps": [
+    {
+     "step": "start",
+     "t": 0,
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": null,
+        "transmitted_at": null
+       }
+      ],
+      "window_ends_at": null,
+      "scheduled": [
+       "comp"
+      ],
+      "closed": null,
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "result",
+     "t": 2,
+     "gateway": "comp",
+     "status": "transmitted",
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": "transmitted",
+        "transmitted_at": "2026-01-01T00:00:02Z"
+       }
+      ],
+      "window_ends_at": "2026-01-01T00:00:14Z",
+      "scheduled": [],
+      "closed": null,
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "native_ack",
+     "t": 6,
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": "transmitted",
+        "transmitted_at": "2026-01-01T00:00:02Z"
+       }
+      ],
+      "window_ends_at": "2026-01-01T00:00:14Z",
+      "scheduled": [],
+      "closed": "native_ack",
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "tick",
+     "t": 20,
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": "transmitted",
+        "transmitted_at": "2026-01-01T00:00:02Z"
+       }
+      ],
+      "window_ends_at": "2026-01-01T00:00:14Z",
+      "scheduled": [],
+      "closed": "native_ack",
+      "ignored_results": 0
+     }
+    }
+   ]
+  },
+  {
+   "note": "A channel message: no companion connected, so one repeater; an ACK on a channel is ignored; a gateway no longer authorised is skipped",
+   "setup": {
+    "start": "2026-01-01T00:00:00Z",
+    "message_kind": "channel",
+    "window_s": 12,
+    "gateways": {
+     "comp": {
+      "kind": "companion",
+      "connected": false,
+      "capable": true,
+      "eligible": true,
+      "reachable": true,
+      "authorized": true,
+      "heard": false
+     },
+     "rep_1": {
+      "kind": "repeater",
+      "connected": false,
+      "capable": false,
+      "eligible": true,
+      "reachable": true,
+      "authorized": true,
+      "heard": false
+     },
+     "rep_2": {
+      "kind": "repeater",
+      "connected": false,
+      "capable": false,
+      "eligible": true,
+      "reachable": true,
+      "authorized": true,
+      "heard": false
+     },
+     "rep_3": {
+      "kind": "repeater",
+      "connected": false,
+      "capable": false,
+      "eligible": true,
+      "reachable": true,
+      "authorized": true,
+      "heard": false
+     }
+    }
+   },
+   "steps": [
+    {
+     "step": "start",
+     "t": 0,
+     "expect": {
+      "origins": [
+       {
+        "gateway": "rep_1",
+        "result": null,
+        "transmitted_at": null
+       }
+      ],
+      "window_ends_at": null,
+      "scheduled": [
+       "rep_1"
+      ],
+      "closed": null,
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "result",
+     "t": 3,
+     "gateway": "rep_1",
+     "status": "transmitted",
+     "expect": {
+      "origins": [
+       {
+        "gateway": "rep_1",
+        "result": "transmitted",
+        "transmitted_at": "2026-01-01T00:00:03Z"
+       }
+      ],
+      "window_ends_at": "2026-01-01T00:00:15Z",
+      "scheduled": [],
+      "closed": null,
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "native_ack",
+     "t": 5,
+     "expect": {
+      "origins": [
+       {
+        "gateway": "rep_1",
+        "result": "transmitted",
+        "transmitted_at": "2026-01-01T00:00:03Z"
+       }
+      ],
+      "window_ends_at": "2026-01-01T00:00:15Z",
+      "scheduled": [],
+      "closed": null,
+      "ignored_results": 1
+     }
+    },
+    {
+     "step": "authority",
+     "t": 8,
+     "gateway": "rep_2",
+     "authorized": false,
+     "expect": {
+      "origins": [
+       {
+        "gateway": "rep_1",
+        "result": "transmitted",
+        "transmitted_at": "2026-01-01T00:00:03Z"
+       }
+      ],
+      "window_ends_at": "2026-01-01T00:00:15Z",
+      "scheduled": [],
+      "closed": null,
+      "ignored_results": 1
+     }
+    },
+    {
+     "step": "tick",
+     "t": 15,
+     "expect": {
+      "origins": [
+       {
+        "gateway": "rep_1",
+        "result": "transmitted",
+        "transmitted_at": "2026-01-01T00:00:03Z"
+       },
+       {
+        "gateway": "rep_3",
+        "result": null,
+        "transmitted_at": null
+       }
+      ],
+      "window_ends_at": "2026-01-01T00:00:15Z",
+      "scheduled": [
+       "rep_3"
+      ],
+      "closed": "second_origin",
+      "ignored_results": 1
+     }
+    },
+    {
+     "step": "result",
+     "t": 16,
+     "gateway": "rep_9",
+     "status": "transmitted",
+     "expect": {
+      "origins": [
+       {
+        "gateway": "rep_1",
+        "result": "transmitted",
+        "transmitted_at": "2026-01-01T00:00:03Z"
+       },
+       {
+        "gateway": "rep_3",
+        "result": null,
+        "transmitted_at": null
+       }
+      ],
+      "window_ends_at": "2026-01-01T00:00:15Z",
+      "scheduled": [],
+      "closed": "second_origin",
+      "ignored_results": 2
+     }
+    }
+   ]
+  },
+  {
+   "note": "An ambiguous origin is never resent and no other origin is picked",
+   "setup": {
+    "start": "2026-01-01T00:00:00Z",
+    "message_kind": "direct",
+    "window_s": 12,
+    "gateways": {
+     "comp": {
+      "kind": "companion",
+      "connected": true,
+      "capable": true,
+      "eligible": true,
+      "reachable": true,
+      "authorized": true,
+      "heard": false
+     },
+     "rep_1": {
+      "kind": "repeater",
+      "connected": false,
+      "capable": false,
+      "eligible": true,
+      "reachable": true,
+      "authorized": true,
+      "heard": false
+     }
+    }
+   },
+   "steps": [
+    {
+     "step": "start",
+     "t": 0,
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": null,
+        "transmitted_at": null
+       }
+      ],
+      "window_ends_at": null,
+      "scheduled": [
+       "comp"
+      ],
+      "closed": null,
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "result",
+     "t": 4,
+     "gateway": "comp",
+     "status": "unknown",
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": "unknown",
+        "transmitted_at": null
+       }
+      ],
+      "window_ends_at": null,
+      "scheduled": [],
+      "closed": "no_automatic_retry",
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "tick",
+     "t": 100,
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": "unknown",
+        "transmitted_at": null
+       }
+      ],
+      "window_ends_at": null,
+      "scheduled": [],
+      "closed": "no_automatic_retry",
+      "ignored_results": 0
+     }
+    }
+   ]
+  },
+  {
+   "note": "No eligible origin",
+   "setup": {
+    "start": "2026-01-01T00:00:00Z",
+    "message_kind": "direct",
+    "window_s": 12,
+    "gateways": {
+     "comp": {
+      "kind": "companion",
+      "connected": true,
+      "capable": false,
+      "eligible": true,
+      "reachable": true,
+      "authorized": true,
+      "heard": false
+     },
+     "rep_1": {
+      "kind": "repeater",
+      "connected": false,
+      "capable": false,
+      "eligible": true,
+      "reachable": false,
+      "authorized": true,
+      "heard": false
+     }
+    }
+   },
+   "steps": [
+    {
+     "step": "start",
+     "t": 0,
+     "expect": {
+      "origins": [],
+      "window_ends_at": null,
+      "scheduled": [],
+      "closed": "no_origin",
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "tick",
+     "t": 50,
+     "expect": {
+      "origins": [],
+      "window_ends_at": null,
+      "scheduled": [],
+      "closed": "no_origin",
+      "ignored_results": 0
+     }
+    }
+   ]
+  },
+  {
+   "note": "Only one gateway: no second origin",
+   "setup": {
+    "start": "2026-01-01T00:00:00Z",
+    "message_kind": "channel",
+    "window_s": 10,
+    "gateways": {
+     "comp": {
+      "kind": "companion",
+      "connected": true,
+      "capable": true,
+      "eligible": true,
+      "reachable": true,
+      "authorized": true,
+      "heard": false
+     }
+    }
+   },
+   "steps": [
+    {
+     "step": "start",
+     "t": 0,
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": null,
+        "transmitted_at": null
+       }
+      ],
+      "window_ends_at": null,
+      "scheduled": [
+       "comp"
+      ],
+      "closed": null,
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "result",
+     "t": 2,
+     "gateway": "comp",
+     "status": "transmitted",
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": "transmitted",
+        "transmitted_at": "2026-01-01T00:00:02Z"
+       }
+      ],
+      "window_ends_at": "2026-01-01T00:00:12Z",
+      "scheduled": [],
+      "closed": null,
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "tick",
+     "t": 14,
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": "transmitted",
+        "transmitted_at": "2026-01-01T00:00:02Z"
+       }
+      ],
+      "window_ends_at": "2026-01-01T00:00:12Z",
+      "scheduled": [],
+      "closed": "no_second_origin",
+      "ignored_results": 0
+     }
+    }
+   ]
+  },
+  {
+   "note": "The first origin answers refused: nothing was transmitted, so no window starts and nothing else is tried",
+   "setup": {
+    "start": "2026-01-01T00:00:00Z",
+    "message_kind": "direct",
+    "window_s": 12,
+    "gateways": {
+     "comp": {
+      "kind": "companion",
+      "connected": true,
+      "capable": true,
+      "eligible": true,
+      "reachable": true,
+      "authorized": true,
+      "heard": false
+     },
+     "rep_1": {
+      "kind": "repeater",
+      "connected": false,
+      "capable": false,
+      "eligible": true,
+      "reachable": true,
+      "authorized": true,
+      "heard": false
+     }
+    }
+   },
+   "steps": [
+    {
+     "step": "start",
+     "t": 0,
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": null,
+        "transmitted_at": null
+       }
+      ],
+      "window_ends_at": null,
+      "scheduled": [
+       "comp"
+      ],
+      "closed": null,
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "result",
+     "t": 3,
+     "gateway": "comp",
+     "status": "refused",
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": "refused",
+        "transmitted_at": null
+       }
+      ],
+      "window_ends_at": null,
+      "scheduled": [],
+      "closed": "no_automatic_retry",
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "tick",
+     "t": 60,
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": "refused",
+        "transmitted_at": null
+       }
+      ],
+      "window_ends_at": null,
+      "scheduled": [],
+      "closed": "no_automatic_retry",
+      "ignored_results": 0
+     }
+    }
+   ]
+  },
+  {
+   "note": "The first origin answers expired: nothing was transmitted, so no window starts and nothing else is tried",
+   "setup": {
+    "start": "2026-01-01T00:00:00Z",
+    "message_kind": "direct",
+    "window_s": 12,
+    "gateways": {
+     "comp": {
+      "kind": "companion",
+      "connected": true,
+      "capable": true,
+      "eligible": true,
+      "reachable": true,
+      "authorized": true,
+      "heard": false
+     },
+     "rep_1": {
+      "kind": "repeater",
+      "connected": false,
+      "capable": false,
+      "eligible": true,
+      "reachable": true,
+      "authorized": true,
+      "heard": false
+     }
+    }
+   },
+   "steps": [
+    {
+     "step": "start",
+     "t": 0,
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": null,
+        "transmitted_at": null
+       }
+      ],
+      "window_ends_at": null,
+      "scheduled": [
+       "comp"
+      ],
+      "closed": null,
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "result",
+     "t": 3,
+     "gateway": "comp",
+     "status": "expired",
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": "expired",
+        "transmitted_at": null
+       }
+      ],
+      "window_ends_at": null,
+      "scheduled": [],
+      "closed": "no_automatic_retry",
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "tick",
+     "t": 60,
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": "expired",
+        "transmitted_at": null
+       }
+      ],
+      "window_ends_at": null,
+      "scheduled": [],
+      "closed": "no_automatic_retry",
+      "ignored_results": 0
+     }
+    }
+   ]
+  },
+  {
+   "note": "The first origin answers failed: nothing was transmitted, so no window starts and nothing else is tried",
+   "setup": {
+    "start": "2026-01-01T00:00:00Z",
+    "message_kind": "direct",
+    "window_s": 12,
+    "gateways": {
+     "comp": {
+      "kind": "companion",
+      "connected": true,
+      "capable": true,
+      "eligible": true,
+      "reachable": true,
+      "authorized": true,
+      "heard": false
+     },
+     "rep_1": {
+      "kind": "repeater",
+      "connected": false,
+      "capable": false,
+      "eligible": true,
+      "reachable": true,
+      "authorized": true,
+      "heard": false
+     }
+    }
+   },
+   "steps": [
+    {
+     "step": "start",
+     "t": 0,
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": null,
+        "transmitted_at": null
+       }
+      ],
+      "window_ends_at": null,
+      "scheduled": [
+       "comp"
+      ],
+      "closed": null,
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "result",
+     "t": 3,
+     "gateway": "comp",
+     "status": "failed",
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": "failed",
+        "transmitted_at": null
+       }
+      ],
+      "window_ends_at": null,
+      "scheduled": [],
+      "closed": "no_automatic_retry",
+      "ignored_results": 0
+     }
+    },
+    {
+     "step": "tick",
+     "t": 60,
+     "expect": {
+      "origins": [
+       {
+        "gateway": "comp",
+        "result": "failed",
+        "transmitted_at": null
+       }
+      ],
+      "window_ends_at": null,
+      "scheduled": [],
+      "closed": "no_automatic_retry",
+      "ignored_results": 0
+     }
+    }
+   ]
+  }
+ ]
+}

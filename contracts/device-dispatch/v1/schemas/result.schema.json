@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.test/mecon/device-dispatch/v1/result",
+  "title": "A device result as the Backend receives it",
+  "description": "signed_by is the device whose signature verified, or null when the result carries none that verifies.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["signed_by", "request_id", "job_number", "status"],
+  "properties": {
+    "signed_by": { "type": ["string", "null"], "pattern": "^[a-z0-9_-]{1,64}$" },
+    "request_id": { "type": "string", "pattern": "^rq_[1-9][0-9]*$" },
+    "job_number": { "type": "integer", "minimum": 1, "maximum": 4294967295 },
+    "status": { "enum": ["progress", "applied", "awaiting-confirm", "queued", "duty_held", "transmitted", "native_ack", "ok", "confirmed", "applied-final", "failed", "reverted", "cancelled", "refused", "invalid", "unknown-op", "unsupported-version", "busy", "replay"] },
+    "rf_count": { "type": "integer", "minimum": 1 },
+    "data": { "type": "string", "maxLength": 200 }
+  }
+}

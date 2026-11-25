@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.test/mecon/job-lifecycle/v1/error",
+  "title": "An error body",
+  "description": "Fixed per code. It echoes nothing from the request: no id, no field, no value.",
+  "oneOf": [
+    { "type": "object", "additionalProperties": false, "required": ["code", "message"], "properties": { "code": { "const": "invalid" }, "message": { "const": "The request is not valid." } } },
+    { "type": "object", "additionalProperties": false, "required": ["code", "message"], "properties": { "code": { "const": "conflict" }, "message": { "const": "The request conflicts with an earlier request." } } },
+    { "type": "object", "additionalProperties": false, "required": ["code", "message"], "properties": { "code": { "const": "not_found" }, "message": { "const": "Not found." } } }
+  ]
+}

@@ -47,7 +47,7 @@ const MUTANTS = [
 ];
 
 const runTests = () => {
-  const r = spawnSync('node', ['--test', 'absent-check.test.mjs'], { cwd: ROOT, encoding: 'utf8', timeout: 120000 });
+  const r = spawnSync('node', ['--test', '--test-reporter=spec', 'absent-check.test.mjs'], { cwd: ROOT, encoding: 'utf8', timeout: 120000 });
   const out = `${r.stdout}\n${r.stderr}`;
   const named = [...new Set([...out.matchAll(/^✖ (.+?) \(/gm)].map((m) => m[1]))].filter((n) => n !== 'failing tests:');
   return { status: r.status, signal: r.signal, named, out };

@@ -11,6 +11,7 @@ import { join } from 'node:path';
 import { parse } from 'yaml';
 import Ajv2020 from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
+import { checkAbsent, checkSpans } from './absent-check.mjs';
 
 const VAR = /\$\{([a-z][a-z0-9_]*)\}/g;
 const PLACEHOLDER = 'synthetic_capture';
@@ -126,12 +127,25 @@ export function validateReaderCases(dir = 'reader-api/v1', name = 'mecon-reader-
         if (name !== s.expect.schema) fail(`${at}: ${s.expect.status} declares schema ${name}, case expects ${s.expect.schema}`);
         if (s.expect.schema && !doc.components.schemas[s.expect.schema]) fail(`${at}: no component schema ${s.expect.schema}`);
         const dh = declaredHeaders(r);
-        for (const h of Object.keys(s.expect.headers ?? {})) if (!dh.includes(h.toLowerCase())) fail(`${at}: header ${h} is not declared for ${s.expect.status}`);
+        for (const [h, want] of Object.entries(s.expect.headers ?? {})) if (!dh.includes(h.toLowerCase()) && want !== 'absent') fail(`${at}: header ${h} is not declared for ${s.expect.status}`);
         const isStream = Object.keys(r.content ?? {}).includes('text/event-stream');
         if (s.expect.stream && !isStream) fail(`${at}: stream expected but ${s.expect.status} is not an event stream`);
         if (isStream && !s.expect.stream) fail(`${at}: ${s.expect.status} is an event stream; give a bounded stream expectation`);
         if (s.expect.lease && s.expect.schema !== 'LeaseKeyList') fail(`${at}: a lease check runs against a LeaseKeyList response`);
         if (s.expect.ids && isStream) fail(`${at}: an ids check reads a JSON body, not an event stream`);
+        // `absent` and `spans` (the public map cases): what the response must never carry, and the distance between
+        // two timestamps of every item. See absent-check.mjs.
+        if (s.expect.absent || s.expect.spans) {
+          const rootSchema = doc.components.schemas[s.expect.schema];
+          const ctx = { schema: rootSchema, components: doc.components, worldText: JSON.stringify(worldsFile) };
+          const positive = (s.expect.match ?? []).some((m) => m.at_least >= 1 || m.count >= 1) || Object.keys(s.expect.body ?? {}).length > 0;
+          if (isStream) fail(`${at}: absent and spans read a JSON body, not an event stream`);
+          else if (!rootSchema) fail(`${at}: absent and spans need a response schema`);
+          else {
+            if (s.expect.absent) for (const e of checkAbsent(s.expect.absent, { ...ctx, positive })) fail(`${at}: ${e}`);
+            if (s.expect.spans) for (const e of checkSpans(s.expect.spans, ctx)) fail(`${at}: ${e}`);
+          }
+        }
         // A `count: 0` alone passes on an empty array, so it proves nothing: pair it with a match at the same place
         // that needs at least one item.
         for (const [where, ms] of [['body', s.expect.match ?? []], ['stream', s.expect.stream?.match ?? []]]) {

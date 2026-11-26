@@ -1,0 +1,384 @@
+{
+ "contract": "mecon-public-map/1.0.0-draft.1",
+ "synthetic": true,
+ "actions": {
+  "sign-in": {
+   "args": [
+    "client",
+    "user"
+   ],
+   "description": "Give `client` a live session of `user` by the implementation's own means, as the Reader API cases do. Every later request of that client carries the session cookie."
+  },
+  "present-bearer": {
+   "args": [
+    "client",
+    "issued"
+   ],
+   "description": "Every later request of `client` carries an `Authorization: Bearer` header. `issued` true: a valid agent token of the instance; false: a string the Backend never issued. Made up either way."
+  },
+  "use-address": {
+   "args": [
+    "client",
+    "address"
+   ],
+   "description": "Requests of `client` come from this client address (as the Backend sees it, whatever proxy header it trusts). Clients without this action share one default address, and a fresh anonymous step uses it too."
+  },
+  "transmit": {
+   "args": [
+    "node",
+    "heard_by",
+    "ago_s"
+   ],
+   "description": "Record one advertisement packet sent by `node`, received `ago_s` seconds before now by each observer of `heard_by`, and let the Backend publish what is due (by whatever means its own tests use to run its refresh; the packet is at least 3 seconds old so it has settled). Every reception carries the world's signal values, topic, source and packet hash."
+  },
+  "transmit-via-path": {
+   "args": [
+    "node",
+    "heard_by",
+    "ago_s",
+    "path",
+    "hash_size"
+   ],
+   "description": "As `transmit`, for a flooded packet whose recorded path lists the nodes of `path` in order, each hop as the first `hash_size` bytes of that node's key."
+  },
+  "advance-clock": {
+   "args": [
+    "seconds"
+   ],
+   "description": "Move the Backend's clock forward by `seconds` and run its periodic work."
+  },
+  "withdraw-position": {
+   "args": [
+    "node"
+   ],
+   "description": "The node advertises again, without a position, and the Backend re-reads who is eligible within the time the contract allows (the case advances the clock)."
+  },
+  "set-feed": {
+   "args": [
+    "enabled"
+   ],
+   "description": "Set the instance setting that switches the public feed on or off."
+  },
+  "lower-rate-limit": {
+   "args": [
+    "requests"
+   ],
+   "description": "Make the Backend count only this many requests per client address, both operations together, before it answers 429. A test hook for the limit the Backend has anyway; the window is its own."
+  },
+  "lower-response-cap": {
+   "args": [
+    "events"
+   ],
+   "description": "Make the Backend carry at most this many events per response. A test hook for the cap the Backend has anyway."
+  },
+  "forge-cursor": {
+   "args": [
+    "cursor",
+    "mode"
+   ],
+   "description": "Capture a cursor built from `cursor`: `fresh-issue-time-unsigned` (issue time set to now, the Backend's signature replaced by zeros) or `fresh-issue-time-old-signature` (issue time set to now, the old signature kept)."
+  }
+ },
+ "worlds": {
+  "public-map": {
+   "description": "One Backend with the feed on. Every key, name, position and marker is made up. A node is `listed` in the description of each entry only if the contract says it should be. Sources: `owned` (the instance owner operates it), `approved_feed` (a third party feed approved for publication) and `other_feed` (neither). Receivers: observers; `public_obs` and `public_obs2` are themselves listed public nodes; `private_obs` has an operator-set position; `inferred_obs` a position the Backend inferred; `ineligible_obs` hears only on `other_feed`; `other_party_obs` is a device of a fleet the instance's owner does not own, reporting through `owned`. All of them report signal strength `-113.5` and `7.25`, topic `private-topic-synthetic`, source name `source-name-synthetic`, gateway label `gateway-label-synthetic`, fleet name `Fleet North (synthetic)`, and the packet hash below.",
+   "markers": {
+    "rssi": "-113.5",
+    "snr": "7.25",
+    "topic": "private-topic-synthetic",
+    "source": "source-name-synthetic",
+    "gateway": "gateway-label-synthetic",
+    "fleet": "Fleet North (synthetic)",
+    "packet_hash": "4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e",
+    "operator_label": "Operator label (synthetic)"
+   },
+   "nodes": {
+    "tx_one": {
+     "key": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "Tx One (synthetic)",
+     "type": "repeater",
+     "position": {
+      "lat": 55.1,
+      "lon": 10.5,
+      "advertised": true
+     },
+     "heard_on": [
+      "owned"
+     ],
+     "listed": true
+    },
+    "tx_two": {
+     "key": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+     "name": null,
+     "type": "companion",
+     "position": {
+      "lat": 55.2,
+      "lon": 10.5,
+      "advertised": true
+     },
+     "heard_on": [
+      "approved_feed"
+     ],
+     "listed": true,
+     "note": "advertises no name: listed by the first eight characters of its key"
+    },
+    "public_obs": {
+     "key": "c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3",
+     "name": "Public Observer (synthetic)",
+     "type": "repeater",
+     "position": {
+      "lat": 55.6,
+      "lon": 10.5,
+      "advertised": true
+     },
+     "heard_on": [
+      "owned"
+     ],
+     "listed": true,
+     "observer": "public_obs"
+    },
+    "public_obs2": {
+     "key": "d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4",
+     "name": null,
+     "type": "repeater",
+     "position": {
+      "lat": 55.7,
+      "lon": 10.5,
+      "advertised": true
+     },
+     "heard_on": [
+      "approved_feed"
+     ],
+     "listed": true,
+     "observer": "public_obs2"
+    },
+    "manual_advertising": {
+     "key": "f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6",
+     "name": null,
+     "operator_label": "Operator label (synthetic)",
+     "type": "repeater",
+     "position": {
+      "lat": 55.9,
+      "lon": 10,
+      "advertised": true
+     },
+     "heard_on": [
+      "owned"
+     ],
+     "listed": true,
+     "note": "an operator typed a label for this contact; the node advertises no name"
+    },
+    "manual_unmarked": {
+     "key": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+     "name": null,
+     "operator_label": "Operator label (synthetic)",
+     "type": "repeater",
+     "position": {
+      "lat": 55.8,
+      "lon": 10,
+      "advertised": false,
+      "set_by": "operator"
+     },
+     "heard_on": [
+      "owned"
+     ],
+     "listed": false
+    },
+    "inferred": {
+     "key": "3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d",
+     "name": "Inferred (synthetic)",
+     "type": "repeater",
+     "position": {
+      "lat": 55.3,
+      "lon": 10.1,
+      "advertised": false,
+      "set_by": "inference"
+     },
+     "heard_on": [
+      "owned"
+     ],
+     "listed": false
+    },
+    "unheard": {
+     "key": "9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d",
+     "name": "Unheard (synthetic)",
+     "type": "repeater",
+     "position": {
+      "lat": 55.4,
+      "lon": 10.2,
+      "advertised": true
+     },
+     "heard_on": [],
+     "listed": false
+    },
+    "ineligible_only": {
+     "key": "1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b",
+     "name": "Other Feed Only (synthetic)",
+     "type": "repeater",
+     "position": {
+      "lat": 55.5,
+      "lon": 10.3,
+      "advertised": true
+     },
+     "heard_on": [
+      "other_feed"
+     ],
+     "listed": false
+    },
+    "other_party": {
+     "key": "adadadadadadadadadadadadadadadadadadadadadadadadadadadadadadadad",
+     "name": "Other Party (synthetic)",
+     "type": "repeater",
+     "position": {
+      "lat": 55.35,
+      "lon": 10.35,
+      "advertised": true
+     },
+     "heard_on": [
+      "other_party_obs"
+     ],
+     "listed": false
+    },
+    "near_origin": {
+     "key": "e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5",
+     "name": "Near Origin (synthetic)",
+     "type": "repeater",
+     "position": {
+      "lat": 0.4,
+      "lon": 0.3,
+      "advertised": true
+     },
+     "heard_on": [
+      "owned"
+     ],
+     "listed": false
+    },
+    "null_island": {
+     "key": "7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b",
+     "name": "Null Island (synthetic)",
+     "type": "repeater",
+     "position": {
+      "lat": 0,
+      "lon": 0,
+      "advertised": true
+     },
+     "heard_on": [
+      "owned"
+     ],
+     "listed": false
+    },
+    "inside_edge": {
+     "key": "6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a",
+     "name": "Inside Edge (synthetic)",
+     "type": "repeater",
+     "position": {
+      "lat": 0.99,
+      "lon": -0.99,
+      "advertised": true
+     },
+     "heard_on": [
+      "owned"
+     ],
+     "listed": false
+    },
+    "edge": {
+     "key": "5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f",
+     "name": "Edge (synthetic)",
+     "type": "repeater",
+     "position": {
+      "lat": 1,
+      "lon": 0,
+      "advertised": true
+     },
+     "heard_on": [
+      "owned"
+     ],
+     "listed": true
+    },
+    "axis_out": {
+     "key": "8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c",
+     "name": "Axis Out (synthetic)",
+     "type": "repeater",
+     "position": {
+      "lat": 0.99,
+      "lon": 5,
+      "advertised": true
+     },
+     "heard_on": [
+      "owned"
+     ],
+     "listed": true
+    },
+    "rep_a": {
+     "key": "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
+     "name": "Rep A (synthetic)",
+     "type": "repeater",
+     "position": {
+      "lat": 56,
+      "lon": 10,
+      "advertised": true
+     },
+     "heard_on": [
+      "owned"
+     ],
+     "listed": true
+    },
+    "rep_b": {
+     "key": "d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2",
+     "name": "Rep B (synthetic)",
+     "type": "repeater",
+     "position": {
+      "lat": 56.1,
+      "lon": 10.1,
+      "advertised": true
+     },
+     "heard_on": [
+      "owned"
+     ],
+     "listed": true
+    }
+   },
+   "observers": {
+    "public_obs": {
+     "is_node": "public_obs",
+     "source": "owned"
+    },
+    "public_obs2": {
+     "is_node": "public_obs2",
+     "source": "approved_feed"
+    },
+    "private_obs": {
+     "source": "owned",
+     "key": "2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c",
+     "name": "private-observer-name (synthetic)",
+     "position": {
+      "lat": 57.123456,
+      "lon": 11.654321,
+      "set_by": "operator"
+     }
+    },
+    "inferred_obs": {
+     "source": "owned",
+     "key": "3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e",
+     "name": "inferred-observer-name (synthetic)",
+     "position": {
+      "lat": 58.234567,
+      "lon": 12.345678,
+      "set_by": "inference"
+     }
+    },
+    "ineligible_obs": {
+     "source": "other_feed",
+     "key": "4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f",
+     "name": "ineligible-observer-name (synthetic)"
+    },
+    "other_party_obs": {
+     "source": "owned",
+     "key": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+     "name": "other-party-observer-name (synthetic)",
+     "fleet_owner": "another user"
+    }
+   }
+  }
+ }
+}

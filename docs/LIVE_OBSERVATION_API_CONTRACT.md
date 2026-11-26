@@ -6,7 +6,7 @@ This describes a **target**, not a currently available endpoint. It enables an a
 
 A Backend normalizes packet reception evidence from permitted sources. It exposes two **separate projections** over that model, with independent authorization, retention and response schemas:
 
-- `/api/observations/v1/public`: anonymous, approved public catalogue, snapshot and bounded SSE activity. Its machine-readable contract is not written yet and is separate from `contracts/observations/v1`, which covers the authorized projection only. The reference Backend's shipped anonymous map feed (`/api/public/v1/nodes` and `/events`) is the reference behaviour it will describe.
+- `/api/public/v1` (`GET /nodes`, `GET /events`): anonymous, allow-listed public catalogue and polled, short-lived activity. Its machine-readable contract is `contracts/public-map/v1`, separate from `contracts/observations/v1`, which covers the authorized projection only. The reference Backend's shipped anonymous map feed is the behaviour it describes. The earlier target path `/api/observations/v1/public` is superseded by it.
 - `/api/observations/v1/authorized`: session-authenticated, capability-scoped fleet/user diagnostic catalogue, snapshot and SSE activity.
 
 No client connects directly to MQTT, storage or raw ingress. Use HTTPS JSON REST snapshots and SSE subscriptions. The public map never calls the authorized endpoints.

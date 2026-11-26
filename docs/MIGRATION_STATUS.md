@@ -9,7 +9,7 @@ MECON's Backend is moving into this repository one block at a time. Each block h
 
 Private code is removed only after stage 4. The core (accounts, identity, key custody, domain persistence and federation) moves last.
 
-*Status as of 2026-11-25. Each entry records only what has been checked.*
+*Status as of 2026-11-26. Each entry records only what has been checked.*
 
 | Block | Contract | 1. Published | 2. Private reference | 3. Public implementation | 4. Production |
 |---|---|---|---|---|---|
@@ -20,7 +20,7 @@ Private code is removed only after stage 4. The core (accounts, identity, key cu
 | Observation processing | [`observation-processing/v1`](../contracts/observation-processing/v1/README.md) | Draft (`1.0.0-draft.1`): schemas, replayable fixtures and a reference processor | **Replay merged** in the private reference Backend, pinned at commit 20b3f3b | **Passing**: [`processing/`](../processing/README.md) replays all 5 published fixtures (A to E, the crash step included), 5 of 5, in its own CI job | No |
 | Session lookup | [`session-lookup/v1`](../contracts/session-lookup/v1/openapi.yaml) | Draft (`1.0.0-draft.3`, commit 8f26b4f, adds 422 `malformed_request` and the base-path line): schemas, fixtures and 20 replayable cases ([`cases/`](../contracts/session-lookup/v1/cases/README.md)); cache timing, stream close on revocation and feed-down closing are not replayable and need implementation tests | Not yet | HTTP adapter merged in `reader-backend/`; fakes and a stub only, no interop run against a real core | No |
 | Reader core | [`reader-core/v1`](../contracts/reader-core/v1/openapi.yaml) | Draft.2 (after a core implementer's review): one operation per `ReaderCore` port method, fixtures and 49 replayable cases ([`cases/`](../contracts/reader-core/v1/cases/README.md)) | Not yet | [`reader-backend/`](../reader-backend/README.md): the fake core and a stub core pass the cases (49 of 49 over HTTP; 43 of 49 on the fake, 6 not applicable to a Python port); no HTTP adapter yet | No |
-| Job lifecycle and device dispatch | [`job-lifecycle/v1`](../contracts/job-lifecycle/v1/README.md), [`device-dispatch/v1`](../contracts/device-dispatch/v1/README.md) | Draft: schemas, a typed command catalogue, 13 replayable fixtures (job lifecycle A to H and K, device dispatch I to L) and reference models; timing under load and real signing are not replayable and need implementation tests | Not yet | Not started | No |
+| Job lifecycle and device dispatch | [`job-lifecycle/v1`](../contracts/job-lifecycle/v1/README.md), [`device-dispatch/v1`](../contracts/device-dispatch/v1/README.md) | Draft: schemas, a typed command catalogue, 13 replayable fixtures (job lifecycle A to H and K, device dispatch I to L) and reference models; timing under load and real signing are not replayable and need implementation tests | **Replay merged** in the private reference Backend, pinned at commit fd339c8: every fixture case replayed against its own request and job code in its CI shards, with the cases it cannot express skipped as not applicable and each known gap held as a strict expected failure, per case | Not started | No |
 
 ## Reader API, stage 2
 

@@ -1,6 +1,6 @@
 # MECON Reader backend (facade)
 
-A public implementation of the Reader API ([`contracts/reader-api/v1`](../contracts/reader-api/v1/openapi.yaml)): a Starlette app that serves the HTTP side of the contract and hands everything else to a core through two ports. It also serves the authorized observation projection ([`contracts/observations/v1`](../contracts/observations/v1/openapi.yaml), see below). It is groundwork. The session port has one real adapter, an HTTP client for the session lookup contract ([`contracts/session-lookup/v1`](../contracts/session-lookup/v1/openapi.yaml), see below), which no run command wires in yet. The core port has no real adapter; the calls it would make are published as the reader-core contract ([`contracts/reader-core/v1`](../contracts/reader-core/v1/openapi.yaml), see below), which the fake core follows. The facade is not deployed anywhere, and nothing in production depends on it.
+A public implementation of the Reader API ([`contracts/reader-api/v1`](../contracts/reader-api/v1/openapi.yaml)): a Starlette app that serves the HTTP side of the contract and hands everything else to a core through two ports. It also serves the authorized observation projection ([`contracts/observations/v1`](../contracts/observations/v1/openapi.yaml), see below). It is groundwork. Each port has one real adapter, an HTTP client: for the session lookup contract ([`contracts/session-lookup/v1`](../contracts/session-lookup/v1/openapi.yaml)) and for the reader-core contract ([`contracts/reader-core/v1`](../contracts/reader-core/v1/openapi.yaml)), which the fake core follows too (both below). `--core-url` wires both into the run command. The facade is not deployed anywhere, and nothing in production depends on it.
 
 ## What the facade owns
 
@@ -72,6 +72,22 @@ Read answers are cached for at most `lookup_cache_s` (5 s), never past the calle
 - **`health_state`** is `unknown` until the core first answers, then `ok`, `unavailable` or `service_unauthorized`. `GET /health` reports it as `session_lookup`, a member the Reader API's `Health` schema allows, but only as `unknown`, `ok` or `unavailable`: `/health` is unauthenticated, so a refused token shows there as `unavailable` and is named only in the ERROR log. A lookup without that attribute, such as the fake, adds nothing.
 - **The client** is httpx with explicit timeouts. It ignores proxy settings from the environment, because the core is on the deployment's private network, over plain HTTP.
 
+## HTTP core adapter
+
+[`http_core.py`](src/mecon_reader_backend/http_core.py) implements the `ReaderCore` port over HTTP, as the reader-core contract (1.0.0-draft.2) describes it: `HttpReaderCore(base_url, token_file, timeout_s=5, events_margin_s=5)`.
+
+- **One method, one operation.** Each port method is a `POST {base}/reader/...` with the operation's JSON body: the `caller` reference (`{user_id, session_ref}`, nothing else about the caller) and the arguments. `getHealth` is a `GET`. `base_url` includes any path prefix in front of `/reader/`. A first page sends no `cursor`; `limit` is always sent. Login start and poll carry `client_address`, which the facade derives behind its trusted proxies. An over-long Origin or Sec-Fetch-Site is sent as absent, which never accepts what the core would refuse. A `wait_s` outside 0 to 25 is sent at the nearer bound.
+- **The service token** is handled as by the session lookup adapter: read from `token_file` by path, again whenever the file changes, sent as `Authorization: Bearer` on every call, never logged and never in a repr. A missing or empty file answers `core_unavailable` without a request.
+- **Timeouts.** `timeout_s` bounds each call. `read_events` is a long poll, so it is bounded by its `wait_s` plus `events_margin_s`.
+- **Answers** are checked against the contract's schema for their operation and status before use. [`core_schema.py`](src/mecon_reader_backend/core_schema.py) checks them against a copy of the document's schemas ([`reader_core_schemas.py`](src/mecon_reader_backend/reader_core_schemas.py), written by [`scripts/reader_core_schemas.py`](scripts/reader_core_schemas.py)), so the running facade needs no schema engine. A `pattern` is matched as ECMA-262 means it: `$` only at the end of the value, and `\d` and `\w` ASCII only. A refusal must also carry a code its status declares (for example `session_ended` on a 403, `not_found` on a 404).
+- **The mapping** gives the `CoreError`s the fake core raises, so the facade's `call_core` maps both the same way:
+  - 403 `session_ended` is `CoreError("forbidden", "session_ended")`, which the facade answers 401 with the cookie cleared, and which closes an open stream after `session_revoked`;
+  - 403 `origin_rejected` and `sending_disabled`, 404 `not_found`, 409 `conflict`, 410 `cursor_expired`, 422 `invalid` and `validation_failed`, 429 `rate_limited` and `throttled` (with `retry_after_s`) and 503 `lease_signing_unavailable` keep their code, with the kind from the status;
+  - everything else is `core_unavailable` (503 `unavailable`, retryable, cookie kept): 401 `service_unauthorized` (logged at ERROR once when it starts and once when it stops), 503 `core_unavailable`, a status the operation does not declare, a redirect (never followed), a body that is not JSON (nested past the parser's depth included), breaks the schema or is over 8 MiB, a refusal code the status does not declare, a timeout and a connection error;
+  - 422 `malformed_request` means the adapter sent a body the contract refuses. That is an adapter bug, never an answer about the caller, so it is logged at ERROR once per operation and answered `core_unavailable`.
+
+  A batch holding a `session_revoked` envelope is `core_unavailable` too: the contract says the core never sends one, and relaying it would sign the user out.
+
 ## Fake adapters
 
 [`fakes/`](src/mecon_reader_backend/fakes/) builds an in-memory world from a `worlds.json` description and implements both ports over it: users, fleets, devices, identities, contacts, channels, messages, read marks, the two switches, send attempts, events and their retention, and Ed25519 lease keys that can be rotated and revoked. A lease is signed as `LeaseToken` describes. The fakes exist for the tests and for poking at the API locally. They are not an implementation of the core.
@@ -82,11 +98,34 @@ Read answers are cached for at most `lookup_cache_s` (5 s), never past the calle
 cd reader-backend
 pip install --require-hashes --no-deps -r requirements-dev.lock
 python -m pytest -q                 # Reader API, observation, session lookup and reader-core cases, facade and adapter rules, SQLite store, guards
-python scripts/mutation.py          # mutants on the facade's own rules, the observation scope filters, the HTTP lookup adapter and the fake core's scoping and idempotency; every one must be killed
+python scripts/mutation.py          # mutants on the facade's own rules, the observation scope filters, the HTTP lookup and core adapters and the fake core's scoping and idempotency; every one must be killed
 PYTHONPATH=src python -m mecon_reader_backend --world ../contracts/reader-api/v1/cases/worlds.json --port 8787 --origin http://127.0.0.1:8787
+python scripts/reader_core_schemas.py  # after a change to contracts/reader-core/v1/openapi.yaml: the adapter's copy of its schemas
 ```
 
-The last command serves the synthetic world on the loopback address only. Logins there are approved out of band, so it is for poking at the API by hand.
+The `--world` command serves the synthetic world on the loopback address only. Logins there are approved out of band, so it is for poking at the API by hand.
+
+To run against a core, pass `--core-url` instead of `--world`. The facade then uses `HttpSessionLookup` and `HttpReaderCore`, both sending the service token from `--token-file`:
+
+```sh
+PYTHONPATH=src python -m mecon_reader_backend --core-url http://core.internal:8080 --token-file /run/secrets/reader-service-token \
+    --origin https://reader.example.test --trusted-proxy 172.18.0.2 --host 0.0.0.0
+```
+
+| Option | Environment | Default |
+| --- | --- | --- |
+| `--core-url` | `MECON_READER_CORE_URL` | none |
+| `--lookup-url` | `MECON_READER_LOOKUP_URL` | the core URL |
+| `--token-file` | `MECON_READER_SERVICE_TOKEN_FILE` | none (required with a core URL) |
+| `--core-timeout-s` | `MECON_READER_CORE_TIMEOUT_S` | 5 |
+| `--events-margin-s` | `MECON_READER_EVENTS_MARGIN_S` | 5 |
+| `--lookup-timeout-s` | `MECON_READER_LOOKUP_TIMEOUT_S` | 2 |
+| `--host` | `MECON_READER_HOST` | 127.0.0.1 |
+| `--origin` | `MECON_READER_ORIGIN` | http://127.0.0.1:8787 |
+
+`--world` wins over `MECON_READER_CORE_URL` when both are set.
+
+The facade's own bounds on a lookup and a core call are set just above the adapters', so an adapter's timeout answers first.
 
 ## What CI proves, and what it does not
 
@@ -107,8 +146,20 @@ It replays every reader-core case from `contracts/reader-core/v1/cases` the same
 
 - **`http`**: a stub core ([`tests/stub_reader_core.py`](tests/stub_reader_core.py)) on a loopback socket, which serves every operation over `FakeReaderCore` in the contract's order of checks (service token, request schema, then the fake's answer). Each request is sent raw, as the case writes it, and the answer is checked against the case. All 49 cases run here.
 - **`fake`**: `FakeReaderCore` called directly with the case's arguments and its answer turned into the contract's status and body. The cases about the service token (3) and about a body that breaks the request schema (3) are not applicable, because the fake is a Python port; the other 43 run.
+- **`adapter`** ([`tests/test_http_core.py`](tests/test_http_core.py)): the `http` target, and then each request again through `HttpReaderCore` against the same stub, from the world as it was before the raw request. The adapter must send exactly the case's body with the service token, and its answer, turned back into the contract's status and body, must meet the same expectation. With an absent or wrong token it must answer `core_unavailable`, and with an absent one send nothing. A request whose body breaks the request schema is sent raw only, because the port takes typed arguments. All 49 cases run here.
 
-The fake core re-checks the caller reference on every call, as the contract requires: a `Caller` whose session is revoked, expired or another user's gets `CoreError("forbidden", "session_ended")`. The facade answers that as a session that no longer resolves (401, cookie cleared), and an open event stream sends `session_revoked` and closes. The fake answers a send to a foreign or missing identity, or an out-of-scope target, with one `not_found`; the facade answers that 403 `forbidden` (`POST /send-attempts` declares no 404). The core's login calls carry `client_address`: the connection's peer, unless the peer is in `FacadeConfig.trusted_proxies` (addresses or CIDRs, default none), when `X-Forwarded-For` is read from the right past trusted proxies. A core's 429 `rate_limited` reaches the browser as the ordinary 202 on login start and `pending` on a poll. The facade caps each user's concurrent `GET /events` streams at `max_streams_per_user` (5): when the user opens one more, the facade ends that user's oldest stream, cleanly and with no frame, so the newest wins and nothing is refused. There is no HTTP adapter for the core port yet.
+The fake core re-checks the caller reference on every call, as the contract requires: a `Caller` whose session is revoked, expired or another user's gets `CoreError("forbidden", "session_ended")`. The facade answers that as a session that no longer resolves (401, cookie cleared), and an open event stream sends `session_revoked` and closes. The fake answers a send to a foreign or missing identity, or an out-of-scope target, with one `not_found`; the facade answers that 403 `forbidden` (`POST /send-attempts` declares no 404). The core's login calls carry `client_address`: the connection's peer, unless the peer is in `FacadeConfig.trusted_proxies` (addresses or CIDRs, default none), when `X-Forwarded-For` is read from the right past trusted proxies. A core's 429 `rate_limited` reaches the browser as the ordinary 202 on login start and `pending` on a poll. The facade caps each user's concurrent `GET /events` streams at `max_streams_per_user` (5): when the user opens one more, the facade ends that user's oldest stream, cleanly and with no frame, so the newest wins and nothing is refused.
+
+The core adapter's own tests ([`tests/test_http_core.py`](tests/test_http_core.py)) cover:
+
+- every operation's method, path, body and token header;
+- every declared refusal and its `CoreError`, refusal codes a status does not carry, `malformed_request` logged once per operation, and `retry_after_s` kept;
+- 2xx bodies that break the schema, an undeclared status, a redirect, an oversized answer and a `session_revoked` envelope in a batch;
+- a missing, empty or refused token (ERROR once per change), and a token file that changes;
+- a core that stalls past the call timeout, and `read_events` bounded by `wait_s` plus the margin;
+- the facade over the adapter: a page, a login over the limit answered with the ordinary 202, an outage as 503 with the cookie kept, and a session the core finds ended as 401 with the cookie cleared;
+- the copy of the schemas against the document, and the schema check against a real JSON Schema validator on every fixture and broken variants of them;
+- the run command wiring both HTTP adapters.
 
 The adapter's own tests ([`tests/test_http_lookup.py`](tests/test_http_lookup.py)) cover:
 
@@ -120,7 +171,7 @@ The adapter's own tests ([`tests/test_http_lookup.py`](tests/test_http_lookup.py
 - the refused-token state: ERROR once per change, and `session_lookup` in the health output, which never names a refused token;
 - that neither the token nor the cookie value appears in the logs.
 
-This proves the adapter against a stub that serves the contract, not against a real core. No real core has served these cases to this adapter, so CI does not prove the adapter and a core agree on anything the cases leave open, and it does not prove the adapter's behaviour under real network faults beyond a loopback socket.
+This proves the adapters against stubs that serve their contracts, not against a real core. No real core has served these cases to these adapters, so CI does not prove an adapter and a core agree on anything the cases leave open, and it does not prove the adapters' behaviour under real network faults beyond a loopback socket.
 
 The observation cases do not cover a stream's `access_revoked` while open, `resync_required`, the heartbeat or the freshness states; this package's own tests do, but the cases do not pin them for another implementation.
 

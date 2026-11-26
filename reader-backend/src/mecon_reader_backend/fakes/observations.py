@@ -40,7 +40,7 @@ class FakeObservationScope:
                 prov, precision = "approved_public_source", PUBLIC_PRECISION_M
             else:
                 continue
-            out.append(ScopedObserver(w.id_of("observers", name), prov, precision if o.get("location") else None))
+            out.append(ScopedObserver(w.observer_id(caller.user_id, name), prov, precision if o.get("location") else None))
         return out
 
 
@@ -54,11 +54,11 @@ class FakeReceptionStore:
         if self.unavailable:
             raise CoreError("unavailable")
 
-    def _names(self, scope: Sequence[ScopedObserver]) -> dict[str, ScopedObserver]:
-        # The one scope filter: only observers the scope names are ever read.
+    def _names(self, caller: Caller, scope: Sequence[ScopedObserver]) -> dict[str, ScopedObserver]:
+        # The one scope filter: only observers the scope names are ever read, by the caller's own ids.
         by_id = {s.observer_id: s for s in scope}
-        return {n: by_id[self.world.id_of("observers", n)] for n in self.world.observers
-                if self.world.id_of("observers", n) in by_id}
+        return {n: by_id[self.world.observer_id(caller.user_id, n)] for n in self.world.observers
+                if self.world.observer_id(caller.user_id, n) in by_id}
 
     def _correlation(self, caller: Caller, packet: str) -> str:
         return "pkc_" + hashlib.sha256(f"{caller.user_id}|{packet}".encode()).hexdigest()[:20]
@@ -90,7 +90,7 @@ class FakeReceptionStore:
             if not cursor.startswith("obp_") or not (digits.isascii() and digits.isdigit()):
                 raise CoreError("gone", "cursor_expired")
             start = int(digits, 10)
-        names = self._names(scope)
+        names = self._names(caller, scope)
         items = []
         for name, s in names.items():
             o = w.observers[name]
@@ -111,7 +111,7 @@ class FakeReceptionStore:
                        limit: int) -> SnapshotResult:
         self._check()
         w = self.world
-        names = self._names(scope)
+        names = self._names(caller, scope)
         if since is not None:
             after = w.parse_obs_cursor(since)
             if after is None:
@@ -138,7 +138,7 @@ class FakeReceptionStore:
         loop = asyncio.get_running_loop()
         deadline = loop.time() + wait_s
         while True:
-            names = self._names(scope)
+            names = self._names(caller, scope)
             held = self._held(caller, names, start)
             if held or loop.time() >= deadline:
                 return EventBatch([self._event(caller, r, names[r.observer]) for r in held], w.obs_cursor(w.obs_seq))

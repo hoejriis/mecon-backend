@@ -185,7 +185,8 @@ def test_the_scope_shrinking_mid_stream_stops_what_is_sent():
             pass
         ids = [s.observer_id for s in await rig.scope.visible_observers(
             await rig.lookup.resolve(rig.session.credential, "read"))]
-        mast = rig.world.id_of("observers", "north_mast")
+        caller = await rig.lookup.resolve(rig.session.credential, "read")
+        mast = rig.world.observer_id(caller.user_id, "north_mast")
         orig = rig.scope.visible_observers
 
         async def shrinking(caller):

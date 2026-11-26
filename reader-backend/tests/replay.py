@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import os
 import pathlib
 import re
 from dataclasses import dataclass, field
@@ -338,9 +339,33 @@ class Replay:
                 self.fail(i, f"body {ptr} is {got if got is not _MISSING else '(missing)'!r}, expected {self.sub(want)!r}")
         for m in expect.get("match") or []:
             self.check_match(i, pointer(body, m["at"]), m)
+        for c in expect.get("ids") or []:
+            self.check_ids(i, body, c)
         if "lease" in expect:
             self.check_lease(i, body, expect["lease"])
         return body
+
+    def check_ids(self, i: int, body: Any, c: dict) -> None:
+        """The observation cases' `ids` expectation (contracts/observations/v1/cases/README.md, "Id form checks")."""
+        arr = pointer(body, c["at"])
+        if not isinstance(arr, list):
+            self.fail(i, f"ids at {c['at']!r}: not an array")
+        pairs = [(item, pointer(item, c["field"])) for item in arr]
+        pairs = [(item, v) for item, v in pairs if v is not _MISSING]
+        if not pairs:
+            self.fail(i, f"ids: no item at {c['at']!r} has {c['field']!r}")
+        if c.get("unsequenced"):
+            values = sorted({str(v) for _, v in pairs})
+            if len(values) < 2:
+                self.fail(i, f"ids: unsequenced needs two distinct ids, got {values!r}")
+            common = os.path.commonprefix(values)
+            if all(v[len(common):] == "" or v[len(common):].isdecimal() for v in values):
+                self.fail(i, f"ids {values!r} differ only by a counter")
+        for other in c.get("unlike") or []:
+            for item, v in pairs:
+                o = pointer(item, other)
+                if o is not _MISSING and id_form(str(v)) == id_form(str(o)):
+                    self.fail(i, f"ids: {c['field']} {v!r} shares its form with {other} {o!r}")
 
     def check_match(self, i: int, arr: Any, m: dict) -> None:
         if not isinstance(arr, list):
@@ -433,6 +458,12 @@ class Replay:
         finally:
             for c in self.clients.values():
                 await c.aclose()
+
+
+def id_form(value: str) -> tuple[str, int]:
+    """An id's form for `unlike`: its prefix up to and including the first `_` or `-` (empty without one), and its length."""
+    cut = min((i for i in (value.find("_"), value.find("-")) if i >= 0), default=-1)
+    return (value[: cut + 1] if cut >= 0 else "", len(value))
 
 
 def parse_sse(raw: bytes) -> list[dict]:

@@ -22,3 +22,5 @@ jobs:
           cache-dependency-path: contracts/package-lock.json
       - run: npm ci --ignore-scripts
       - run: npm test
+      - name: Public map case checks, mutation check
+        run: node scripts/mutation-public-map.mjs

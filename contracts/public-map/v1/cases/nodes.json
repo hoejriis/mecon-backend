@@ -1,0 +1,404 @@
+{
+ "contract": "mecon-public-map/1.0.0-draft.1",
+ "synthetic": true,
+ "group": "nodes",
+ "cases": [
+  {
+   "id": "nodes-01",
+   "title": "Only nodes that advertise their own position and were heard through an eligible source are listed",
+   "world": "public-map",
+   "steps": [
+    {
+     "request": {
+      "operation": "getPublicNodes"
+     },
+     "expect": {
+      "status": 200,
+      "schema": "PublicNodeList",
+      "headers": {
+       "Cache-Control": "public, max-age=30"
+      },
+      "match": [
+       {
+        "at": "/nodes",
+        "where": {
+         "/public_node_id": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1"
+        },
+        "count": 1
+       },
+       {
+        "at": "/nodes",
+        "where": {
+         "/public_node_id": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2"
+        },
+        "count": 1
+       },
+       {
+        "at": "/nodes",
+        "where": {
+         "/public_node_id": "c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3"
+        },
+        "count": 1
+       },
+       {
+        "at": "/nodes",
+        "where": {
+         "/public_node_id": "d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4"
+        },
+        "count": 1
+       },
+       {
+        "at": "/nodes",
+        "where": {
+         "/public_node_id": "f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6"
+        },
+        "count": 1
+       },
+       {
+        "at": "/nodes",
+        "where": {
+         "/public_node_id": "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1"
+        },
+        "count": 1
+       },
+       {
+        "at": "/nodes",
+        "where": {
+         "/public_node_id": "9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d"
+        },
+        "count": 0
+       },
+       {
+        "at": "/nodes",
+        "where": {
+         "/public_node_id": "1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b"
+        },
+        "count": 0
+       },
+       {
+        "at": "/nodes",
+        "where": {
+         "/public_node_id": "3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d"
+        },
+        "count": 0
+       },
+       {
+        "at": "/nodes",
+        "where": {
+         "/public_node_id": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a"
+        },
+        "count": 0
+       },
+       {
+        "at": "/nodes",
+        "where": {
+         "/public_node_id": "adadadadadadadadadadadadadadadadadadadadadadadadadadadadadadadad"
+        },
+        "count": 0
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "nodes-02",
+   "title": "A node near (0, 0) is never listed; the boundary is exactly one degree on both axes",
+   "world": "public-map",
+   "steps": [
+    {
+     "request": {
+      "operation": "getPublicNodes"
+     },
+     "expect": {
+      "status": 200,
+      "schema": "PublicNodeList",
+      "match": [
+       {
+        "at": "/nodes",
+        "where": {
+         "/public_node_id": "5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f"
+        },
+        "count": 1
+       },
+       {
+        "at": "/nodes",
+        "where": {
+         "/public_node_id": "8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c"
+        },
+        "count": 1
+       },
+       {
+        "at": "/nodes",
+        "where": {
+         "/public_node_id": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1"
+        },
+        "count": 1
+       },
+       {
+        "at": "/nodes",
+        "where": {
+         "/public_node_id": "e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5"
+        },
+        "count": 0
+       },
+       {
+        "at": "/nodes",
+        "where": {
+         "/public_node_id": "7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b"
+        },
+        "count": 0
+       },
+       {
+        "at": "/nodes",
+        "where": {
+         "/public_node_id": "6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a"
+        },
+        "count": 0
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "nodes-03",
+   "title": "A listed node carries exactly its key, advertised name, type, advertised position and last-heard minute, and nothing about who heard it",
+   "world": "public-map",
+   "steps": [
+    {
+     "request": {
+      "operation": "getPublicNodes"
+     },
+     "expect": {
+      "status": 200,
+      "schema": "PublicNodeList",
+      "match": [
+       {
+        "at": "/nodes",
+        "where": {
+         "/public_node_id": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "/name": "Tx One (synthetic)",
+         "/type": "repeater",
+         "/location/lat": 55.1,
+         "/location/lon": 10.5
+        },
+        "count": 1
+       }
+      ],
+      "absent": {
+       "keys": [
+        "observer",
+        "observer_id",
+        "observer_key",
+        "observer_name",
+        "rssi",
+        "snr",
+        "packet_id",
+        "packet_hash",
+        "hash",
+        "packet_correlation_id",
+        "reception_id",
+        "source",
+        "source_id",
+        "gateway",
+        "fleet",
+        "topic",
+        "contact_name",
+        "label",
+        "text",
+        "payload"
+       ],
+       "values": [
+        "2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c",
+        "private-observer-name (synthetic)",
+        "57.123456",
+        "58.234567",
+        "inferred-observer-name (synthetic)",
+        "ineligible-observer-name (synthetic)",
+        "other-party-observer-name (synthetic)",
+        "-113.5",
+        "7.25",
+        "private-topic-synthetic",
+        "source-name-synthetic",
+        "gateway-label-synthetic",
+        "Fleet North (synthetic)",
+        "4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e",
+        "Operator label (synthetic)"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "nodes-04",
+   "title": "A node that advertises no name is listed by the first eight characters of its key, never by a name an operator typed",
+   "world": "public-map",
+   "steps": [
+    {
+     "request": {
+      "operation": "getPublicNodes"
+     },
+     "expect": {
+      "status": 200,
+      "schema": "PublicNodeList",
+      "match": [
+       {
+        "at": "/nodes",
+        "where": {
+         "/public_node_id": "f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6",
+         "/name": "f6f6f6f6"
+        },
+        "count": 1
+       },
+       {
+        "at": "/nodes",
+        "where": {
+         "/public_node_id": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+         "/name": "b2b2b2b2"
+        },
+        "count": 1
+       }
+      ],
+      "absent": {
+       "keys": [
+        "observer",
+        "observer_id",
+        "observer_key",
+        "observer_name",
+        "rssi",
+        "snr",
+        "packet_id",
+        "packet_hash",
+        "hash",
+        "packet_correlation_id",
+        "reception_id",
+        "source",
+        "source_id",
+        "gateway",
+        "fleet",
+        "topic",
+        "contact_name",
+        "label",
+        "text",
+        "payload"
+       ],
+       "values": [
+        "Operator label (synthetic)"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "nodes-05",
+   "title": "A position that is not marked as advertised makes no node public, and its operator label is never published",
+   "world": "public-map",
+   "steps": [
+    {
+     "request": {
+      "operation": "getPublicNodes"
+     },
+     "expect": {
+      "status": 200,
+      "schema": "PublicNodeList",
+      "match": [
+       {
+        "at": "/nodes",
+        "where": {
+         "/public_node_id": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1"
+        },
+        "count": 1
+       },
+       {
+        "at": "/nodes",
+        "where": {
+         "/public_node_id": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a"
+        },
+        "count": 0
+       },
+       {
+        "at": "/nodes",
+        "where": {
+         "/public_node_id": "3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d"
+        },
+        "count": 0
+       }
+      ],
+      "absent": {
+       "keys": [
+        "contact_name",
+        "label"
+       ],
+       "values": [
+        "Operator label (synthetic)",
+        "Inferred (synthetic)"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "nodes-06",
+   "title": "A node heard only through a device of a fleet the instance's owner does not own, or only through an ineligible source, is never listed",
+   "world": "public-map",
+   "steps": [
+    {
+     "action": "transmit",
+     "args": {
+      "node": "other_party",
+      "heard_by": [
+       "other_party_obs"
+      ],
+      "ago_s": 3
+     }
+    },
+    {
+     "action": "transmit",
+     "args": {
+      "node": "ineligible_only",
+      "heard_by": [
+       "ineligible_obs"
+      ],
+      "ago_s": 3
+     }
+    },
+    {
+     "request": {
+      "operation": "getPublicNodes"
+     },
+     "expect": {
+      "status": 200,
+      "schema": "PublicNodeList",
+      "match": [
+       {
+        "at": "/nodes",
+        "where": {
+         "/public_node_id": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1"
+        },
+        "count": 1
+       },
+       {
+        "at": "/nodes",
+        "where": {
+         "/public_node_id": "adadadadadadadadadadadadadadadadadadadadadadadadadadadadadadadad"
+        },
+        "count": 0
+       },
+       {
+        "at": "/nodes",
+        "where": {
+         "/public_node_id": "1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b"
+        },
+        "count": 0
+       }
+      ]
+     }
+    }
+   ]
+  }
+ ]
+}

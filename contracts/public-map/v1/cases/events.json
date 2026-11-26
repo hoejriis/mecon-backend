@@ -1,0 +1,1530 @@
+{
+ "contract": "mecon-public-map/1.0.0-draft.1",
+ "synthetic": true,
+ "group": "events",
+ "cases": [
+  {
+   "id": "events-01",
+   "title": "Only eligible transmitters give a pulse, and a line goes only to an observer that is itself a listed public node",
+   "world": "public-map",
+   "steps": [
+    {
+     "action": "transmit",
+     "args": {
+      "node": "tx_one",
+      "heard_by": [
+       "public_obs",
+       "private_obs",
+       "inferred_obs",
+       "ineligible_obs"
+      ],
+      "ago_s": 3
+     }
+    },
+    {
+     "action": "transmit",
+     "args": {
+      "node": "tx_two",
+      "heard_by": [
+       "public_obs2"
+      ],
+      "ago_s": 3
+     }
+    },
+    {
+     "action": "transmit",
+     "args": {
+      "node": "inferred",
+      "heard_by": [
+       "public_obs"
+      ],
+      "ago_s": 3
+     }
+    },
+    {
+     "action": "transmit",
+     "args": {
+      "node": "unheard",
+      "heard_by": [
+       "public_obs"
+      ],
+      "ago_s": 3
+     }
+    },
+    {
+     "action": "transmit",
+     "args": {
+      "node": "ineligible_only",
+      "heard_by": [
+       "ineligible_obs"
+      ],
+      "ago_s": 3
+     }
+    },
+    {
+     "action": "transmit",
+     "args": {
+      "node": "other_party",
+      "heard_by": [
+       "other_party_obs"
+      ],
+      "ago_s": 3
+     }
+    },
+    {
+     "action": "transmit",
+     "args": {
+      "node": "manual_unmarked",
+      "heard_by": [
+       "public_obs"
+      ],
+      "ago_s": 3
+     }
+    },
+    {
+     "action": "transmit",
+     "args": {
+      "node": "near_origin",
+      "heard_by": [
+       "public_obs"
+      ],
+      "ago_s": 3
+     }
+    },
+    {
+     "request": {
+      "operation": "getPublicEvents"
+     },
+     "expect": {
+      "status": 200,
+      "schema": "PublicEventList",
+      "headers": {
+       "Cache-Control": "no-store"
+      },
+      "match": [
+       {
+        "at": "/events",
+        "where": {
+         "/kind": "transmission",
+         "/public_node_id": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "/activity_class": "advert",
+         "/links/0/lat": 55.6,
+         "/links/0/lon": 10.5
+        },
+        "count": 1
+       },
+       {
+        "at": "/events",
+        "where": {
+         "/kind": "transmission",
+         "/public_node_id": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+         "/activity_class": "advert",
+         "/links/0/lat": 55.7,
+         "/links/0/lon": 10.5
+        },
+        "count": 1
+       },
+       {
+        "at": "/events",
+        "where": {
+         "/public_node_id": "3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d"
+        },
+        "count": 0
+       },
+       {
+        "at": "/events",
+        "where": {
+         "/public_node_id": "9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d"
+        },
+        "count": 0
+       },
+       {
+        "at": "/events",
+        "where": {
+         "/public_node_id": "1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b"
+        },
+        "count": 0
+       },
+       {
+        "at": "/events",
+        "where": {
+         "/public_node_id": "adadadadadadadadadadadadadadadadadadadadadadadadadadadadadadadad"
+        },
+        "count": 0
+       },
+       {
+        "at": "/events",
+        "where": {
+         "/public_node_id": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a"
+        },
+        "count": 0
+       },
+       {
+        "at": "/events",
+        "where": {
+         "/public_node_id": "e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5"
+        },
+        "count": 0
+       }
+      ],
+      "absent": {
+       "keys": [
+        "observer",
+        "observer_id",
+        "observer_key",
+        "observer_name",
+        "rssi",
+        "snr",
+        "packet_id",
+        "packet_hash",
+        "hash",
+        "packet_correlation_id",
+        "reception_id",
+        "source",
+        "source_id",
+        "gateway",
+        "fleet",
+        "topic",
+        "contact_name",
+        "label",
+        "text",
+        "payload"
+       ],
+       "values": [
+        "2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c",
+        "private-observer-name (synthetic)",
+        "57.123456",
+        "58.234567",
+        "inferred-observer-name (synthetic)",
+        "ineligible-observer-name (synthetic)",
+        "other-party-observer-name (synthetic)",
+        "-113.5",
+        "7.25",
+        "private-topic-synthetic",
+        "source-name-synthetic",
+        "gateway-label-synthetic",
+        "Fleet North (synthetic)",
+        "4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e",
+        "Operator label (synthetic)"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "events-02",
+   "title": "A transmission lives exactly 45 seconds",
+   "world": "public-map",
+   "steps": [
+    {
+     "action": "transmit",
+     "args": {
+      "node": "tx_one",
+      "heard_by": [
+       "public_obs"
+      ],
+      "ago_s": 3
+     }
+    },
+    {
+     "request": {
+      "operation": "getPublicEvents"
+     },
+     "expect": {
+      "status": 200,
+      "schema": "PublicEventList",
+      "match": [
+       {
+        "at": "/events",
+        "where": {
+         "/public_node_id": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1"
+        },
+        "at_least": 1
+       }
+      ],
+      "spans": [
+       {
+        "at": "/events",
+        "from": "/occurred_at",
+        "to": "/expires_at",
+        "seconds": 45
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "events-03",
+   "title": "Without a cursor only the last 45 seconds are returned",
+   "world": "public-map",
+   "steps": [
+    {
+     "action": "transmit",
+     "args": {
+      "node": "tx_one",
+      "heard_by": [
+       "public_obs"
+      ],
+      "ago_s": 3
+     }
+    },
+    {
+     "request": {
+      "operation": "getPublicEvents"
+     },
+     "expect": {
+      "status": 200,
+      "schema": "PublicEventList",
+      "match": [
+       {
+        "at": "/events",
+        "where": {
+         "/public_node_id": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1"
+        },
+        "at_least": 1
+       }
+      ]
+     }
+    },
+    {
+     "action": "advance-clock",
+     "args": {
+      "seconds": 43
+     }
+    },
+    {
+     "action": "transmit",
+     "args": {
+      "node": "tx_two",
+      "heard_by": [
+       "public_obs2"
+      ],
+      "ago_s": 3
+     }
+    },
+    {
+     "request": {
+      "operation": "getPublicEvents"
+     },
+     "expect": {
+      "status": 200,
+      "schema": "PublicEventList",
+      "match": [
+       {
+        "at": "/events",
+        "where": {
+         "/public_node_id": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2"
+        },
+        "at_least": 1
+       },
+       {
+        "at": "/events",
+        "where": {
+         "/public_node_id": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1"
+        },
+        "count": 0
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "events-04",
+   "title": "Receptions older than a pulse's lifetime are never replayed",
+   "world": "public-map",
+   "steps": [
+    {
+     "action": "transmit",
+     "args": {
+      "node": "tx_one",
+      "heard_by": [
+       "public_obs"
+      ],
+      "ago_s": 50
+     }
+    },
+    {
+     "action": "transmit",
+     "args": {
+      "node": "tx_two",
+      "heard_by": [
+       "public_obs2"
+      ],
+      "ago_s": 3
+     }
+    },
+    {
+     "request": {
+      "operation": "getPublicEvents"
+     },
+     "expect": {
+      "status": 200,
+      "schema": "PublicEventList",
+      "match": [
+       {
+        "at": "/events",
+        "where": {
+         "/public_node_id": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2"
+        },
+        "at_least": 1
+       },
+       {
+        "at": "/events",
+        "where": {
+         "/public_node_id": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1"
+        },
+        "count": 0
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "events-05",
+   "title": "A cursor returns only newer events",
+   "world": "public-map",
+   "steps": [
+    {
+     "action": "transmit",
+     "args": {
+      "node": "tx_one",
+      "heard_by": [
+       "public_obs"
+      ],
+      "ago_s": 3
+     }
+    },
+    {
+     "request": {
+      "operation": "getPublicEvents"
+     },
+     "expect": {
+      "status": 200,
+      "schema": "PublicEventList",
+      "match": [
+       {
+        "at": "/events",
+        "where": {
+         "/public_node_id": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1"
+        },
+        "at_least": 1
+       }
+      ]
+     },
+     "capture": {
+      "first": "/cursor"
+     }
+    },
+    {
+     "action": "advance-clock",
+     "args": {
+      "seconds": 2
+     }
+    },
+    {
+     "action": "transmit",
+     "args": {
+      "node": "tx_two",
+      "heard_by": [
+       "public_obs2"
+      ],
+      "ago_s": 3
+     }
+    },
+    {
+     "request": {
+      "operation": "getPublicEvents",
+      "query": {
+       "since": "${first}"
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "PublicEventList",
+      "match": [
+       {
+        "at": "/events",
+        "where": {
+         "/public_node_id": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2"
+        },
+        "at_least": 1
+       },
+       {
+        "at": "/events",
+        "where": {
+         "/public_node_id": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1"
+        },
+        "count": 0
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "events-06",
+   "title": "A cursor is accepted while it is fresh and answers 410 once it is old, with nothing replayed",
+   "world": "public-map",
+   "steps": [
+    {
+     "action": "transmit",
+     "args": {
+      "node": "tx_one",
+      "heard_by": [
+       "public_obs"
+      ],
+      "ago_s": 3
+     }
+    },
+    {
+     "request": {
+      "operation": "getPublicEvents"
+     },
+     "expect": {
+      "status": 200,
+      "schema": "PublicEventList",
+      "match": [
+       {
+        "at": "/events",
+        "where": {
+         "/public_node_id": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1"
+        },
+        "at_least": 1
+       }
+      ]
+     },
+     "capture": {
+      "c": "/cursor"
+     }
+    },
+    {
+     "action": "advance-clock",
+     "args": {
+      "seconds": 30
+     }
+    },
+    {
+     "request": {
+      "operation": "getPublicEvents",
+      "query": {
+       "since": "${c}"
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "PublicEventList"
+     }
+    },
+    {
+     "action": "advance-clock",
+     "args": {
+      "seconds": 31
+     }
+    },
+    {
+     "request": {
+      "operation": "getPublicEvents",
+      "query": {
+       "since": "${c}"
+      }
+     },
+     "expect": {
+      "status": 410,
+      "schema": "Error",
+      "headers": {
+       "Cache-Control": "no-store"
+      },
+      "body": {
+       "/code": "cursor_expired",
+       "/retryable": false
+      },
+      "absent": {
+       "keys": [
+        "events",
+        "cursor",
+        "public_node_id",
+        "links"
+       ]
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "getPublicEvents"
+     },
+     "expect": {
+      "status": 200,
+      "schema": "PublicEventList"
+     }
+    }
+   ]
+  },
+  {
+   "id": "events-07",
+   "title": "An unknown or forged cursor answers 410 and replays nothing, however fresh its issue time looks",
+   "world": "public-map",
+   "steps": [
+    {
+     "action": "transmit",
+     "args": {
+      "node": "tx_one",
+      "heard_by": [
+       "public_obs"
+      ],
+      "ago_s": 3
+     }
+    },
+    {
+     "request": {
+      "operation": "getPublicEvents"
+     },
+     "expect": {
+      "status": 200,
+      "schema": "PublicEventList",
+      "match": [
+       {
+        "at": "/events",
+        "where": {
+         "/public_node_id": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1"
+        },
+        "at_least": 1
+       }
+      ]
+     },
+     "capture": {
+      "c": "/cursor"
+     }
+    },
+    {
+     "action": "forge-cursor",
+     "args": {
+      "cursor": "${c}",
+      "mode": "fresh-issue-time-unsigned"
+     },
+     "capture": "unsigned"
+    },
+    {
+     "action": "forge-cursor",
+     "args": {
+      "cursor": "${c}",
+      "mode": "fresh-issue-time-old-signature"
+     },
+     "capture": "resigned"
+    },
+    {
+     "request": {
+      "operation": "getPublicEvents",
+      "query": {
+       "since": "nonsense"
+      }
+     },
+     "expect": {
+      "status": 410,
+      "schema": "Error",
+      "body": {
+       "/code": "cursor_expired"
+      },
+      "absent": {
+       "keys": [
+        "events",
+        "cursor",
+        "public_node_id",
+        "links"
+       ]
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "getPublicEvents",
+      "query": {
+       "since": "MTIzLjQ1Ng"
+      }
+     },
+     "expect": {
+      "status": 410,
+      "schema": "Error",
+      "body": {
+       "/code": "cursor_expired"
+      },
+      "absent": {
+       "keys": [
+        "events",
+        "cursor",
+        "public_node_id",
+        "links"
+       ]
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "getPublicEvents",
+      "query": {
+       "since": "${unsigned}"
+      }
+     },
+     "expect": {
+      "status": 410,
+      "schema": "Error",
+      "body": {
+       "/code": "cursor_expired"
+      },
+      "absent": {
+       "keys": [
+        "events",
+        "cursor",
+        "public_node_id",
+        "links"
+       ]
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "getPublicEvents",
+      "query": {
+       "since": "${resigned}"
+      }
+     },
+     "expect": {
+      "status": 410,
+      "schema": "Error",
+      "body": {
+       "/code": "cursor_expired"
+      },
+      "absent": {
+       "keys": [
+        "events",
+        "cursor",
+        "public_node_id",
+        "links"
+       ]
+      }
+     }
+    },
+    {
+     "action": "advance-clock",
+     "args": {
+      "seconds": 120
+     }
+    },
+    {
+     "action": "forge-cursor",
+     "args": {
+      "cursor": "${c}",
+      "mode": "fresh-issue-time-unsigned"
+     },
+     "capture": "late"
+    },
+    {
+     "action": "forge-cursor",
+     "args": {
+      "cursor": "${c}",
+      "mode": "fresh-issue-time-old-signature"
+     },
+     "capture": "late_resigned"
+    },
+    {
+     "request": {
+      "operation": "getPublicEvents",
+      "query": {
+       "since": "${c}"
+      }
+     },
+     "expect": {
+      "status": 410,
+      "schema": "Error",
+      "body": {
+       "/code": "cursor_expired"
+      },
+      "absent": {
+       "keys": [
+        "events",
+        "cursor",
+        "public_node_id",
+        "links"
+       ]
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "getPublicEvents",
+      "query": {
+       "since": "${late}"
+      }
+     },
+     "expect": {
+      "status": 410,
+      "schema": "Error",
+      "body": {
+       "/code": "cursor_expired"
+      },
+      "absent": {
+       "keys": [
+        "events",
+        "cursor",
+        "public_node_id",
+        "links"
+       ]
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "getPublicEvents",
+      "query": {
+       "since": "${late_resigned}"
+      }
+     },
+     "expect": {
+      "status": 410,
+      "schema": "Error",
+      "body": {
+       "/code": "cursor_expired"
+      },
+      "absent": {
+       "keys": [
+        "events",
+        "cursor",
+        "public_node_id",
+        "links"
+       ]
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "getPublicEvents"
+     },
+     "expect": {
+      "status": 200,
+      "schema": "PublicEventList"
+     }
+    }
+   ]
+  },
+  {
+   "id": "events-08",
+   "title": "A line reference is reused within 45 seconds of its first use, never extended, and is new after",
+   "world": "public-map",
+   "steps": [
+    {
+     "action": "transmit",
+     "args": {
+      "node": "tx_one",
+      "heard_by": [
+       "public_obs"
+      ],
+      "ago_s": 3
+     }
+    },
+    {
+     "request": {
+      "operation": "getPublicEvents"
+     },
+     "expect": {
+      "status": 200,
+      "schema": "PublicEventList",
+      "match": [
+       {
+        "at": "/events",
+        "where": {
+         "/public_node_id": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1"
+        },
+        "at_least": 1
+       }
+      ]
+     },
+     "capture": {
+      "ref1": {
+       "at": "/events",
+       "where": {
+        "/public_node_id": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1"
+       },
+       "field": "/links/0/ref"
+      }
+     }
+    },
+    {
+     "action": "advance-clock",
+     "args": {
+      "seconds": 6
+     }
+    },
+    {
+     "action": "transmit",
+     "args": {
+      "node": "tx_one",
+      "heard_by": [
+       "public_obs"
+      ],
+      "ago_s": 3
+     }
+    },
+    {
+     "request": {
+      "operation": "getPublicEvents"
+     },
+     "expect": {
+      "status": 200,
+      "schema": "PublicEventList",
+      "match": [
+       {
+        "at": "/events",
+        "where": {
+         "/public_node_id": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "/links/0/ref": "${ref1}"
+        },
+        "count": 2
+       }
+      ]
+     }
+    },
+    {
+     "action": "advance-clock",
+     "args": {
+      "seconds": 50
+     }
+    },
+    {
+     "action": "transmit",
+     "args": {
+      "node": "tx_one",
+      "heard_by": [
+       "public_obs"
+      ],
+      "ago_s": 3
+     }
+    },
+    {
+     "request": {
+      "operation": "getPublicEvents"
+     },
+     "expect": {
+      "status": 200,
+      "schema": "PublicEventList",
+      "match": [
+       {
+        "at": "/events",
+        "where": {
+         "/public_node_id": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1"
+        },
+        "at_least": 1
+       },
+       {
+        "at": "/events",
+        "where": {
+         "/links/0/ref": "${ref1}"
+        },
+        "count": 0
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "events-09",
+   "title": "Line references and event ids are random: no counter, and a reference is not an id of anything private",
+   "world": "public-map",
+   "steps": [
+    {
+     "action": "transmit",
+     "args": {
+      "node": "tx_one",
+      "heard_by": [
+       "public_obs",
+       "public_obs2"
+      ],
+      "ago_s": 3
+     }
+    },
+    {
+     "request": {
+      "operation": "getPublicEvents"
+     },
+     "expect": {
+      "status": 200,
+      "schema": "PublicEventList",
+      "match": [
+       {
+        "at": "/events",
+        "where": {
+         "/public_node_id": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1"
+        },
+        "at_least": 1
+       }
+      ],
+      "ids": [
+       {
+        "at": "/events/0/links",
+        "field": "/ref",
+        "unsequenced": true
+       }
+      ],
+      "absent": {
+       "keys": [
+        "observer",
+        "observer_id",
+        "observer_key",
+        "observer_name",
+        "rssi",
+        "snr",
+        "packet_id",
+        "packet_hash",
+        "hash",
+        "packet_correlation_id",
+        "reception_id",
+        "source",
+        "source_id",
+        "gateway",
+        "fleet",
+        "topic",
+        "contact_name",
+        "label",
+        "text",
+        "payload"
+       ],
+       "values": [
+        "2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c",
+        "private-observer-name (synthetic)",
+        "57.123456",
+        "58.234567",
+        "inferred-observer-name (synthetic)",
+        "ineligible-observer-name (synthetic)",
+        "other-party-observer-name (synthetic)",
+        "-113.5",
+        "7.25",
+        "private-topic-synthetic",
+        "source-name-synthetic",
+        "gateway-label-synthetic",
+        "Fleet North (synthetic)",
+        "4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e",
+        "Operator label (synthetic)"
+       ]
+      }
+     }
+    },
+    {
+     "action": "transmit",
+     "args": {
+      "node": "tx_two",
+      "heard_by": [
+       "public_obs2"
+      ],
+      "ago_s": 3
+     }
+    },
+    {
+     "request": {
+      "operation": "getPublicEvents"
+     },
+     "expect": {
+      "status": 200,
+      "schema": "PublicEventList",
+      "match": [
+       {
+        "at": "/events",
+        "where": {
+         "/public_node_id": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1"
+        },
+        "at_least": 1
+       },
+       {
+        "at": "/events",
+        "where": {
+         "/public_node_id": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2"
+        },
+        "at_least": 1
+       }
+      ],
+      "ids": [
+       {
+        "at": "/events",
+        "field": "/event_id",
+        "unsequenced": true,
+        "unlike": [
+         "/public_node_id"
+        ]
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "events-10",
+   "title": "A node that stops being eligible is revoked in the event list, dropped from the catalogue and gives no further pulse",
+   "world": "public-map",
+   "steps": [
+    {
+     "action": "transmit",
+     "args": {
+      "node": "tx_two",
+      "heard_by": [
+       "public_obs2"
+      ],
+      "ago_s": 3
+     }
+    },
+    {
+     "request": {
+      "operation": "getPublicEvents"
+     },
+     "expect": {
+      "status": 200,
+      "schema": "PublicEventList",
+      "match": [
+       {
+        "at": "/events",
+        "where": {
+         "/public_node_id": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2"
+        },
+        "at_least": 1
+       }
+      ]
+     },
+     "capture": {
+      "c": "/cursor"
+     }
+    },
+    {
+     "request": {
+      "operation": "getPublicNodes"
+     },
+     "expect": {
+      "status": 200,
+      "schema": "PublicNodeList",
+      "match": [
+       {
+        "at": "/nodes",
+        "where": {
+         "/public_node_id": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2"
+        },
+        "count": 1
+       }
+      ]
+     }
+    },
+    {
+     "action": "withdraw-position",
+     "args": {
+      "node": "tx_two"
+     }
+    },
+    {
+     "action": "advance-clock",
+     "args": {
+      "seconds": 40
+     }
+    },
+    {
+     "request": {
+      "operation": "getPublicEvents",
+      "query": {
+       "since": "${c}"
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "PublicEventList",
+      "match": [
+       {
+        "at": "/events",
+        "where": {
+         "/kind": "node_revoked",
+         "/public_node_id": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2"
+        },
+        "count": 1
+       }
+      ]
+     }
+    },
+    {
+     "request": {
+      "operation": "getPublicNodes"
+     },
+     "expect": {
+      "status": 200,
+      "schema": "PublicNodeList",
+      "match": [
+       {
+        "at": "/nodes",
+        "where": {
+         "/public_node_id": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1"
+        },
+        "count": 1
+       },
+       {
+        "at": "/nodes",
+        "where": {
+         "/public_node_id": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2"
+        },
+        "count": 0
+       }
+      ]
+     }
+    },
+    {
+     "action": "transmit",
+     "args": {
+      "node": "tx_two",
+      "heard_by": [
+       "public_obs2"
+      ],
+      "ago_s": 3
+     }
+    },
+    {
+     "action": "transmit",
+     "args": {
+      "node": "tx_one",
+      "heard_by": [
+       "public_obs"
+      ],
+      "ago_s": 3
+     }
+    },
+    {
+     "request": {
+      "operation": "getPublicEvents"
+     },
+     "expect": {
+      "status": 200,
+      "schema": "PublicEventList",
+      "match": [
+       {
+        "at": "/events",
+        "where": {
+         "/public_node_id": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1"
+        },
+        "at_least": 1
+       },
+       {
+        "at": "/events",
+        "where": {
+         "/public_node_id": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2"
+        },
+        "count": 0
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "events-11",
+   "title": "A response is capped and the cursor continues after the last event it carries",
+   "world": "public-map",
+   "steps": [
+    {
+     "action": "lower-response-cap",
+     "args": {
+      "events": 3
+     }
+    },
+    {
+     "action": "transmit",
+     "args": {
+      "node": "tx_one",
+      "heard_by": [
+       "public_obs"
+      ],
+      "ago_s": 3
+     }
+    },
+    {
+     "action": "transmit",
+     "args": {
+      "node": "tx_one",
+      "heard_by": [
+       "public_obs"
+      ],
+      "ago_s": 3
+     }
+    },
+    {
+     "action": "transmit",
+     "args": {
+      "node": "tx_one",
+      "heard_by": [
+       "public_obs"
+      ],
+      "ago_s": 3
+     }
+    },
+    {
+     "action": "transmit",
+     "args": {
+      "node": "tx_one",
+      "heard_by": [
+       "public_obs"
+      ],
+      "ago_s": 3
+     }
+    },
+    {
+     "action": "transmit",
+     "args": {
+      "node": "tx_one",
+      "heard_by": [
+       "public_obs"
+      ],
+      "ago_s": 3
+     }
+    },
+    {
+     "action": "transmit",
+     "args": {
+      "node": "tx_one",
+      "heard_by": [
+       "public_obs"
+      ],
+      "ago_s": 3
+     }
+    },
+    {
+     "action": "transmit",
+     "args": {
+      "node": "tx_one",
+      "heard_by": [
+       "public_obs"
+      ],
+      "ago_s": 3
+     }
+    },
+    {
+     "request": {
+      "operation": "getPublicEvents"
+     },
+     "expect": {
+      "status": 200,
+      "schema": "PublicEventList",
+      "match": [
+       {
+        "at": "/events",
+        "where": {
+         "/kind": "transmission"
+        },
+        "count": 3
+       }
+      ]
+     },
+     "capture": {
+      "c1": "/cursor"
+     }
+    },
+    {
+     "request": {
+      "operation": "getPublicEvents",
+      "query": {
+       "since": "${c1}"
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "PublicEventList",
+      "match": [
+       {
+        "at": "/events",
+        "where": {
+         "/kind": "transmission"
+        },
+        "count": 3
+       }
+      ]
+     },
+     "capture": {
+      "c2": "/cursor"
+     }
+    },
+    {
+     "request": {
+      "operation": "getPublicEvents",
+      "query": {
+       "since": "${c2}"
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "PublicEventList",
+      "match": [
+       {
+        "at": "/events",
+        "where": {
+         "/kind": "transmission"
+        },
+        "count": 1
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "events-12",
+   "title": "A repeater a flooded packet's multi-byte path names gets a relay pulse, and a line to the next named hop only",
+   "world": "public-map",
+   "steps": [
+    {
+     "action": "transmit-via-path",
+     "args": {
+      "node": "tx_one",
+      "heard_by": [
+       "public_obs"
+      ],
+      "ago_s": 3,
+      "path": [
+       "rep_a",
+       "rep_b"
+      ],
+      "hash_size": 2
+     }
+    },
+    {
+     "request": {
+      "operation": "getPublicEvents"
+     },
+     "expect": {
+      "status": 200,
+      "schema": "PublicEventList",
+      "match": [
+       {
+        "at": "/events",
+        "where": {
+         "/kind": "transmission",
+         "/public_node_id": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "/activity_class": "advert"
+        },
+        "count": 1
+       },
+       {
+        "at": "/events",
+        "where": {
+         "/kind": "transmission",
+         "/public_node_id": "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
+         "/activity_class": "relay",
+         "/links/0/lat": 56.1,
+         "/links/0/lon": 10.1
+        },
+        "count": 1
+       },
+       {
+        "at": "/events",
+        "where": {
+         "/kind": "transmission",
+         "/public_node_id": "d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2",
+         "/activity_class": "relay"
+        },
+        "count": 1
+       }
+      ],
+      "absent": {
+       "keys": [
+        "observer",
+        "observer_id",
+        "observer_key",
+        "observer_name",
+        "rssi",
+        "snr",
+        "packet_id",
+        "packet_hash",
+        "hash",
+        "packet_correlation_id",
+        "reception_id",
+        "source",
+        "source_id",
+        "gateway",
+        "fleet",
+        "topic",
+        "contact_name",
+        "label",
+        "text",
+        "payload"
+       ],
+       "values": [
+        "2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c",
+        "private-observer-name (synthetic)",
+        "57.123456",
+        "58.234567",
+        "inferred-observer-name (synthetic)",
+        "ineligible-observer-name (synthetic)",
+        "other-party-observer-name (synthetic)",
+        "-113.5",
+        "7.25",
+        "private-topic-synthetic",
+        "source-name-synthetic",
+        "gateway-label-synthetic",
+        "Fleet North (synthetic)",
+        "4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e",
+        "Operator label (synthetic)"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "events-13",
+   "title": "A one-byte path names no relay",
+   "world": "public-map",
+   "steps": [
+    {
+     "action": "transmit-via-path",
+     "args": {
+      "node": "tx_one",
+      "heard_by": [
+       "public_obs"
+      ],
+      "ago_s": 3,
+      "path": [
+       "rep_a",
+       "rep_b"
+      ],
+      "hash_size": 1
+     }
+    },
+    {
+     "request": {
+      "operation": "getPublicEvents"
+     },
+     "expect": {
+      "status": 200,
+      "schema": "PublicEventList",
+      "match": [
+       {
+        "at": "/events",
+        "where": {
+         "/kind": "transmission",
+         "/public_node_id": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "/activity_class": "advert"
+        },
+        "count": 1
+       },
+       {
+        "at": "/events",
+        "where": {
+         "/public_node_id": "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1"
+        },
+        "count": 0
+       },
+       {
+        "at": "/events",
+        "where": {
+         "/public_node_id": "d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2"
+        },
+        "count": 0
+       }
+      ]
+     }
+    }
+   ]
+  }
+ ]
+}

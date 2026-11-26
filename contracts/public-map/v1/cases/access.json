@@ -1,0 +1,603 @@
+{
+ "contract": "mecon-public-map/1.0.0-draft.1",
+ "synthetic": true,
+ "group": "access",
+ "cases": [
+  {
+   "id": "access-01",
+   "title": "With the feed switched off both operations answer 404, whatever the cursor, and publish nothing",
+   "world": "public-map",
+   "steps": [
+    {
+     "action": "transmit",
+     "args": {
+      "node": "tx_one",
+      "heard_by": [
+       "public_obs"
+      ],
+      "ago_s": 3
+     }
+    },
+    {
+     "action": "set-feed",
+     "args": {
+      "enabled": false
+     }
+    },
+    {
+     "request": {
+      "operation": "getPublicNodes"
+     },
+     "expect": {
+      "status": 404,
+      "schema": "Error",
+      "body": {
+       "/code": "not_found",
+       "/retryable": false
+      },
+      "absent": {
+       "keys": [
+        "nodes",
+        "as_of"
+       ]
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "getPublicEvents"
+     },
+     "expect": {
+      "status": 404,
+      "schema": "Error",
+      "body": {
+       "/code": "not_found"
+      },
+      "absent": {
+       "keys": [
+        "events",
+        "cursor"
+       ]
+      }
+     }
+    },
+    {
+     "request": {
+      "operation": "getPublicEvents",
+      "query": {
+       "since": "nonsense"
+      }
+     },
+     "expect": {
+      "status": 404,
+      "schema": "Error",
+      "body": {
+       "/code": "not_found"
+      },
+      "absent": {
+       "keys": [
+        "events",
+        "cursor"
+       ]
+      }
+     }
+    },
+    {
+     "action": "set-feed",
+     "args": {
+      "enabled": true
+     }
+    },
+    {
+     "request": {
+      "operation": "getPublicNodes"
+     },
+     "expect": {
+      "status": 200,
+      "schema": "PublicNodeList",
+      "match": [
+       {
+        "at": "/nodes",
+        "where": {
+         "/public_node_id": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1"
+        },
+        "count": 1
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "access-02",
+   "title": "The rate limit is per client address, both operations together, with Retry-After",
+   "world": "public-map",
+   "steps": [
+    {
+     "action": "use-address",
+     "args": {
+      "client": "busy",
+      "address": "203.0.113.7"
+     }
+    },
+    {
+     "action": "use-address",
+     "args": {
+      "client": "other",
+      "address": "203.0.113.9"
+     }
+    },
+    {
+     "action": "lower-rate-limit",
+     "args": {
+      "requests": 3
+     }
+    },
+    {
+     "as": "busy",
+     "request": {
+      "operation": "getPublicEvents"
+     },
+     "expect": {
+      "status": 200,
+      "schema": "PublicEventList"
+     }
+    },
+    {
+     "as": "busy",
+     "request": {
+      "operation": "getPublicEvents"
+     },
+     "expect": {
+      "status": 200,
+      "schema": "PublicEventList"
+     }
+    },
+    {
+     "as": "busy",
+     "request": {
+      "operation": "getPublicNodes"
+     },
+     "expect": {
+      "status": 200,
+      "schema": "PublicNodeList",
+      "match": [
+       {
+        "at": "/nodes",
+        "where": {
+         "/public_node_id": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1"
+        },
+        "count": 1
+       }
+      ]
+     }
+    },
+    {
+     "as": "busy",
+     "request": {
+      "operation": "getPublicEvents"
+     },
+     "expect": {
+      "status": 429,
+      "schema": "Error",
+      "headers": {
+       "Retry-After": "present"
+      },
+      "body": {
+       "/code": "throttled",
+       "/retryable": true
+      },
+      "absent": {
+       "keys": [
+        "events",
+        "cursor",
+        "nodes"
+       ]
+      }
+     }
+    },
+    {
+     "as": "busy",
+     "request": {
+      "operation": "getPublicNodes"
+     },
+     "expect": {
+      "status": 429,
+      "schema": "Error",
+      "headers": {
+       "Retry-After": "present"
+      },
+      "body": {
+       "/code": "throttled"
+      },
+      "absent": {
+       "keys": [
+        "events",
+        "nodes"
+       ]
+      }
+     }
+    },
+    {
+     "as": "other",
+     "request": {
+      "operation": "getPublicNodes"
+     },
+     "expect": {
+      "status": 200,
+      "schema": "PublicNodeList",
+      "match": [
+       {
+        "at": "/nodes",
+        "where": {
+         "/public_node_id": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1"
+        },
+        "count": 1
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "access-03",
+   "title": "A session cookie, a valid bearer and a bearer never issued all get exactly the anonymous answer",
+   "world": "public-map",
+   "steps": [
+    {
+     "action": "sign-in",
+     "args": {
+      "client": "alice",
+      "user": "alice"
+     }
+    },
+    {
+     "action": "present-bearer",
+     "args": {
+      "client": "agent",
+      "issued": true
+     }
+    },
+    {
+     "action": "present-bearer",
+     "args": {
+      "client": "stranger",
+      "issued": false
+     }
+    },
+    {
+     "action": "transmit",
+     "args": {
+      "node": "tx_one",
+      "heard_by": [
+       "public_obs",
+       "private_obs"
+      ],
+      "ago_s": 3
+     }
+    },
+    {
+     "request": {
+      "operation": "getPublicNodes"
+     },
+     "expect": {
+      "status": 200,
+      "schema": "PublicNodeList",
+      "headers": {
+       "Set-Cookie": "absent"
+      },
+      "match": [
+       {
+        "at": "/nodes",
+        "where": {
+         "/public_node_id": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1"
+        },
+        "count": 1
+       }
+      ]
+     },
+     "capture": {
+      "anon_nodes": "/nodes"
+     }
+    },
+    {
+     "request": {
+      "operation": "getPublicEvents"
+     },
+     "expect": {
+      "status": 200,
+      "schema": "PublicEventList",
+      "headers": {
+       "Set-Cookie": "absent"
+      },
+      "match": [
+       {
+        "at": "/events",
+        "where": {
+         "/public_node_id": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1"
+        },
+        "at_least": 1
+       }
+      ]
+     },
+     "capture": {
+      "anon_events": "/events"
+     }
+    },
+    {
+     "as": "alice",
+     "request": {
+      "operation": "getPublicNodes"
+     },
+     "expect": {
+      "status": 200,
+      "schema": "PublicNodeList",
+      "headers": {
+       "Set-Cookie": "absent"
+      },
+      "body": {
+       "/nodes": "${anon_nodes}"
+      },
+      "match": [
+       {
+        "at": "/nodes",
+        "where": {
+         "/public_node_id": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1"
+        },
+        "count": 1
+       }
+      ]
+     }
+    },
+    {
+     "as": "alice",
+     "request": {
+      "operation": "getPublicEvents"
+     },
+     "expect": {
+      "status": 200,
+      "schema": "PublicEventList",
+      "headers": {
+       "Set-Cookie": "absent"
+      },
+      "body": {
+       "/events": "${anon_events}"
+      },
+      "match": [
+       {
+        "at": "/events",
+        "where": {
+         "/public_node_id": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1"
+        },
+        "at_least": 1
+       }
+      ],
+      "absent": {
+       "keys": [
+        "observer",
+        "observer_id",
+        "observer_key",
+        "observer_name",
+        "rssi",
+        "snr",
+        "packet_id",
+        "packet_hash",
+        "hash",
+        "packet_correlation_id",
+        "reception_id",
+        "source",
+        "source_id",
+        "gateway",
+        "fleet",
+        "topic",
+        "contact_name",
+        "label",
+        "text",
+        "payload"
+       ],
+       "values": [
+        "2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c",
+        "private-observer-name (synthetic)",
+        "57.123456",
+        "58.234567",
+        "inferred-observer-name (synthetic)",
+        "ineligible-observer-name (synthetic)",
+        "other-party-observer-name (synthetic)",
+        "-113.5",
+        "7.25",
+        "private-topic-synthetic",
+        "source-name-synthetic",
+        "gateway-label-synthetic",
+        "Fleet North (synthetic)",
+        "4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e",
+        "Operator label (synthetic)"
+       ]
+      }
+     }
+    },
+    {
+     "as": "agent",
+     "request": {
+      "operation": "getPublicNodes"
+     },
+     "expect": {
+      "status": 200,
+      "schema": "PublicNodeList",
+      "headers": {
+       "Set-Cookie": "absent"
+      },
+      "body": {
+       "/nodes": "${anon_nodes}"
+      },
+      "match": [
+       {
+        "at": "/nodes",
+        "where": {
+         "/public_node_id": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1"
+        },
+        "count": 1
+       }
+      ]
+     }
+    },
+    {
+     "as": "agent",
+     "request": {
+      "operation": "getPublicEvents"
+     },
+     "expect": {
+      "status": 200,
+      "schema": "PublicEventList",
+      "headers": {
+       "Set-Cookie": "absent"
+      },
+      "body": {
+       "/events": "${anon_events}"
+      },
+      "match": [
+       {
+        "at": "/events",
+        "where": {
+         "/public_node_id": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1"
+        },
+        "at_least": 1
+       }
+      ],
+      "absent": {
+       "keys": [
+        "observer",
+        "observer_id",
+        "observer_key",
+        "observer_name",
+        "rssi",
+        "snr",
+        "packet_id",
+        "packet_hash",
+        "hash",
+        "packet_correlation_id",
+        "reception_id",
+        "source",
+        "source_id",
+        "gateway",
+        "fleet",
+        "topic",
+        "contact_name",
+        "label",
+        "text",
+        "payload"
+       ],
+       "values": [
+        "2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c",
+        "private-observer-name (synthetic)",
+        "57.123456",
+        "58.234567",
+        "inferred-observer-name (synthetic)",
+        "ineligible-observer-name (synthetic)",
+        "other-party-observer-name (synthetic)",
+        "-113.5",
+        "7.25",
+        "private-topic-synthetic",
+        "source-name-synthetic",
+        "gateway-label-synthetic",
+        "Fleet North (synthetic)",
+        "4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e",
+        "Operator label (synthetic)"
+       ]
+      }
+     }
+    },
+    {
+     "as": "stranger",
+     "request": {
+      "operation": "getPublicNodes"
+     },
+     "expect": {
+      "status": 200,
+      "schema": "PublicNodeList",
+      "headers": {
+       "Set-Cookie": "absent"
+      },
+      "body": {
+       "/nodes": "${anon_nodes}"
+      },
+      "match": [
+       {
+        "at": "/nodes",
+        "where": {
+         "/public_node_id": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1"
+        },
+        "count": 1
+       }
+      ]
+     }
+    },
+    {
+     "as": "stranger",
+     "request": {
+      "operation": "getPublicEvents"
+     },
+     "expect": {
+      "status": 200,
+      "schema": "PublicEventList",
+      "headers": {
+       "Set-Cookie": "absent"
+      },
+      "body": {
+       "/events": "${anon_events}"
+      },
+      "match": [
+       {
+        "at": "/events",
+        "where": {
+         "/public_node_id": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1"
+        },
+        "at_least": 1
+       }
+      ],
+      "absent": {
+       "keys": [
+        "observer",
+        "observer_id",
+        "observer_key",
+        "observer_name",
+        "rssi",
+        "snr",
+        "packet_id",
+        "packet_hash",
+        "hash",
+        "packet_correlation_id",
+        "reception_id",
+        "source",
+        "source_id",
+        "gateway",
+        "fleet",
+        "topic",
+        "contact_name",
+        "label",
+        "text",
+        "payload"
+       ],
+       "values": [
+        "2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c",
+        "private-observer-name (synthetic)",
+        "57.123456",
+        "58.234567",
+        "inferred-observer-name (synthetic)",
+        "ineligible-observer-name (synthetic)",
+        "other-party-observer-name (synthetic)",
+        "-113.5",
+        "7.25",
+        "private-topic-synthetic",
+        "source-name-synthetic",
+        "gateway-label-synthetic",
+        "Fleet North (synthetic)",
+        "4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e",
+        "Operator label (synthetic)"
+       ]
+      }
+     }
+    }
+   ]
+  }
+ ]
+}

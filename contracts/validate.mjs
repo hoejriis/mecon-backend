@@ -12,9 +12,10 @@ import { validateObservationSubscription } from './validate-observation-subscrip
 import { validateRawCapture } from './validate-raw-capture.mjs';
 import { validateReaderCases } from './validate-reader-cases.mjs';
 import { validateReaderCore } from './validate-reader-core.mjs';
+import { validatePublicMap } from './validate-public-map.mjs';
 
 const docs = ['reader-api/v1/openapi.yaml', 'observations/v1/openapi.yaml', 'session-lookup/v1/openapi.yaml',
-  'reader-core/v1/openapi.yaml'];
+  'reader-core/v1/openapi.yaml', 'public-map/v1/openapi.yaml'];
 // Privacy: no observation fixture or schema may carry these fields (see the contract's description).
 const FORBIDDEN_KEY = /route|path|hop|relay|hash|payload|content|text|transmitter|sender|raw|bytes/i;
 const forbiddenKeys = (v, trail = '') =>
@@ -123,6 +124,10 @@ for (const r of [validateReaderCases('reader-core/v1', 'mecon-reader-core'), val
   checked += r.checked;
   failures += r.failures;
 }
+// The anonymous public map feed: conformance cases (with their absence and span checks) and its own rules.
+const publicMap = validatePublicMap();
+checked += publicMap.checked;
+failures += publicMap.failures;
 // The device dispatch and job lifecycle contracts: catalogue, schemas, fixtures replayed through their reference models.
 import { validateDeviceDispatch } from './validate-device-dispatch.mjs';
 import { validateJobLifecycle } from './validate-job-lifecycle.mjs';

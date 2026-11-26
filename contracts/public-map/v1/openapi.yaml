@@ -1,0 +1,265 @@
+openapi: 3.1.0
+info:
+  title: MECON Anonymous Public Map Feed
+  version: 1.0.0-draft.1
+  summary: The anonymous, allow-listed projection of nodes that advertise their own position, and a short live activity feed.
+  description: |
+    Machine-readable contract of the anonymous public observation projection: what a public map draws without
+    any sign-in. Target specification for the Backend, described from the behaviour the reference Backend ships
+    and tests; a draft that may change by pull request until a Backend replays its conformance cases. It is
+    separate from the authorized projection (`contracts/observations/v1`), with its own authorization,
+    retention and schemas. The authorized operations are never called by a public map, and nothing here is a
+    way to reach them.
+
+    **No credential is read.** Neither operation looks at a cookie, a bearer token or any other credential. A
+    caller who sends a valid session, a valid agent token or a token the Backend never issued gets exactly the
+    anonymous answer: the same status, headers and body content as a caller who sends nothing. Neither response
+    sets a cookie. There is no CSRF token, because nothing here changes state.
+
+    **What is published.** A node is listed only when all of these hold:
+    - it advertises a position of its own: the position comes from the node's own latest advertisement, never
+      from an operator's entry, a manual contact, an estimate or an inference. A node that later advertises no
+      position is no longer listed;
+    - the position is not within one degree of (0, 0) on both axes (`|lat| < 1` and `|lon| < 1` drops the node;
+      exactly 1.0 on either axis keeps it). That is a no-fix value, never a place;
+    - it has a public type (`companion`, `repeater`, `room` or `sensor`);
+    - it was heard through an eligible public source: a source the instance's owner operates, or a third-party
+      feed the owner approved for publication, and, for a receiver that belongs to a fleet, only a receiver of a
+      fleet the instance's owner owns. A node heard only through any other source or receiver is never listed,
+      however public its position, and a reception through such a source never produces an event or a line.
+
+    A node's `name` is the name the node itself advertises. When it advertises none, the name is the first eight
+    characters of its `public_node_id`. A name or a label an operator typed for a contact is never used.
+    `last_heard` is the time the node was last heard through an eligible source, floored to the minute (null
+    when that is not known).
+
+    **What is never carried.** Each payload is built field by field from the schemas below, never from a stored
+    row, and every object is closed (`additionalProperties: false`). Neither operation carries, as a key or as a
+    value: the identity, key, name or position of an observer that is not itself a listed public node; a
+    reception's signal strength or signal-to-noise ratio; a packet id, a packet hash or a correlation id; a
+    source, a gateway, a fleet or a topic; message text or content; a contact name an operator typed; a
+    position that is not marked as advertised. A line to an observer is drawn only to an observer that is
+    itself a listed public node, at that node's listed position.
+
+    **Relay pulses.** A packet's recorded path can name repeaters. A hop is a repeater only when its 2- or
+    3-byte hash is the key prefix of exactly one listed repeater among every node the Backend knows (located or
+    not, listed or not). A 1-byte path, an ambiguous or unknown hop and a direct-routed packet (whose path is the
+    route still ahead) name no relay. Each named repeater gets one `relay` pulse; a line joins two repeaters
+    only when they are adjacent in the path, never across an unnamed hop.
+
+    **Time.** A transmission's `expires_at` is exactly 45 seconds after its `occurred_at`, which is the time
+    of the packet's first reception. A packet is published once its receptions have settled for a few seconds,
+    so receptions by several observers become one event with all its lines. Without a cursor, `GET /events`
+    returns only transmissions published within the last 45 seconds. A transmission whose 45 seconds are over is
+    never returned, whatever the cursor, and receptions older than that are never replayed. A line `ref` is
+    random: the same ordered pair of nodes keeps the same `ref` while 45 seconds have not passed since the
+    pair's `ref` was first used (the lifetime is never extended), and gets a new one after. A `ref` and an
+    `event_id` say nothing about either end of a line and cannot be linked to any private id.
+
+    **Cursors.** `cursor` in an events response is opaque and signed by the Backend. It is accepted for at least
+    45 and at most 60 seconds after it was issued. A cursor older than that, unknown (made up, or issued by
+    another process or before a restart), forged (a fresh issue time without the Backend's signature, or an old
+    signature reused) or pointing behind what the Backend still holds answers 410 `cursor_expired`, and never
+    replays older receptions: the client fetches the nodes again and polls without a cursor.
+
+    **Withdrawal.** A node that stops being eligible (it advertises no position, or no eligible source has heard
+    it) is dropped from `GET /nodes` and announced once as a `node_revoked` event, both within 45 seconds (a
+    Backend may serve a cached catalogue until then); the client removes the node and every line to it. Lines to a revoked node end at once.
+
+    **Limits.** Responses are capped: at most 200 events per response; when more are held, the cursor moves to
+    the last event carried and the next poll continues there. Each client address has a request limit, for both
+    operations together; past it the Backend answers 429 with `Retry-After` in whole seconds, and a client
+    polling as `poll_after_ms` asks is never limited. Another client address is not affected.
+
+    **The off switch.** A public feed is an instance setting the instance's owner controls. When it is off,
+    both operations answer 404 `not_found`, with the standard error body, and publish nothing.
+  license:
+    name: Apache-2.0
+    identifier: Apache-2.0
+servers:
+  - url: /api/public/v1
+    description: Same origin as the Backend
+security: []
+tags:
+  - name: nodes
+    description: The public catalogue.
+  - name: events
+    description: Short-lived live activity.
+
+paths:
+  /nodes:
+    get:
+      tags: [nodes]
+      operationId: getPublicNodes
+      summary: The nodes that advertise their own position
+      description: |
+        Every listed node, sorted by `public_node_id`. A client draws a pin for each node and a line or pulse
+        only for events naming a node it holds. An empty feed is 200 with an empty list.
+      responses:
+        '200':
+          description: The catalogue
+          headers:
+            Cache-Control: { $ref: '#/components/headers/PublicCache' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PublicNodeList' }
+              examples:
+                nodes: { externalValue: fixtures/nodes.json }
+                empty: { externalValue: fixtures/nodes-empty.json }
+        '404': { $ref: '#/components/responses/FeedOff' }
+        '429': { $ref: '#/components/responses/Throttled' }
+
+  /events:
+    get:
+      tags: [events]
+      operationId: getPublicEvents
+      summary: Recent activity, polled
+      description: |
+        Without `since`, the transmissions published within the last 45 seconds. With `since`, the events after
+        that cursor. The response's `cursor` goes into the next poll, no sooner than `poll_after_ms`. An empty
+        window is 200 with an empty list and a cursor.
+      parameters:
+        - name: since
+          in: query
+          required: false
+          description: The `cursor` of an earlier response.
+          schema: { type: string, maxLength: 256 }
+      responses:
+        '200':
+          description: Events
+          headers:
+            Cache-Control: { $ref: '#/components/headers/NoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PublicEventList' }
+              examples:
+                events: { externalValue: fixtures/events.json }
+                empty: { externalValue: fixtures/events-empty.json }
+        '404': { $ref: '#/components/responses/FeedOff' }
+        '410': { $ref: '#/components/responses/CursorExpired' }
+        '429': { $ref: '#/components/responses/Throttled' }
+
+components:
+  headers:
+    NoStore:
+      schema: { type: string, const: no-store }
+    PublicCache:
+      description: The catalogue may be reused for 30 seconds.
+      schema: { type: string, const: 'public, max-age=30' }
+
+  responses:
+    FeedOff:
+      description: The public feed is switched off (code `not_found`).
+      headers:
+        Cache-Control: { $ref: '#/components/headers/NoStore' }
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' }, examples: { e: { externalValue: fixtures/error-404-feed-off.json } } } }
+    CursorExpired:
+      description: The cursor is old, unknown or forged (code `cursor_expired`). Nothing is replayed; fetch the nodes again and poll without a cursor.
+      headers:
+        Cache-Control: { $ref: '#/components/headers/NoStore' }
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' }, examples: { e: { externalValue: fixtures/error-410-cursor-expired.json } } } }
+    Throttled:
+      description: Too many requests from this client address (code `throttled`, `retryable` true).
+      headers:
+        Cache-Control: { $ref: '#/components/headers/NoStore' }
+        Retry-After: { schema: { type: integer, minimum: 1 } }
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' }, examples: { e: { externalValue: fixtures/error-429-throttled.json } } } }
+
+  schemas:
+    Timestamp:
+      type: string
+      format: date-time
+      description: UTC, ISO-8601, with `Z`.
+    Error:
+      type: object
+      required: [code, message, request_id, retryable]
+      additionalProperties: false
+      properties:
+        code: { type: string, examples: [not_found, cursor_expired, throttled] }
+        message: { type: string }
+        request_id: { type: string }
+        retryable: { type: boolean }
+
+    PublicNodeId:
+      type: string
+      pattern: '^[0-9a-f]{64}$'
+      description: The node's own public key, lowercase hex, as the node advertises it. It identifies a node, never an observer.
+    Position:
+      type: object
+      required: [lat, lon]
+      additionalProperties: false
+      properties:
+        lat: { type: number, minimum: -90, maximum: 90 }
+        lon: { type: number, minimum: -180, maximum: 180 }
+
+    PublicNode:
+      type: object
+      required: [public_node_id, name, type, location, last_heard]
+      additionalProperties: false
+      properties:
+        public_node_id: { $ref: '#/components/schemas/PublicNodeId' }
+        name: { type: string, minLength: 1, description: "The node's advertised name, or the first eight characters of `public_node_id`." }
+        type: { type: string, enum: [companion, repeater, room, sensor] }
+        location: { $ref: '#/components/schemas/Position' }
+        last_heard:
+          description: The time the node was last heard through an eligible source, floored to the minute; null when not known.
+          oneOf:
+            - type: string
+              format: date-time
+              pattern: '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:00Z$'
+            - type: 'null'
+    PublicNodeList:
+      type: object
+      required: [as_of, nodes]
+      additionalProperties: false
+      properties:
+        as_of: { $ref: '#/components/schemas/Timestamp' }
+        nodes: { type: array, items: { $ref: '#/components/schemas/PublicNode' } }
+
+    Line:
+      type: object
+      required: [ref, lat, lon]
+      additionalProperties: false
+      description: A line from the event's node to the position given.
+      properties:
+        ref:
+          type: string
+          pattern: '^l_[A-Za-z0-9_-]{8}$'
+          description: Random; reused for the same ordered pair of nodes only within 45 seconds of its first use.
+        lat: { type: number, minimum: -90, maximum: 90 }
+        lon: { type: number, minimum: -180, maximum: 180 }
+    TransmissionEvent:
+      type: object
+      required: [event_id, kind, public_node_id, occurred_at, expires_at, activity_class, links]
+      additionalProperties: false
+      properties:
+        event_id: { type: string, pattern: '^e_[A-Za-z0-9_-]{12}$', description: Random; reveals no order. }
+        kind: { type: string, const: transmission }
+        public_node_id: { $ref: '#/components/schemas/PublicNodeId' }
+        occurred_at: { $ref: '#/components/schemas/Timestamp' }
+        expires_at: { $ref: '#/components/schemas/Timestamp' }
+        activity_class: { type: string, enum: [advert, other, relay] }
+        links:
+          type: array
+          items: { $ref: '#/components/schemas/Line' }
+    NodeRevokedEvent:
+      type: object
+      required: [kind, public_node_id]
+      additionalProperties: false
+      properties:
+        kind: { type: string, const: node_revoked }
+        public_node_id: { $ref: '#/components/schemas/PublicNodeId' }
+    PublicEventList:
+      type: object
+      required: [cursor, events, poll_after_ms]
+      additionalProperties: false
+      properties:
+        cursor: { type: string, minLength: 1, maxLength: 256 }
+        events:
+          type: array
+          maxItems: 200
+          items:
+            oneOf:
+              - $ref: '#/components/schemas/TransmissionEvent'
+              - $ref: '#/components/schemas/NodeRevokedEvent'
+        poll_after_ms: { type: integer, minimum: 1000 }

@@ -249,6 +249,178 @@
    ]
   },
   {
+   "id": "busy-backs-off-after-three",
+   "description": "The first 3 busy answers in a row are asked again after busy_retry_s (3 s): the 10 s before the first step hold the answers at 0, 3, 6 and 9 s. From the 4th busy answer on the next ask is after retry_s (30 s), which the steps show. The gate stays closed throughout.",
+   "mode": "companion",
+   "enrolment": "busy",
+   "expect": {
+    "probe_request_hex": "3c2d007f0100017b2276223a312c226964223a2263672d31222c226f70223a226465706c6f796d656e742e676574227d",
+    "gate_open": false,
+    "probe_result": "busy",
+    "upstream_publishes": 0
+   },
+   "then": [
+    {
+     "probe_after_s": 30,
+     "enrolment_after": "busy",
+     "probe_result_after": "busy",
+     "gate_open_after": false
+    },
+    {
+     "probe_after_s": 30,
+     "enrolment_after": "busy",
+     "probe_result_after": "busy",
+     "gate_open_after": false
+    }
+   ]
+  },
+  {
+   "id": "busy-counts-as-failed-past-twice-recheck-s",
+   "description": "With recheck_s 30 and retry_s 5: busy answers change nothing while no decided answer has been absent for more than 2 x recheck_s (60 s). Past that each busy answer counts as one failed answer, and the third in a row closes the gate (probe_failed).",
+   "mode": "companion",
+   "enrolment": "provisioned",
+   "config": {
+    "recheck_s": 30,
+    "retry_s": 5
+   },
+   "expect": {
+    "probe_request_hex": "3c2d007f0100017b2276223a312c226964223a2263672d31222c226f70223a226465706c6f796d656e742e676574227d",
+    "gate_open": true,
+    "probe_result": "provisioned",
+    "upstream_publishes": 0
+   },
+   "then": [
+    {
+     "probe_after_s": 30,
+     "enrolment_after": "busy",
+     "probe_result_after": "busy",
+     "gate_open_after": true
+    },
+    {
+     "probe_after_s": 3,
+     "enrolment_after": "busy",
+     "probe_result_after": "busy",
+     "gate_open_after": true
+    },
+    {
+     "probe_after_s": 3,
+     "enrolment_after": "busy",
+     "probe_result_after": "busy",
+     "gate_open_after": true
+    },
+    {
+     "probe_after_s": 3,
+     "enrolment_after": "busy",
+     "probe_result_after": "busy",
+     "gate_open_after": true
+    },
+    {
+     "probe_after_s": 5,
+     "enrolment_after": "busy",
+     "probe_result_after": "busy",
+     "gate_open_after": true
+    },
+    {
+     "probe_after_s": 5,
+     "enrolment_after": "busy",
+     "probe_result_after": "busy",
+     "gate_open_after": true
+    },
+    {
+     "probe_after_s": 5,
+     "enrolment_after": "busy",
+     "probe_result_after": "busy",
+     "gate_open_after": true
+    },
+    {
+     "probe_after_s": 5,
+     "enrolment_after": "busy",
+     "probe_result_after": "busy",
+     "gate_open_after": true
+    },
+    {
+     "probe_after_s": 5,
+     "enrolment_after": "busy",
+     "probe_result_after": "busy",
+     "gate_open_after": true
+    },
+    {
+     "probe_after_s": 5,
+     "enrolment_after": "busy",
+     "probe_result_after": "busy",
+     "gate_open_after": true
+    },
+    {
+     "probe_after_s": 5,
+     "enrolment_after": "busy",
+     "probe_result_after": "busy",
+     "gate_open_after": false
+    }
+   ]
+  },
+  {
+   "id": "busy-run-ends-on-provisioned",
+   "description": "A provisioned answer ends a run of busy answers: the next busy answer is the first of a new run and is asked again after busy_retry_s again, not after retry_s.",
+   "mode": "companion",
+   "enrolment": "provisioned",
+   "expect": {
+    "probe_request_hex": "3c2d007f0100017b2276223a312c226964223a2263672d31222c226f70223a226465706c6f796d656e742e676574227d",
+    "gate_open": true,
+    "probe_result": "provisioned",
+    "upstream_publishes": 0
+   },
+   "then": [
+    {
+     "probe_after_s": 600,
+     "enrolment_after": "busy",
+     "probe_result_after": "busy",
+     "gate_open_after": true
+    },
+    {
+     "probe_after_s": 3,
+     "enrolment_after": "busy",
+     "probe_result_after": "busy",
+     "gate_open_after": true
+    },
+    {
+     "probe_after_s": 3,
+     "enrolment_after": "busy",
+     "probe_result_after": "busy",
+     "gate_open_after": true
+    },
+    {
+     "probe_after_s": 3,
+     "enrolment_after": "busy",
+     "probe_result_after": "busy",
+     "gate_open_after": true
+    },
+    {
+     "probe_after_s": 30,
+     "enrolment_after": "busy",
+     "probe_result_after": "busy",
+     "gate_open_after": true
+    },
+    {
+     "probe_after_s": 30,
+     "enrolment_after": "provisioned",
+     "probe_result_after": "provisioned",
+     "gate_open_after": true
+    },
+    {
+     "probe_after_s": 600,
+     "enrolment_after": "busy",
+     "probe_result_after": "busy",
+     "gate_open_after": true
+    },
+    {
+     "probe_after_s": 3,
+     "enrolment_after": "busy",
+     "probe_result_after": "busy",
+     "gate_open_after": true
+    }
+   ]
+  },
+  {
    "id": "refused-closes-at-once",
    "description": "Any other status is a real refusal and closes an open gate at once.",
    "mode": "companion",

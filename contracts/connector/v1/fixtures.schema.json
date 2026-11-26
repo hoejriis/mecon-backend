@@ -49,6 +49,11 @@
         "description": { "type": "string" },
         "mode": { "$ref": "#/$defs/mode" },
         "enrolment": { "enum": ["provisioned", "none", "corrupt", "silent", "garbage", "refused", "bad_state", "busy", "failed"] },
+        "config": {
+          "description": "downlink.gate settings that differ from the defaults for this case.",
+          "type": "object", "additionalProperties": false,
+          "properties": { "recheck_s": { "type": "number" }, "retry_s": { "type": "number" }, "busy_retry_s": { "type": "number" } }
+        },
         "expect": {
           "type": "object", "additionalProperties": false,
           "required": ["probe_request_hex", "gate_open", "probe_result", "upstream_publishes"],
@@ -74,7 +79,7 @@
                 }
               },
               {
-                "description": "The device answers the next deployment.get as enrolment_after; it is asked after_s seconds after the previous answer (recheck_s, retry_s or busy_retry_s at their defaults).",
+                "description": "The device answers the next deployment.get as enrolment_after; it is asked after_s seconds after the previous answer (recheck_s, retry_s or busy_retry_s, as the case sets them).",
                 "type": "object", "additionalProperties": false,
                 "required": ["probe_after_s", "enrolment_after", "probe_result_after", "gate_open_after"],
                 "properties": {

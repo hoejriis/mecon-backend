@@ -68,7 +68,7 @@ GATE = load_fixture("gate.json")["cases"]
 
 @pytest.mark.parametrize("case", GATE, ids=[c["id"] for c in GATE])
 def test_gate_fixture(case):
-    rig = Rig(cfg=make_cfg(mode=case["mode"]), enrolment=case["enrolment"])
+    rig = Rig(cfg=make_cfg(mode=case["mode"], downlink={"gate": case["config"]} if "config" in case else {}), enrolment=case["enrolment"])
     answered = {"n": 0, "t": rig.clock.t}
 
     def run(seconds):  # steps the rig, remembering when the last answer to deployment.get was counted

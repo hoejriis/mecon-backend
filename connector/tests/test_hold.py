@@ -1049,6 +1049,142 @@ def test_conf_28_gate_a_not_ok_answer_is_logged_with_status_and_error_only(mk, a
     assert "usig" not in r.logbuf.getvalue() and "U1lOVEhFVElD" not in r.logbuf.getvalue()
 
 
+def hold_tick_until(r, cond, max_s, dt=0.1):
+    """Moves the fake clock in small steps until cond() holds; returns the seconds it took."""
+    t0 = r.clock.t
+    while not cond():
+        assert r.clock.t - t0 < max_s, f"not within {max_s} s"
+        r.clock.advance(dt)
+        r.step()
+        time.sleep(0.0005)
+    return r.clock.t - t0
+
+
+def hold_answered(r, label, n, max_s):
+    return hold_tick_until(r, lambda: r.m("downlink_gate_probes_total", label) == n, max_s)
+
+
+def short_gate(r, **kw):
+    """Gate timings for the hold rig (its config helper only builds the hold section): short ones unless given."""
+    import dataclasses
+
+    g = dataclasses.replace(r.cfg.gate, **{"recheck_s": 30.0, "retry_s": 5.0, "timeout_s": 4.0, **kw})
+    r.bridge.cfg = dataclasses.replace(r.cfg, gate=g)
+
+
+def hold_events(r, name):
+    return [json.loads(ln) for ln in r.logbuf.getvalue().splitlines() if json.loads(ln)["event"] == name]
+
+
+def test_conf_28_gate_failed_threshold_releases_the_hold_like_not_enrolled(mk):
+    # Kept on purpose: a device whose storage keeps failing is handed back, as a device that is not enrolled is.
+    r = mk()
+    conn = r.up()
+    r.dev.enrolment = "failed"
+    r.jump(601)
+    probe_answered(r, "failed", 1)
+    r.jump(31)
+    probe_answered(r, "failed", 2)
+    assert not conn.closed.is_set()
+    r.jump(31)
+    probe_answered(r, "failed", 3)
+    assert conn.closed.wait(3) and conn.close_code == 1000
+    assert r.bridge._gate_closed_for_good and r.m("downlink_gate_closes_total", "probe_failed") == 1
+    assert r.bridge._state != "connected" or r.bridge.snapshot()["downlink"] == "closed"
+
+
+def test_conf_28_gate_busy_is_asked_again_after_busy_retry_s_three_times_then_after_retry_s(mk):
+    r = mk()
+    r.up()
+    r.dev.enrolment = "busy"
+    r.jump(601)
+    probe_answered(r, "busy", 1)
+    gaps = [round(hold_answered(r, "busy", n, 40)) for n in (2, 3, 4, 5)]
+    assert gaps == [3, 3, 3, 30]
+
+
+def test_conf_28_gate_busy_backoff_after_is_configurable(mk):
+    r = mk()
+    short_gate(r, recheck_s=600.0, retry_s=30.0, timeout_s=8.0, busy_backoff_after=1)
+    r.up()
+    r.dev.enrolment = "busy"
+    r.jump(601)
+    probe_answered(r, "busy", 1)
+    assert [round(hold_answered(r, "busy", n, 40)) for n in (2, 3)] == [3, 30]
+
+
+def test_conf_28_gate_busy_stays_invisible_inside_the_window_then_counts_as_failed_and_releases_the_hold(mk):
+    r = mk()
+    short_gate(r)
+    conn = r.up()
+    t_open = r.clock.t
+    r.dev.enrolment = "busy"
+    while r.clock.t - t_open < 59.0:
+        r.clock.advance(0.1)
+        r.step()
+        time.sleep(0.0005)
+        assert not conn.closed.is_set() and r.metrics.total("downlink_gate_closes_total") == 0, r.clock.t - t_open
+    answer_all(r)
+    req(conn, "w1")
+    r.wait(lambda: [rid_of(m) for m in r.dev.messages] == ["w1"])  # relaying goes on
+    hold_tick_until(r, lambda: conn.closed.is_set(), 60)
+    assert 60 < r.clock.t - t_open < 80 and conn.close_code == 1000
+    assert r.m("downlink_gate_closes_total", "probe_failed") == 1
+
+
+def test_conf_28_gate_a_provisioned_answer_ends_a_busy_run_and_the_back_off(mk):
+    r = mk()
+    short_gate(r)
+    conn = r.up()
+    r.dev.enrolment = "busy"
+    hold_answered(r, "busy", 6, 120)
+    n = r.m("downlink_gate_probes_total", "busy")
+    r.dev.enrolment = "provisioned"
+    hold_answered(r, "provisioned", 2, 20)
+    ended = hold_events(r, "gate_probe_busy_run_ended")
+    assert [e["count"] for e in ended] == [n] and set(ended[0]) == {"ts", "level", "event", "count"} and ended[0]["level"] == "info"
+    r.dev.enrolment = "busy"
+    hold_answered(r, "busy", n + 1, 40)
+    assert [round(hold_answered(r, "busy", n + k, 20)) for k in (2, 3)] == [3, 3]  # quick again: a new run
+    assert not conn.closed.is_set()
+
+
+def test_conf_28_gate_only_the_first_busy_of_a_run_is_a_warning(mk):
+    r = mk()
+    short_gate(r)
+    r.up()
+    from mecon_connector.logutil import Log
+
+    r.bridge.log = Log(r.logbuf, "debug")
+    r.dev.enrolment = "busy"
+    hold_answered(r, "busy", 4, 120)
+    r.dev.enrolment = "failed"
+    hold_answered(r, "failed", 1, 20)
+    probe = hold_events(r, "gate_probe_not_ok")
+    assert [(e["level"], e["status"]) for e in probe] == [("warn", "busy"), ("debug", "busy"), ("debug", "busy"), ("debug", "busy"), ("warn", "failed")]
+    assert all(set(e) == {"ts", "level", "event", "status", "error"} for e in probe)
+    assert [e["count"] for e in hold_events(r, "gate_probe_busy_run_ended")] == [4]
+
+
+def test_conf_28_gate_a_busy_answer_before_any_decided_answer_is_measured_from_the_port_opening(mk):
+    r = mk(enrolment="busy")  # the fake clock starts far above 2 * recheck_s
+    short_gate(r)
+    hold_answered(r, "busy", 1, 20)
+    assert 2.5 <= hold_answered(r, "busy", 2, 20) <= 3.5  # a quick retry: not counted as failed
+
+
+def test_conf_28_gate_a_close_for_another_reason_ends_a_busy_run_with_its_count(mk):
+    r = mk()
+    short_gate(r)
+    r.up()
+    r.dev.enrolment = "busy"
+    hold_answered(r, "busy", 2, 120)
+    r.dev.enrolment = "silent"
+    r.dev.say(r.dev.event("health", signed=False))  # an unsigned uplink message closes the gate at once
+    r.wait(lambda: r.m("downlink_gate_closes_total", "unsigned_uplink") == 1)
+    assert [e["count"] for e in hold_events(r, "gate_probe_busy_run_ended")] == [2]
+
+
 # ---- the token never leaks (credentials) ------------------------------------------------------
 
 

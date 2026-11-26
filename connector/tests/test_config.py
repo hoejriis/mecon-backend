@@ -141,3 +141,13 @@ def test_gate_busy_retry_and_failed_threshold_defaults_and_bounds():
                 {"failed_threshold": 2.5}, {"failed_threshold": True}, {"busy_retry_s": "3"}):
         with pytest.raises(ConfigError):
             make_cfg(downlink={"gate": bad})
+
+
+def test_gate_busy_backoff_after_default_and_bounds():
+    from conftest import make_cfg
+
+    assert make_cfg().gate.busy_backoff_after == 3
+    assert make_cfg(downlink={"gate": {"busy_backoff_after": 1}}).gate.busy_backoff_after == 1
+    for bad in ({"busy_backoff_after": 0}, {"busy_backoff_after": 101}, {"busy_backoff_after": 1.5}, {"busy_backoff_after": True}):
+        with pytest.raises(ConfigError):
+            make_cfg(downlink={"gate": bad})

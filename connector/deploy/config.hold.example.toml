@@ -47,6 +47,7 @@ token_presentation = "header"
 # timeout_s = 8               # an unanswered request counts as closed and releases the hold
 # busy_retry_s = 3            # a "busy" answer (no memory) changes nothing and is asked again this soon
 # failed_threshold = 3        # this many "failed" answers (storage) in a row close the gate and release the hold
+# busy_backoff_after = 3      # after this many "busy" answers in a row, ask again after retry_s instead of busy_retry_s
 
 [health]
 enabled = true

@@ -202,8 +202,8 @@ PROBE_HEX = {"companion": h(wrap(iface(1, 0, 1, PROBE), marker=0x3C)), "console"
 gt = []
 
 
-def gcase(cid, desc, mode, enrolment, gate_open, probe_result, then=None, upstream=0):
-    gt.append({"id": cid, "description": desc, "mode": mode, "enrolment": enrolment,
+def gcase(cid, desc, mode, enrolment, gate_open, probe_result, then=None, upstream=0, config=None):
+    gt.append({"id": cid, "description": desc, "mode": mode, "enrolment": enrolment, **({"config": config} if config else {}),
                "expect": {"probe_request_hex": PROBE_HEX[mode], "gate_open": gate_open, "probe_result": probe_result,
                           "upstream_publishes": upstream}, "then": then or []})
 
@@ -233,6 +233,22 @@ gcase("failed-run-ends-on-provisioned", "A provisioned answer between failed ans
       "companion", "provisioned", True, "provisioned",
       [probe(600, "failed", "failed", True), probe(30, "busy", "busy", True), probe(3, "failed", "failed", True),
        probe(30, "provisioned", "provisioned", True), probe(600, "failed", "failed", True), probe(30, "failed", "failed", True)])
+gcase("busy-backs-off-after-three",
+      "The first 3 busy answers in a row are asked again after busy_retry_s (3 s): the 10 s before the first step hold the answers at 0, 3, 6 and 9 s. From the 4th busy answer on the next ask is after retry_s (30 s), which the steps show. The gate stays closed throughout.",
+      "companion", "busy", False, "busy",
+      [probe(30, "busy", "busy", False), probe(30, "busy", "busy", False)])
+gcase("busy-counts-as-failed-past-twice-recheck-s",
+      "With recheck_s 30 and retry_s 5: busy answers change nothing while no decided answer has been absent for more than 2 x recheck_s (60 s). Past that each busy answer counts as one failed answer, and the third in a row closes the gate (probe_failed).",
+      "companion", "provisioned", True, "provisioned",
+      [probe(30, "busy", "busy", True), probe(3, "busy", "busy", True), probe(3, "busy", "busy", True), probe(3, "busy", "busy", True)]
+      + [probe(5, "busy", "busy", True)] * 5 + [probe(5, "busy", "busy", True), probe(5, "busy", "busy", False)],
+      config={"recheck_s": 30, "retry_s": 5})
+gcase("busy-run-ends-on-provisioned",
+      "A provisioned answer ends a run of busy answers: the next busy answer is the first of a new run and is asked again after busy_retry_s again, not after retry_s.",
+      "companion", "provisioned", True, "provisioned",
+      [probe(600, "busy", "busy", True), probe(3, "busy", "busy", True), probe(3, "busy", "busy", True), probe(3, "busy", "busy", True),
+       probe(30, "busy", "busy", True), probe(30, "provisioned", "provisioned", True),
+       probe(600, "busy", "busy", True), probe(3, "busy", "busy", True)])
 gcase("refused-closes-at-once", "Any other status is a real refusal and closes an open gate at once.",
       "companion", "provisioned", True, "provisioned", [probe(600, "refused", "refused", False)])
 gcase("unsigned-uplink-closes", "The first uplink message without usig closes downlink at once; it is still forwarded unchanged.", "companion", "provisioned", True, "provisioned",

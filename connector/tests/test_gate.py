@@ -427,3 +427,143 @@ def test_an_ok_answer_logs_no_probe_warning():
     rig.bridge.log = Log(buf)
     rig.settle()
     assert "gate_probe_not_ok" not in buf.getvalue()
+
+
+# ---- a run of busy answers: back-off, a bound, and one warning ------------------------------
+
+
+def gate_log(rig):
+    import io
+
+    from mecon_connector.logutil import Log
+
+    buf = io.StringIO()
+    rig.bridge.log = Log(buf, "debug")
+    return buf
+
+
+def events(buf, name):
+    return [json.loads(ln) for ln in buf.getvalue().splitlines() if json.loads(ln)["event"] == name]
+
+
+def test_busy_is_asked_again_after_busy_retry_s_three_times_then_after_retry_s():
+    rig = Rig(enrolment="busy")  # closed gate; busy_retry_s 3, retry_s 30
+    answered(rig, "busy", 1, 3)
+    gaps = [answered(rig, "busy", n, 40) for n in (2, 3, 4, 5)]
+    assert [round(g) for g in gaps] == [3, 3, 3, 30]  # answers 1-3 are asked again soon, the 4th backs off
+
+
+def test_busy_backoff_after_is_configurable():
+    rig = Rig(cfg=make_cfg(downlink={"gate": {"busy_backoff_after": 1}}), enrolment="busy")
+    answered(rig, "busy", 1, 3)
+    assert [round(answered(rig, "busy", n, 40)) for n in (2, 3)] == [3, 30]  # only the first is asked again soon
+    rig = Rig(cfg=make_cfg(downlink={"gate": {"busy_backoff_after": 5}}), enrolment="busy")
+    answered(rig, "busy", 1, 3)
+    assert [round(answered(rig, "busy", n, 40)) for n in (2, 3, 4, 5, 6, 7)] == [3, 3, 3, 3, 3, 30]
+
+
+SHORT = {"gate": {"recheck_s": 30, "retry_s": 5, "timeout_s": 4}}
+
+
+def test_busy_stays_invisible_inside_the_recheck_window_and_then_counts_as_failed():
+    rig = open_rig(cfg=make_cfg(downlink=SHORT))
+    t_open = rig.clock.t
+    rig.dev.enrolment = "busy"
+    # recheck_s (30) after the opening the busy answers start; a window of twice that passes without a decided answer
+    while rig.clock.t - t_open < 59.0:
+        rig.step(1, dt=0.1)
+        assert gate_open(rig) and closes(rig) == 0, rig.clock.t - t_open
+    send_cmd(rig)
+    assert len(rig.dev.written) == 1  # still carried
+    run_until(rig, lambda: not gate_open(rig), 60)
+    took = rig.clock.t - t_open
+    assert 60 < took < 80, took  # three busy answers past 2 * recheck_s, asked again every retry_s (5)
+    assert rig.metrics.get("downlink_gate_closes_total", "probe_failed") == 1 and closes(rig) == 1
+
+
+def test_busy_past_the_window_counts_toward_the_same_failed_run_as_failed_answers():
+    rig = open_rig(cfg=make_cfg(downlink={"gate": {**SHORT["gate"], "failed_threshold": 2}}))
+    t_open = rig.clock.t
+    rig.dev.enrolment = "busy"
+    run_until(rig, lambda: rig.clock.t - t_open > 60, 70)
+    n = probes(rig, "busy")
+    answered(rig, "busy", n + 1, 10)  # the first busy answer past the window counts as one failed
+    assert gate_open(rig)
+    rig.dev.enrolment = "failed"
+    answered(rig, "failed", 1, 20)
+    assert not gate_open(rig) and rig.metrics.get("downlink_gate_closes_total", "probe_failed") == 1
+
+
+def test_a_provisioned_answer_ends_a_busy_run_and_starts_the_window_again():
+    rig = open_rig(cfg=make_cfg(downlink=SHORT))
+    buf = gate_log(rig)
+    rig.dev.enrolment = "busy"
+    answered(rig, "busy", 6, 120)  # past the three quick retries, in the back-off
+    n = probes(rig, "busy")
+    rig.dev.enrolment = "provisioned"
+    answered(rig, "provisioned", 2, 20)
+    ended = events(buf, "gate_probe_busy_run_ended")
+    assert [e["count"] for e in ended] == [n] and set(ended[0]) == {"ts", "level", "event", "count"}
+    assert ended[0]["level"] == "info"
+    # the window starts at the provisioned answer: busy answers just after it neither count nor close
+    rig.dev.enrolment = "busy"
+    answered(rig, "busy", n + 1, 40)
+    assert gate_open(rig) and closes(rig) == 0
+    rig.dev.enrolment = "provisioned"
+    # the new run starts with quick retries again
+    took = answered(rig, "provisioned", 3, 40)
+    assert took < 40
+
+
+def test_a_provisioned_answer_resets_the_back_off():
+    rig = Rig(enrolment="busy")
+    answered(rig, "busy", 5, 120)  # 4th and 5th answers: backed off
+    rig.dev.enrolment = "provisioned"
+    answered(rig, "provisioned", 1, 40)
+    rig.dev.enrolment = "busy"
+    answered(rig, "busy", 6, 700)  # the open gate is asked again after recheck_s
+    rig.dev.enrolment = "busy"
+    assert round(answered(rig, "busy", 7, 40)) == 3  # quick again: a new run
+
+
+def test_only_the_first_busy_of_a_run_is_a_warning_and_the_run_end_is_logged_once():
+    rig = open_rig()
+    buf = gate_log(rig)
+    rig.dev.enrolment = "busy"
+    answered(rig, "busy", 4, 640)
+    rig.dev.enrolment = "failed"
+    answered(rig, "failed", 1, 60)
+    warns = [e for e in events(buf, "gate_probe_not_ok") if e["level"] == "warn"]
+    debugs = [e for e in events(buf, "gate_probe_not_ok") if e["level"] == "debug"]
+    assert [w["status"] for w in warns] == ["busy", "failed"]  # the first busy, then the failed answer
+    assert len(debugs) == 3 and all(d["status"] == "busy" and set(d) == {"ts", "level", "event", "status", "error"} for d in debugs)
+    ended = events(buf, "gate_probe_busy_run_ended")
+    assert [e["count"] for e in ended] == [4]  # a failed answer ends the run; one line
+    answered(rig, "failed", 2, 60)
+    assert len(events(buf, "gate_probe_busy_run_ended")) == 1  # a failed run is not a busy run
+
+
+def test_every_failed_answer_is_a_warning():
+    rig = open_rig(cfg=make_cfg(downlink={"gate": {"failed_threshold": 5}}))
+    buf = gate_log(rig)
+    rig.dev.enrolment = "failed"
+    answered(rig, "failed", 3, 700)
+    assert [e["level"] for e in events(buf, "gate_probe_not_ok")] == ["warn"] * 3
+    assert events(buf, "gate_probe_busy_run_ended") == []
+
+
+def test_a_closed_gate_ends_a_busy_run_with_its_count():
+    rig = open_rig()
+    buf = gate_log(rig)
+    rig.dev.enrolment = "busy"
+    answered(rig, "busy", 2, 640)
+    rig.dev.say(b'{"v":1,"event":"x"}')  # an unsigned uplink message closes the gate at once
+    rig.step(5)
+    assert not gate_open(rig)
+    assert [e["count"] for e in events(buf, "gate_probe_busy_run_ended")] == [2]
+
+
+def test_a_busy_answer_before_any_decided_answer_is_measured_from_the_port_opening():
+    rig = Rig(cfg=make_cfg(downlink=SHORT), enrolment="busy")  # the fake clock starts far above 2 * recheck_s
+    answered(rig, "busy", 1, 3)
+    assert 2.5 <= answered(rig, "busy", 2, 20) <= 3.5  # a quick retry: not counted as failed

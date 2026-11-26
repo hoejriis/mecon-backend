@@ -258,7 +258,7 @@ describe('live activity', () => {
     await settle();
     const active = svg()!.querySelectorAll('.obs-active');
     expect(active).toHaveLength(1);
-    expect(active[0]!.getAttribute('data-observer')).toBe('obs_synthetic_0001');
+    expect(active[0]!.getAttribute('data-observer')).toBe('ob_synthetic_7c1e40a2');
     expect(screen.getByText('Heard a packet at 10:00:05 UTC')).toBeInTheDocument();
     expect(pinLabels()[0]).toContain('heard a packet at 10:00:05 UTC');
     expect(HIGHLIGHT_MS).toBeLessThanOrEqual(15_000);

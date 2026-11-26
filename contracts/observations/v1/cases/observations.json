@@ -1,5 +1,5 @@
 {
- "contract": "mecon-observations/1.0.0-draft.3",
+ "contract": "mecon-observations/1.0.0-draft.4",
  "synthetic": true,
  "group": "observations",
  "cases": [
@@ -796,6 +796,390 @@
       "status": 200,
       "schema": "ObservationEvent",
       "stream": {}
+     }
+    }
+   ]
+  },
+  {
+   "id": "observations-12",
+   "title": "Members of two fleets who both see one public observer get different observer ids for it",
+   "world": "two-fleets-observed",
+   "steps": [
+    {
+     "action": "sign-in",
+     "args": {
+      "client": "alice",
+      "user": "alice"
+     }
+    },
+    {
+     "as": "alice",
+     "request": {
+      "operation": "listObservers",
+      "query": {
+       "scope": "self"
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "ObserverList",
+      "match": [
+       {
+        "at": "/items",
+        "where": {
+         "/label": "Public buoy (synthetic)"
+        },
+        "count": 1
+       }
+      ]
+     },
+     "capture": {
+      "a_buoy": {
+       "at": "/items",
+       "where": {
+        "/label": "Public buoy (synthetic)"
+       },
+       "field": "/observer_id"
+      }
+     }
+    },
+    {
+     "action": "sign-in",
+     "args": {
+      "client": "carol",
+      "user": "carol"
+     }
+    },
+    {
+     "as": "carol",
+     "request": {
+      "operation": "listObservers",
+      "query": {
+       "scope": "self"
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "ObserverList",
+      "match": [
+       {
+        "at": "/items",
+        "where": {
+         "/label": "Public buoy (synthetic)"
+        },
+        "count": 1
+       },
+       {
+        "at": "/items",
+        "where": {
+         "/observer_id": "${a_buoy}"
+        },
+        "count": 0
+       }
+      ]
+     }
+    },
+    {
+     "as": "carol",
+     "request": {
+      "operation": "getObservationSnapshot",
+      "query": {
+       "scope": "self"
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "Snapshot",
+      "match": [
+       {
+        "at": "/items",
+        "where": {
+         "/rssi": -70
+        },
+        "count": 1
+       },
+       {
+        "at": "/items",
+        "where": {
+         "/observer_id": "${a_buoy}"
+        },
+        "count": 0
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "observations-13",
+   "title": "One member's observer id is the same in the list, the snapshot, the stream and another session",
+   "world": "two-fleets-observed",
+   "steps": [
+    {
+     "action": "sign-in",
+     "args": {
+      "client": "alice",
+      "user": "alice"
+     }
+    },
+    {
+     "as": "alice",
+     "request": {
+      "operation": "listObservers",
+      "query": {
+       "scope": "self"
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "ObserverList",
+      "match": [
+       {
+        "at": "/items",
+        "where": {
+         "/label": "North mast (synthetic)"
+        },
+        "count": 1
+       },
+       {
+        "at": "/items",
+        "where": {
+         "/label": "Public buoy (synthetic)"
+        },
+        "count": 1
+       }
+      ]
+     },
+     "capture": {
+      "a_mast": {
+       "at": "/items",
+       "where": {
+        "/label": "North mast (synthetic)"
+       },
+       "field": "/observer_id"
+      },
+      "a_buoy": {
+       "at": "/items",
+       "where": {
+        "/label": "Public buoy (synthetic)"
+       },
+       "field": "/observer_id"
+      }
+     }
+    },
+    {
+     "as": "alice",
+     "request": {
+      "operation": "getObservationSnapshot",
+      "query": {
+       "scope": "self"
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "Snapshot",
+      "match": [
+       {
+        "at": "/items",
+        "where": {
+         "/rssi": -90,
+         "/observer_id": "${a_mast}"
+        },
+        "count": 1
+       },
+       {
+        "at": "/items",
+        "where": {
+         "/rssi": -70,
+         "/observer_id": "${a_buoy}"
+        },
+        "count": 1
+       }
+      ]
+     },
+     "capture": {
+      "cp": "/cursor"
+     }
+    },
+    {
+     "action": "add-reception",
+     "args": {
+      "observer": "north_mast",
+      "packet": "p3",
+      "rssi": -77
+     }
+    },
+    {
+     "action": "add-reception",
+     "args": {
+      "observer": "public_buoy",
+      "packet": "p2",
+      "rssi": -61
+     }
+    },
+    {
+     "as": "alice",
+     "request": {
+      "operation": "streamObservationEvents",
+      "query": {
+       "scope": "self",
+       "cursor": "${cp}"
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "ObservationEvent",
+      "stream": {
+       "match": [
+        {
+         "at": "",
+         "where": {
+          "/kind": "reception",
+          "/reception/rssi": -77,
+          "/reception/observer_id": "${a_mast}"
+         },
+         "at_least": 1
+        },
+        {
+         "at": "",
+         "where": {
+          "/kind": "reception",
+          "/reception/rssi": -61,
+          "/reception/observer_id": "${a_buoy}"
+         },
+         "at_least": 1
+        }
+       ]
+      }
+     }
+    },
+    {
+     "action": "sign-in",
+     "args": {
+      "client": "alice_again",
+      "user": "alice"
+     }
+    },
+    {
+     "as": "alice_again",
+     "request": {
+      "operation": "listObservers",
+      "query": {
+       "scope": "self"
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "ObserverList",
+      "match": [
+       {
+        "at": "/items",
+        "where": {
+         "/label": "North mast (synthetic)",
+         "/observer_id": "${a_mast}"
+        },
+        "count": 1
+       },
+       {
+        "at": "/items",
+        "where": {
+         "/label": "Public buoy (synthetic)",
+         "/observer_id": "${a_buoy}"
+        },
+        "count": 1
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "observations-14",
+   "title": "Observer ids show no sequence and never share the form of a reception's other ids",
+   "world": "two-fleets-observed",
+   "steps": [
+    {
+     "action": "sign-in",
+     "args": {
+      "client": "alice",
+      "user": "alice"
+     }
+    },
+    {
+     "as": "alice",
+     "request": {
+      "operation": "listObservers",
+      "query": {
+       "scope": "self"
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "ObserverList",
+      "match": [
+       {
+        "at": "/items",
+        "where": {
+         "/label": "North mast (synthetic)"
+        },
+        "count": 1
+       },
+       {
+        "at": "/items",
+        "where": {
+         "/label": "North attic (synthetic)"
+        },
+        "count": 1
+       }
+      ],
+      "ids": [
+       {
+        "at": "/items",
+        "field": "/observer_id",
+        "unsequenced": true
+       }
+      ]
+     }
+    },
+    {
+     "as": "alice",
+     "request": {
+      "operation": "getObservationSnapshot",
+      "query": {
+       "scope": "self"
+      }
+     },
+     "expect": {
+      "status": 200,
+      "schema": "Snapshot",
+      "match": [
+       {
+        "at": "/items",
+        "where": {
+         "/rssi": -90
+        },
+        "count": 1
+       },
+       {
+        "at": "/items",
+        "where": {
+         "/rssi": -101
+        },
+        "count": 1
+       }
+      ],
+      "ids": [
+       {
+        "at": "/items",
+        "field": "/observer_id",
+        "unsequenced": true,
+        "unlike": [
+         "/event_id",
+         "/reception_id",
+         "/packet_correlation_id"
+        ]
+       }
+      ]
      }
     }
    ]

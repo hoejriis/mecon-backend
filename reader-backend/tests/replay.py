@@ -358,8 +358,7 @@ class Replay:
             values = sorted({str(v) for _, v in pairs})
             if len(values) < 2:
                 self.fail(i, f"ids: unsequenced needs two distinct ids, got {values!r}")
-            common = os.path.commonprefix(values)
-            if all(v[len(common):] == "" or v[len(common):].isdecimal() for v in values):
+            if looks_like_a_counter(values):
                 self.fail(i, f"ids {values!r} differ only by a counter")
         for other in c.get("unlike") or []:
             for item, v in pairs:
@@ -458,6 +457,25 @@ class Replay:
         finally:
             for c in self.clients.values():
                 await c.aclose()
+
+
+def looks_like_a_counter(values) -> bool:
+    """The `unsequenced` rule (contracts/observations/v1/cases/README.md, "Id form checks"): strip the longest
+    common prefix, then the longest common suffix of what is left. When every remainder is an integer
+    (decimal; or hex when all remainders have one length; an empty remainder is 0) and their spread is below
+    2**32, the ids are a counter."""
+    values = sorted(set(values))
+    prefix = os.path.commonprefix(values)
+    rest = [v[len(prefix):] for v in values]
+    suffix = os.path.commonprefix([r[::-1] for r in rest])[::-1]
+    rest = [r[: len(r) - len(suffix)] for r in rest]
+    if all(r == "" or (r.isascii() and r.isdigit()) for r in rest):
+        nums = [int(r or "0", 10) for r in rest]
+    elif len({len(r) for r in rest}) == 1 and all(r and all(c in "0123456789abcdefABCDEF" for c in r) for r in rest):
+        nums = [int(r, 16) for r in rest]
+    else:
+        return False
+    return max(nums) - min(nums) < 2**32
 
 
 def id_form(value: str) -> tuple[str, int]:

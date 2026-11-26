@@ -355,7 +355,7 @@
         "field"
       ],
       "additionalProperties": false,
-      "description": "The ids at `field` of every item of the array at `at`. `unsequenced`: at least two distinct ids, and once their longest common prefix is removed, not every remainder is empty or decimal digits. `unlike`: in each item, the id does not share a form (prefix up to and including the first `_` or `-`, and length) with the value at any of these pointers.",
+      "description": "The ids at `field` of every item of the array at `at`. `unsequenced`: at least two distinct ids, and once their longest common prefix and then their longest common suffix are removed, the remainders are not integers (decimal, or hex of one length) spread by less than 2^32. `unlike`: in each item, the id does not share a form (prefix up to and including the first `_` or `-`, and length) with the value at any of these pointers.",
       "properties": {
         "at": {
           "type": "string",

@@ -131,6 +131,7 @@ export function validateReaderCases(dir = 'reader-api/v1', name = 'mecon-reader-
         if (s.expect.stream && !isStream) fail(`${at}: stream expected but ${s.expect.status} is not an event stream`);
         if (isStream && !s.expect.stream) fail(`${at}: ${s.expect.status} is an event stream; give a bounded stream expectation`);
         if (s.expect.lease && s.expect.schema !== 'LeaseKeyList') fail(`${at}: a lease check runs against a LeaseKeyList response`);
+        if (s.expect.ids && isStream) fail(`${at}: an ids check reads a JSON body, not an event stream`);
         // A `count: 0` alone passes on an empty array, so it proves nothing: pair it with a match at the same place
         // that needs at least one item.
         for (const [where, ms] of [['body', s.expect.match ?? []], ['stream', s.expect.stream?.match ?? []]]) {

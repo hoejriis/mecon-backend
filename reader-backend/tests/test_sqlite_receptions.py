@@ -46,8 +46,12 @@ class Rig:
         self.store = processing_store.Store(self.path)
         self.next_capture = 1
         self.reader = SqliteReceptionStore(self.path, key=KEY, clock=lambda: NOW, poll_s=0.01, **kw)
-        self.ids = {n: self.reader.observer_id(s, k) for n, (s, k) in
-                    {"a": ("s1", "KEYA"), "b": ("s1", "KEYB"), "c": ("s2", "KEYC")}.items()}
+        self.ids = self.ids_for("usr_alice")
+
+    def ids_for(self, uid):
+        """Each observer's id as the caller `uid` sees it (scoped to the caller)."""
+        return {n: self.reader.observer_id(uid, s, k) for n, (s, k) in
+                {"a": ("s1", "KEYA"), "b": ("s1", "KEYB"), "c": ("s2", "KEYC")}.items()}
 
     def add(self, observer, packet_id, ago_s, *, ptype="ADVERT", rssi=-90.4, snr=5.0, device=True, hops=3, route=1):
         source, key = {"a": ("s1", "KEYA"), "b": ("s1", "KEYB"), "c": ("s2", "KEYC"), "none": ("s1", None)}[observer]
@@ -61,8 +65,9 @@ class Rig:
         self.next_capture += 1
         return self.next_capture - 1
 
-    def scope(self, *names, prov="own_fleet", precision=50.0):
-        return [ScopedObserver(self.ids[n], prov, precision) for n in names]
+    def scope(self, *names, prov="own_fleet", precision=50.0, uid="usr_alice"):
+        ids = self.ids_for(uid)
+        return [ScopedObserver(ids[n], prov, precision) for n in names]
 
 
 @pytest.fixture
@@ -186,7 +191,7 @@ def test_the_correlation_id_is_opaque_shared_per_packet_and_never_the_hash_or_an
     rig.add("b", "AAAA000000000001", 59)
     rig.add("a", "AAAA000000000002", 58)
     a = run(rig.reader.snapshot(caller("usr_alice"), rig.scope("a", "b"), None, 5)).items
-    c = run(rig.reader.snapshot(caller("usr_carol"), rig.scope("a", "b"), None, 5)).items
+    c = run(rig.reader.snapshot(caller("usr_carol"), rig.scope("a", "b", uid="usr_carol"), None, 5)).items
     assert a[0]["packet_correlation_id"] == a[1]["packet_correlation_id"] != a[2]["packet_correlation_id"]
     assert a[0]["packet_correlation_id"] != c[0]["packet_correlation_id"]
     for item in a + c:
@@ -197,9 +202,11 @@ def test_the_correlation_id_is_opaque_shared_per_packet_and_never_the_hash_or_an
 
 def test_the_observer_id_hides_the_key_and_source(rig):
     for oid in rig.ids.values():
-        assert "KEY" not in oid and "s1" not in oid and re.fullmatch(r"obs_[A-Za-z0-9_-]{22}", oid)
+        assert "KEY" not in oid and "s1" not in oid and re.fullmatch(r"ob_[A-Za-z0-9_-]{22}", oid)
     other = SqliteReceptionStore(rig.path, key=b"another-key-0123456789abcdef!!")
-    assert other.observer_id("s1", "KEYA") != rig.ids["a"]
+    assert other.observer_id("usr_alice", "s1", "KEYA") != rig.ids["a"]
+    # Scoped to the caller: another caller gets other ids for the same observers.
+    assert not set(rig.ids_for("usr_carol").values()) & set(rig.ids.values())
 
 
 # ---- observers ----
@@ -371,7 +378,8 @@ def test_every_response_over_the_sqlite_store_is_clean_and_scoped(rig):
     rig.add("a", "BEEF000000000001", 60, ptype="TEXT_MESSAGE")
     rig.add("b", "BEEF000000000001", 59, ptype="TEXT_MESSAGE")
     rig.add("c", "BEEF000000000002", 58)
-    app = make_app(rig, world, lookup, core, {alice.id: rig.scope("a", "b")})
+    app = make_app(rig, world, lookup, core, {alice.id: rig.scope("a", "b", uid=alice.id)})
+    ids = rig.ids_for(alice.id)
     session = world.mint_session("alice")
 
     async def go():
@@ -388,7 +396,7 @@ def test_every_response_over_the_sqlite_store_is_clean_and_scoped(rig):
     obs, snap, status, raw = run(go())
     assert not list(OBSERVATIONS.schema_validator("ObserverList").iter_errors(obs))
     assert not list(OBSERVATIONS.schema_validator("Snapshot").iter_errors(snap))
-    assert len(snap["items"]) == 2 and {i["observer_id"] for i in snap["items"]} == {rig.ids["a"], rig.ids["b"]}
+    assert len(snap["items"]) == 2 and {i["observer_id"] for i in snap["items"]} == {ids["a"], ids["b"]}
     assert snap["items"][0]["packet_correlation_id"] == snap["items"][1]["packet_correlation_id"]
     for body in (obs, snap):
         assert_clean({k: v for k, v in body.items()}, "BEEF000000000001", "BEEF000000000002", "KEYA", "KEYC")
@@ -409,7 +417,7 @@ def test_every_response_over_the_sqlite_store_is_clean_and_scoped(rig):
         return res
     status, _, raw, _ = run(live())
     frames = parse_sse(raw)
-    assert len(frames) == 1 and frames[0]["reception"]["observer_id"] == rig.ids["a"]
+    assert len(frames) == 1 and frames[0]["reception"]["observer_id"] == ids["a"]
     assert_clean(frames[0], "BEEF000000000003", "BEEF000000000004", "KEYA")
     assert f"id: {frames[0]['event_id']}\n".encode() in raw
 

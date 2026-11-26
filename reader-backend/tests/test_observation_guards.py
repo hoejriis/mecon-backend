@@ -7,7 +7,7 @@ from mecon_reader_backend.observations import DECLARED, PREFIX
 from replay import OBSERVATIONS as C
 from replay import Replay
 
-EXPECTED_CASES = 11
+EXPECTED_CASES = 14
 EXPECTED_OPERATIONS = {"listObservers", "getObservationSnapshot", "streamObservationEvents"}
 
 
@@ -21,7 +21,7 @@ def test_every_case_file_on_disk_is_replayed():
     assert sorted(C.case_files) == C.case_files_on_disk()
 
 
-def test_eleven_cases_and_none_missing():
+def test_fourteen_cases_and_none_missing():
     cases = C.load_cases()
     on_disk = sum(len(json.loads((C.cases_dir / f"{f}.json").read_text())["cases"]) for f in C.case_files_on_disk())
     assert len(cases) == on_disk == EXPECTED_CASES

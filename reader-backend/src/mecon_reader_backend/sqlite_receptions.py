@@ -97,9 +97,11 @@ class SqliteReceptionStore:
     def _mac(self, *parts: str) -> bytes:
         return hmac.new(self._key, b"\x00".join(p.encode() for p in parts), hashlib.sha256).digest()
 
-    def observer_id(self, source: str, observer_key: str) -> str:
-        """The API id of an observer. A real ObservationScope computes the same ids with this function."""
-        return "obs_" + _b64(self._mac("observer", source, observer_key), 22)
+    def observer_id(self, user_id: str, source: str, observer_key: str) -> str:
+        """The API id of an observer as one caller sees it: a keyed hash bound to the caller, so two callers get
+        different ids for one observer and no id shows an order (contracts/observations/v1, ObserverId). A real
+        ObservationScope computes the same ids with this function."""
+        return "ob_" + _b64(self._mac("observer", user_id, source, observer_key), 22)
 
     def _correlation(self, caller: Caller, packet_id: str) -> str:
         # Never the packet's hash: a keyed hash of it, bound to the caller, so two callers cannot match theirs.
@@ -155,12 +157,12 @@ class SqliteReceptionStore:
         except sqlite3.Error:
             raise CoreError("unavailable") from None
 
-    def _allowed(self, conn: sqlite3.Connection, scope: Sequence[ScopedObserver]) -> dict[tuple[str, str], ScopedObserver]:
+    def _allowed(self, conn: sqlite3.Connection, caller: Caller, scope: Sequence[ScopedObserver]) -> dict[tuple[str, str], ScopedObserver]:
         """The (source, observer_key) pairs the scope names: the one scope filter, applied before any reception is read."""
         by_id = {s.observer_id: s for s in scope}
         out = {}
         for source, key in conn.execute("SELECT DISTINCT source, observer_key FROM hours"):
-            s = by_id.get(self.observer_id(source, key))
+            s = by_id.get(self.observer_id(caller.user_id, source, key))
             if s is not None:
                 out[(source, key)] = s
         return out
@@ -245,7 +247,7 @@ class SqliteReceptionStore:
         now = self._clock()
 
         def read(conn: sqlite3.Connection) -> list[dict[str, Any]]:
-            allowed = self._allowed(conn, scope)
+            allowed = self._allowed(conn, caller, scope)
             heard = {(s, k): t for s, k, t in conn.execute(
                 "SELECT source, observer_key, MAX(received_at) FROM receptions WHERE observer_key IS NOT NULL "
                 "GROUP BY source, observer_key")}
@@ -277,7 +279,7 @@ class SqliteReceptionStore:
                        limit: int) -> SnapshotResult:
         def read(conn: sqlite3.Connection) -> tuple[list[dict[str, Any]], str]:
             after = self._valid_position(conn, caller, since) if since is not None else None
-            allowed = self._allowed(conn, scope)
+            allowed = self._allowed(conn, caller, scope)
             head = self._head(conn)
             if after is None:
                 rows = list(reversed(self._scan(conn, allowed, after=0, limit=limit, newest_first=True)))
@@ -303,7 +305,7 @@ class SqliteReceptionStore:
                     start = self._head(conn) if cursor is None else self._valid_position(conn, caller, cursor)
                 else:
                     self._valid_position(conn, caller, self.cursor(caller, start))
-                allowed = self._allowed(conn, scope)
+                allowed = self._allowed(conn, caller, scope)
                 head = self._head(conn)
                 rows = self._scan(conn, allowed, after=start, limit=500, newest_first=False)
                 # A full page leaves the cursor at its last reception, so the next read continues from there.

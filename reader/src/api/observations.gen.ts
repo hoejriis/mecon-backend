@@ -112,6 +112,20 @@ export interface components {
         /** @description Opaque; clients never parse, compare across callers, or construct it. */
         OpaqueId: string;
         /**
+         * @description Scoped to the caller. Two callers who may both see one observer get
+         *     different ids for it; for one caller the id is stable across
+         *     `GET /observers`, `GET /snapshot` and `GET /events` and across that
+         *     caller's sessions. It reveals no ordering, count or row identity: ids
+         *     of observers created in sequence must not differ only by a counter, and
+         *     the id is never a row number or a reversible encoding of one (a keyed
+         *     hash of the caller and the observer, of at least 80 bits, meets this).
+         *     It never has the form of an `event_id`, `reception_id`,
+         *     `packet_correlation_id` or cursor the same Backend issues: it has its
+         *     own prefix or shape, so no client can mistake one kind of id for
+         *     another.
+         */
+        ObserverId: components["schemas"]["OpaqueId"];
+        /**
          * Format: date-time
          * @description UTC, ISO-8601, with `Z`.
          */
@@ -151,7 +165,7 @@ export interface components {
             state: "live" | "stale" | "offline";
         };
         Observer: {
-            observer_id: components["schemas"]["OpaqueId"];
+            observer_id: components["schemas"]["ObserverId"];
             /** @description A display name the observer's owner chose. */
             label: string;
             /** @description Null whenever the caller may not see the observer's location. */
@@ -174,8 +188,8 @@ export interface components {
             event_id: components["schemas"]["OpaqueId"];
             packet_correlation_id: components["schemas"]["OpaqueId"];
             reception_id: components["schemas"]["OpaqueId"];
-            /** @description Matches an `observer_id` from `GET /observers`; it may be absent from a stale copy of that list. */
-            observer_id: components["schemas"]["OpaqueId"];
+            /** @description Matches the same caller's `observer_id` from `GET /observers`; it may be absent from a stale copy of that list. */
+            observer_id: components["schemas"]["ObserverId"];
             /** @description When the observer says it heard the packet, by the observer's clock. */
             observed_at: components["schemas"]["Timestamp"];
             /** @description When the Backend received the report, by the Backend's clock. May be long after `observed_at`. */

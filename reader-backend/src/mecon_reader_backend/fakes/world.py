@@ -142,6 +142,7 @@ class World:
     obs_floor: int = 0
     observes: bool = False
     csrf_secret: bytes = field(default_factory=lambda: secrets.token_bytes(32))
+    observer_secret: bytes = field(default_factory=lambda: secrets.token_bytes(32))
     reader_origins: tuple[str, ...] = ("https://reader.example.test",)
     login_lifetime: timedelta = timedelta(minutes=15)
     session_lifetime: timedelta = timedelta(hours=12)
@@ -172,8 +173,6 @@ class World:
             seq = next(w._seq)
             w.messages.append(Message("msg_" + secrets.token_hex(8), seq, m["identity"], key, m["direction"],
                                       m["text"], m.get("sender_label"), at, bool(m.get("read", False))))
-        for name in w.observers:
-            w.ids[("observers", name)] = "obs_" + secrets.token_hex(8)
         for r in sorted(desc.get("receptions", []), key=lambda r: -r["ago_s"]):  # oldest first
             w.add_reception(r["observer"], r["packet"], r["rssi"], r.get("snr", 0), ago_s=r["ago_s"])
         w.switches.update(desc.get("switches", {}))
@@ -185,6 +184,11 @@ class World:
 
     def id_of(self, kind: str, name: str) -> str:
         return self.ids[(kind, name)]
+
+    def observer_id(self, user_id: str, name: str) -> str:
+        """An observer's id as one caller sees it: a keyed hash of the caller and the observer, so two callers
+        get different ids for one observer and no id shows an order (contracts/observations/v1, ObserverId)."""
+        return "ob_" + hmac.new(self.observer_secret, f"{user_id}|{name}".encode(), hashlib.sha256).hexdigest()[:24]
 
     def name_of(self, kind: str, opaque: str) -> str | None:
         for (k, n), i in self.ids.items():

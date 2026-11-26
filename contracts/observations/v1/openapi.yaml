@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: MECON Live Observation API (authorized projection)
-  version: 1.0.0-draft.3
+  version: 1.0.0-draft.4
   summary: Session-authenticated, capability-scoped view of observer locations and packet receptions.
   description: |
     Machine-readable form of the authorized projection described in
@@ -42,6 +42,16 @@ info:
     decrypted content and no message text. No raw packet bytes and no packet
     hash. Authority over a fleet does not imply the right to read anyone's
     private messages, and nothing here is a path to them.
+
+    **Observer ids.** An `observer_id` is scoped to the caller. Two callers
+    who may both see the same observer get different `observer_id`s for it.
+    For one caller it is the same in `GET /observers`, `GET /snapshot` and
+    `GET /events`, and in every session of that caller. It reveals no
+    ordering, no count and no row identity: it is not a counter, a row number
+    or a reversible encoding of either, and ids of observers created one after
+    another show no sequence. It never has the form of an `event_id`,
+    `reception_id`, `packet_correlation_id` or cursor (see `ObserverId`). A
+    client never compares one caller's `observer_id` with another's.
 
     This document defines the authorized projection only. The anonymous public
     projection is a separate contract with separate authorization, retention
@@ -259,6 +269,21 @@ components:
       minLength: 1
       maxLength: 128
       description: Opaque; clients never parse, compare across callers, or construct it.
+    ObserverId:
+      allOf:
+        - $ref: '#/components/schemas/OpaqueId'
+      description: |
+        Scoped to the caller. Two callers who may both see one observer get
+        different ids for it; for one caller the id is stable across
+        `GET /observers`, `GET /snapshot` and `GET /events` and across that
+        caller's sessions. It reveals no ordering, count or row identity: ids
+        of observers created in sequence must not differ only by a counter, and
+        the id is never a row number or a reversible encoding of one (a keyed
+        hash of the caller and the observer, of at least 80 bits, meets this).
+        It never has the form of an `event_id`, `reception_id`,
+        `packet_correlation_id` or cursor the same Backend issues: it has its
+        own prefix or shape, so no client can mistake one kind of id for
+        another.
     Timestamp:
       type: string
       format: date-time
@@ -310,7 +335,7 @@ components:
       required: [observer_id, label, location, freshness]
       additionalProperties: false
       properties:
-        observer_id: { $ref: '#/components/schemas/OpaqueId' }
+        observer_id: { $ref: '#/components/schemas/ObserverId' }
         label: { type: string, description: A display name the observer's owner chose. }
         location:
           description: Null whenever the caller may not see the observer's location.
@@ -344,8 +369,8 @@ components:
         reception_id: { $ref: '#/components/schemas/OpaqueId' }
         observer_id:
           allOf:
-            - $ref: '#/components/schemas/OpaqueId'
-          description: Matches an `observer_id` from `GET /observers`; it may be absent from a stale copy of that list.
+            - $ref: '#/components/schemas/ObserverId'
+          description: Matches the same caller's `observer_id` from `GET /observers`; it may be absent from a stale copy of that list.
         observed_at:
           allOf:
             - $ref: '#/components/schemas/Timestamp'

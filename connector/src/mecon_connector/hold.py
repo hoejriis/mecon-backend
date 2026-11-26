@@ -45,6 +45,7 @@ from .framing import (
     encode_mecon_frames,
     encode_serial_frame,
 )
+from .gate import BusyRun, classify_probe, probe_log_fields
 from .logutil import Log
 from .metrics import Metrics
 from .nordic_dfu import BAUD as DFU_BAUD
@@ -179,6 +180,8 @@ class HoldBridge:
         self._gate_closed_for_good = False  # the last deployment.get said "not enrolled" (not merely "asking")
         self._probe_seq = 0
         self._next_probe = 0.0
+        self._gate_failures = 0  # consecutive `failed` answers to deployment.get
+        self._busy = BusyRun()  # consecutive `busy` answers, and when the last decided answer came
 
         # hold side
         self._state = "idle"  # idle | connecting | connected | stopped
@@ -795,6 +798,8 @@ class HoldBridge:
         self._gate_open = False
         self._gate_closed_for_good = False
         self._next_probe = now
+        self._gate_failures = 0  # a new link starts a new count
+        self._busy.decided(now, self.log)  # a new link also starts a new busy run and a new recheck window
         self.m.set("serial_connected", 1)
         self.log.info("serial_connected")
         self._dfu_app_returned(now)
@@ -888,10 +893,12 @@ class HoldBridge:
         n = len(self._queue)
         self._queue.clear()
         self.m.inc("downlink_closed_total", n)
+        self._busy.end(self.log)
         self._next_probe = now
 
     def _gate_result(self, provisioned: bool, reason: str, now: float) -> None:
         g = self.cfg.gate
+        self._gate_failures = 0  # a decided answer ends a run of `failed` answers
         if provisioned:
             if not self._gate_open:
                 self.log.info("downlink_open")
@@ -900,7 +907,7 @@ class HoldBridge:
             self._next_probe = now + g.recheck_s
         else:
             self._close_gate(reason, now)
-            self._gate_closed_for_good = True  # an answer that says not enrolled releases the hold
+            self._gate_closed_for_good = True  # every close releases the hold, also probe_failed (failed_threshold failed answers in a row): a device whose storage keeps failing is handed back
             self._next_probe = now + g.retry_s
 
     # ---- messages from the device ------------------------------------------------------
@@ -993,19 +1000,38 @@ class HoldBridge:
                 if not self._finish_paging(why):
                     self._next_hello = now + HELLO_RETRY_S
             return
-        res = obj.get("result")
-        state = res.get("state") if isinstance(res, dict) else None
-        if obj.get("status") != "ok":
-            self.m.inc("downlink_gate_probes_total", 1, "refused")
-            self._gate_result(False, "not_provisioned", now)
-        elif state == "provisioned":
-            self.m.inc("downlink_gate_probes_total", 1, "provisioned")
+        self._on_probe_class(obj, now)
+
+    def _on_probe_class(self, obj: dict, now: float) -> None:
+        """busy: ask again soon (later, after a few), change nothing, unless it lasts past recheck_s (then it counts as failed); failed: close only after failed_threshold in a
+        row; provisioned opens; none, corrupt, an unreadable state and any other status close."""
+        label = classify_probe(obj)
+        self.m.inc("downlink_gate_probes_total", 1, label)
+        g = self.cfg.gate
+        failed = label == "failed"
+        if label == "busy":
+            # The gate, the relay and the hold stay as they are, and the next ask is soon (later, after a few in a row).
+            # Once recheck_s has passed since the last decided answer, a busy answer counts as one `failed`.
+            delay, failed = self._busy.on_busy(obj, now, g, self.log)
+            if not failed:
+                self._next_probe = now + delay
+                return
+        elif label == "failed":
+            self._busy.end(self.log)
+            self.log.warn("gate_probe_not_ok", **probe_log_fields(obj))
+        elif obj.get("status") != "ok":
+            self.log.warn("gate_probe_not_ok", **probe_log_fields(obj))
+        if failed:
+            self._gate_failures += 1
+            if self._gate_failures >= g.failed_threshold:
+                self._gate_result(False, "probe_failed", now)
+            else:
+                self._next_probe = now + g.retry_s
+        elif label == "provisioned":
+            self._busy.decided(now, self.log)
             self._gate_result(True, "", now)
-        elif state in ("none", "corrupt"):
-            self.m.inc("downlink_gate_probes_total", 1, state)
-            self._gate_result(False, "not_provisioned", now)
         else:
-            self.m.inc("downlink_gate_probes_total", 1, "malformed")
+            self._busy.decided(now, self.log)
             self._gate_result(False, "not_provisioned", now)
 
     # ---- bootloader DFU (contracts/connector-hold/v1, section 12) --------------------------------

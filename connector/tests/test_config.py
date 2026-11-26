@@ -128,3 +128,26 @@ def test_event_topics_are_a_prefix_and_must_not_nest():
     )
     assert "must not be below" in problems(mod(mqtt__topics={"resp": "ev/x"}))
     assert "must differ" in problems(mod(mqtt__topics={"req": "resp"}))
+
+
+def test_gate_busy_retry_and_failed_threshold_defaults_and_bounds():
+    from conftest import make_cfg
+
+    c = make_cfg()
+    assert (c.gate.busy_retry_s, c.gate.failed_threshold) == (3.0, 3)
+    c = make_cfg(downlink={"gate": {"busy_retry_s": 1, "failed_threshold": 10}})
+    assert (c.gate.busy_retry_s, c.gate.failed_threshold) == (1.0, 10)
+    for bad in ({"busy_retry_s": 0.5}, {"busy_retry_s": 61}, {"failed_threshold": 0}, {"failed_threshold": 11},
+                {"failed_threshold": 2.5}, {"failed_threshold": True}, {"busy_retry_s": "3"}):
+        with pytest.raises(ConfigError):
+            make_cfg(downlink={"gate": bad})
+
+
+def test_gate_busy_backoff_after_default_and_bounds():
+    from conftest import make_cfg
+
+    assert make_cfg().gate.busy_backoff_after == 3
+    assert make_cfg(downlink={"gate": {"busy_backoff_after": 1}}).gate.busy_backoff_after == 1
+    for bad in ({"busy_backoff_after": 0}, {"busy_backoff_after": 101}, {"busy_backoff_after": 1.5}, {"busy_backoff_after": True}):
+        with pytest.raises(ConfigError):
+            make_cfg(downlink={"gate": bad})

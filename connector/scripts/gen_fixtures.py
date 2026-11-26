@@ -9,7 +9,7 @@ import json
 import pathlib
 
 OUT = pathlib.Path(__file__).resolve().parents[2] / "contracts" / "connector" / "v1" / "fixtures"
-CONTRACT = "mecon-usb-connector/1.0.0-draft.1"
+CONTRACT = "mecon-usb-connector/1.0.0-draft.2"
 NOTE = "Synthetic test data. No real device id, key, signature or credential."
 
 
@@ -202,8 +202,8 @@ PROBE_HEX = {"companion": h(wrap(iface(1, 0, 1, PROBE), marker=0x3C)), "console"
 gt = []
 
 
-def gcase(cid, desc, mode, enrolment, gate_open, probe_result, then=None, upstream=0):
-    gt.append({"id": cid, "description": desc, "mode": mode, "enrolment": enrolment,
+def gcase(cid, desc, mode, enrolment, gate_open, probe_result, then=None, upstream=0, config=None):
+    gt.append({"id": cid, "description": desc, "mode": mode, "enrolment": enrolment, **({"config": config} if config else {}),
                "expect": {"probe_request_hex": PROBE_HEX[mode], "gate_open": gate_open, "probe_result": probe_result,
                           "upstream_publishes": upstream}, "then": then or []})
 
@@ -213,6 +213,44 @@ gcase("provisioned-opens-console", "The same on a console, as one `mecon> ` line
 for st, res in (("none", "none"), ("corrupt", "corrupt"), ("refused", "refused"), ("bad_state", "malformed"), ("silent", "timeout"), ("garbage", "timeout")):
     gcase("closed-" + st.replace("_", "-"), f"Device answer '{st}' keeps downlink closed (fails closed)." + (" Bytes that do not parse have no route, so they are dropped and counted as unroutable." if st == "garbage" else ""),
           "companion", st, False, res, upstream=0)
+
+
+def probe(after_s, answer, result, gate_open_after):
+    return {"probe_after_s": after_s, "enrolment_after": answer, "probe_result_after": result, "gate_open_after": gate_open_after}
+
+
+gcase("closed-busy", "Device answer 'busy' (no memory) changes nothing: a closed gate stays closed and is asked again after busy_retry_s.",
+      "companion", "busy", False, "busy")
+gcase("closed-failed", "Device answer 'failed' (storage) changes nothing below failed_threshold: a closed gate stays closed.",
+      "companion", "failed", False, "failed")
+gcase("busy-keeps-an-open-gate-open", "A busy answer to a recheck is not 'not provisioned': the gate stays open and is asked again after busy_retry_s (3 s).",
+      "companion", "provisioned", True, "provisioned",
+      [probe(600, "busy", "busy", True), probe(3, "busy", "busy", True), probe(3, "provisioned", "provisioned", True)])
+gcase("failed-closes-at-the-threshold", "failed answers keep the gate open until failed_threshold (3) of them come in a row, asked again after retry_s.",
+      "companion", "provisioned", True, "provisioned",
+      [probe(600, "failed", "failed", True), probe(30, "failed", "failed", True), probe(30, "failed", "failed", False)])
+gcase("failed-run-ends-on-provisioned", "A provisioned answer between failed answers starts the count again; a busy answer neither counts nor ends the run.",
+      "companion", "provisioned", True, "provisioned",
+      [probe(600, "failed", "failed", True), probe(30, "busy", "busy", True), probe(3, "failed", "failed", True),
+       probe(30, "provisioned", "provisioned", True), probe(600, "failed", "failed", True), probe(30, "failed", "failed", True)])
+gcase("busy-backs-off-after-three",
+      "The first 3 busy answers in a row are asked again after busy_retry_s (3 s): the 10 s before the first step hold the answers at 0, 3, 6 and 9 s. From the 4th busy answer on the next ask is after retry_s (30 s), which the steps show. The gate stays closed throughout.",
+      "companion", "busy", False, "busy",
+      [probe(30, "busy", "busy", False), probe(30, "busy", "busy", False)])
+gcase("busy-counts-as-failed-past-twice-recheck-s",
+      "With recheck_s 30 and retry_s 5: busy answers change nothing while no decided answer has been absent for more than 2 x recheck_s (60 s). Past that each busy answer counts as one failed answer, and the third in a row closes the gate (probe_failed).",
+      "companion", "provisioned", True, "provisioned",
+      [probe(30, "busy", "busy", True), probe(3, "busy", "busy", True), probe(3, "busy", "busy", True), probe(3, "busy", "busy", True)]
+      + [probe(5, "busy", "busy", True)] * 5 + [probe(5, "busy", "busy", True), probe(5, "busy", "busy", False)],
+      config={"recheck_s": 30, "retry_s": 5})
+gcase("busy-run-ends-on-provisioned",
+      "A provisioned answer ends a run of busy answers: the next busy answer is the first of a new run and is asked again after busy_retry_s again, not after retry_s.",
+      "companion", "provisioned", True, "provisioned",
+      [probe(600, "busy", "busy", True), probe(3, "busy", "busy", True), probe(3, "busy", "busy", True), probe(3, "busy", "busy", True),
+       probe(30, "busy", "busy", True), probe(30, "provisioned", "provisioned", True),
+       probe(600, "busy", "busy", True), probe(3, "busy", "busy", True)])
+gcase("refused-closes-at-once", "Any other status is a real refusal and closes an open gate at once.",
+      "companion", "provisioned", True, "provisioned", [probe(600, "refused", "refused", False)])
 gcase("unsigned-uplink-closes", "The first uplink message without usig closes downlink at once; it is still forwarded unchanged.", "companion", "provisioned", True, "provisioned",
       [{"uplink": "signed_event", "enrolment_after": None, "gate_open_after": True, "forwarded": True},
        {"uplink": "unsigned_event", "enrolment_after": "none", "gate_open_after": False, "forwarded": True}])

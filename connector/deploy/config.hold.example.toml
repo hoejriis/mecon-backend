@@ -39,6 +39,16 @@ token_presentation = "header"
 # package_max_bytes = 2097152
 # failed_hold_s = 1800        # how long a failed job keeps the hold without a device link
 
+# The enrolment gate (deployment.get). Requests are relayed only while the device says "provisioned";
+# these only tune how often it asks and how a transient answer is treated (see the README).
+# [downlink.gate]
+# recheck_s = 600             # while open
+# retry_s = 30                # while closed, and after a "failed" answer below the threshold
+# timeout_s = 8               # an unanswered request counts as closed and releases the hold
+# busy_retry_s = 3            # a "busy" answer (no memory) changes nothing and is asked again this soon
+# failed_threshold = 3        # this many "failed" answers (storage) in a row close the gate and release the hold
+# busy_backoff_after = 3      # after this many "busy" answers in a row, ask again after retry_s instead of busy_retry_s
+
 [health]
 enabled = true
 bind = "127.0.0.1"

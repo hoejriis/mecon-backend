@@ -48,28 +48,48 @@
         "id": { "$ref": "#/$defs/id" },
         "description": { "type": "string" },
         "mode": { "$ref": "#/$defs/mode" },
-        "enrolment": { "enum": ["provisioned", "none", "corrupt", "silent", "garbage", "refused", "bad_state"] },
+        "enrolment": { "enum": ["provisioned", "none", "corrupt", "silent", "garbage", "refused", "bad_state", "busy", "failed"] },
+        "config": {
+          "description": "downlink.gate settings that differ from the defaults for this case.",
+          "type": "object", "additionalProperties": false,
+          "properties": { "recheck_s": { "type": "number" }, "retry_s": { "type": "number" }, "busy_retry_s": { "type": "number" } }
+        },
         "expect": {
           "type": "object", "additionalProperties": false,
           "required": ["probe_request_hex", "gate_open", "probe_result", "upstream_publishes"],
           "properties": {
             "probe_request_hex": { "$ref": "#/$defs/hex" },
             "gate_open": { "type": "boolean" },
-            "probe_result": { "enum": ["provisioned", "none", "corrupt", "malformed", "refused", "timeout"] },
+            "probe_result": { "enum": ["provisioned", "none", "corrupt", "malformed", "busy", "failed", "refused", "timeout"] },
             "upstream_publishes": { "enum": [0, 1] }
           }
         },
         "then": {
           "type": "array",
           "items": {
-            "type": "object", "additionalProperties": false,
-            "required": ["uplink", "enrolment_after", "gate_open_after", "forwarded"],
-            "properties": {
-              "uplink": { "enum": ["signed_event", "unsigned_event", "new_epoch_event"] },
-              "enrolment_after": { "enum": [null, "provisioned", "none", "corrupt"] },
-              "gate_open_after": { "type": "boolean" },
-              "forwarded": { "const": true }
-            }
+            "oneOf": [
+              {
+                "type": "object", "additionalProperties": false,
+                "required": ["uplink", "enrolment_after", "gate_open_after", "forwarded"],
+                "properties": {
+                  "uplink": { "enum": ["signed_event", "unsigned_event", "new_epoch_event"] },
+                  "enrolment_after": { "enum": [null, "provisioned", "none", "corrupt"] },
+                  "gate_open_after": { "type": "boolean" },
+                  "forwarded": { "const": true }
+                }
+              },
+              {
+                "description": "The device answers the next deployment.get as enrolment_after; it is asked after_s seconds after the previous answer (recheck_s, retry_s or busy_retry_s, as the case sets them).",
+                "type": "object", "additionalProperties": false,
+                "required": ["probe_after_s", "enrolment_after", "probe_result_after", "gate_open_after"],
+                "properties": {
+                  "probe_after_s": { "type": "number", "minimum": 1 },
+                  "enrolment_after": { "enum": ["provisioned", "none", "corrupt", "refused", "busy", "failed"] },
+                  "probe_result_after": { "enum": ["provisioned", "none", "corrupt", "refused", "busy", "failed"] },
+                  "gate_open_after": { "type": "boolean" }
+                }
+              }
+            ]
           }
         }
       }

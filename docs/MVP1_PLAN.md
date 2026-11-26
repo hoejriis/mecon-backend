@@ -49,6 +49,7 @@ Delegated receive identities (up to four extra), offline secure cache and fully 
 | **Deployed (restricted, existing `mecon.cloud` users only)** | The Reader shell with the five-tab navigation (Chats / Nodes / Map / Tools / Settings), the login client, the design system and a read-only Bluetooth diagnostics page. The Reader API is routed to the existing Backend (signed-out checks pass); signed-in acceptance with test accounts has not yet run, so verified sign-in is not claimed. |
 | **Implemented, not verified live** | The Backend-path messaging client, written against a draft contract. |
 | **Simulated only** | The BLE Companion adapter, exercised through an Android Chrome profile simulation; not verified on hardware. Bluefy on iPhone/iPad still awaits real-hardware testing. |
-| **Planned** | Live observation Map, contacts, offline cache, safe updates, USB access and the public Backend replacement. |
+| **Deployed, awaiting acceptance (MVP2)** | The encrypted offline cache with leases, safe updates with confirmed activation, and the laptop browser USB Companion adapter. Each is verified by its own tests and, for updates, across live releases; each waits on a hands-on acceptance step on real hardware. |
+| **Planned** | Live observation Map, contacts, and the public Backend replacement. |
 
 Evidence is recorded in the [acceptance matrix](MVP1_ACCEPTANCE.md); the normative design is [MVP1 implementation design](MVP1_IMPLEMENTATION_DESIGN.md). Nothing here implies public availability or verified full messaging.

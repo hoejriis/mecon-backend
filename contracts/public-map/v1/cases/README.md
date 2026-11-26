@@ -30,7 +30,7 @@ The format and the replay rules are the Reader API's, in [`../../../reader-api/v
 - Pulses and lines: only eligible transmitters; lines only to listed public observers; the 45 second lifetime; the window without a cursor; receptions older than a pulse never replayed; a cursor returning only newer events; relay pulses from multi-byte paths only.
 - Cursors: fresh, old, unknown and forged all behave as the contract says, and a 410 carries no events.
 - Line references: reused within 45 seconds of first use, new after; event ids and references show no counter.
-- Withdrawal: a node that stops advertising its position is revoked in the event list, leaves the catalogue and gives no pulse.
+- Withdrawal: a node that stops advertising its position is revoked in the event list, leaves the catalogue and gives no pulse. Both are read 40 s after the withdrawal, so a Backend that rereads its catalogue lazily (within 45 s) passes without a forced refresh.
 - Limits and switches: capped responses with a continuing cursor; 404 on both operations with the feed off, whatever the cursor; 429 with `Retry-After` per client address; a session cookie, a valid bearer and a bearer never issued all get exactly the anonymous answer, with no cookie set.
 
 **Not covered yet:** a relay named by a hash two nodes share (an ambiguous hop), a direct-routed packet's path, and a restart of the Backend making every cursor unknown. Each needs a world action the runners do not have yet.

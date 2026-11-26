@@ -63,8 +63,8 @@ info:
     replays older receptions: the client fetches the nodes again and polls without a cursor.
 
     **Withdrawal.** A node that stops being eligible (it advertises no position, or no eligible source has heard
-    it) is dropped from `GET /nodes` and, within 45 seconds, announced once as a `node_revoked` event; the
-    client removes the node and every line to it. Lines to a revoked node end at once.
+    it) is dropped from `GET /nodes` and announced once as a `node_revoked` event, both within 45 seconds (a
+    Backend may serve a cached catalogue until then); the client removes the node and every line to it. Lines to a revoked node end at once.
 
     **Limits.** Responses are capped: at most 200 events per response; when more are held, the cursor moves to
     the last event carried and the next poll continues there. Each client address has a request limit, for both

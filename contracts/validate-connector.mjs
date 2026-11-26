@@ -42,6 +42,9 @@ for (const f of readdirSync(join(dir, 'fixtures')).filter((x) => x.endsWith('.js
     } else if (doc.direction === 'enrolment_gate') {
       const probes = metricValues.get('downlink_gate_probes_total').labels.result;
       if (!probes.includes(c.expect.probe_result)) fail(`fixtures/${f}/${c.id}: probe result ${c.expect.probe_result} is not in the contract`);
+      for (const s of c.then.filter((x) => 'probe_after_s' in x)) {
+        if (!probes.includes(s.probe_result_after)) fail(`fixtures/${f}/${c.id}: probe result ${s.probe_result_after} is not in the contract`);
+      }
     } else if (c.expect?.dropped_reason && !dropReasons.has(c.expect.dropped_reason)) {
       fail(`fixtures/${f}/${c.id}: drop reason ${c.expect.dropped_reason} is not in the contract`);
     }

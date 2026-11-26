@@ -9,7 +9,7 @@ import json
 import pathlib
 
 OUT = pathlib.Path(__file__).resolve().parents[2] / "contracts" / "connector" / "v1" / "fixtures"
-CONTRACT = "mecon-usb-connector/1.0.0-draft.1"
+CONTRACT = "mecon-usb-connector/1.0.0-draft.2"
 NOTE = "Synthetic test data. No real device id, key, signature or credential."
 
 
@@ -213,6 +213,28 @@ gcase("provisioned-opens-console", "The same on a console, as one `mecon> ` line
 for st, res in (("none", "none"), ("corrupt", "corrupt"), ("refused", "refused"), ("bad_state", "malformed"), ("silent", "timeout"), ("garbage", "timeout")):
     gcase("closed-" + st.replace("_", "-"), f"Device answer '{st}' keeps downlink closed (fails closed)." + (" Bytes that do not parse have no route, so they are dropped and counted as unroutable." if st == "garbage" else ""),
           "companion", st, False, res, upstream=0)
+
+
+def probe(after_s, answer, result, gate_open_after):
+    return {"probe_after_s": after_s, "enrolment_after": answer, "probe_result_after": result, "gate_open_after": gate_open_after}
+
+
+gcase("closed-busy", "Device answer 'busy' (no memory) changes nothing: a closed gate stays closed and is asked again after busy_retry_s.",
+      "companion", "busy", False, "busy")
+gcase("closed-failed", "Device answer 'failed' (storage) changes nothing below failed_threshold: a closed gate stays closed.",
+      "companion", "failed", False, "failed")
+gcase("busy-keeps-an-open-gate-open", "A busy answer to a recheck is not 'not provisioned': the gate stays open and is asked again after busy_retry_s (3 s).",
+      "companion", "provisioned", True, "provisioned",
+      [probe(600, "busy", "busy", True), probe(3, "busy", "busy", True), probe(3, "provisioned", "provisioned", True)])
+gcase("failed-closes-at-the-threshold", "failed answers keep the gate open until failed_threshold (3) of them come in a row, asked again after retry_s.",
+      "companion", "provisioned", True, "provisioned",
+      [probe(600, "failed", "failed", True), probe(30, "failed", "failed", True), probe(30, "failed", "failed", False)])
+gcase("failed-run-ends-on-provisioned", "A provisioned answer between failed answers starts the count again; a busy answer neither counts nor ends the run.",
+      "companion", "provisioned", True, "provisioned",
+      [probe(600, "failed", "failed", True), probe(30, "busy", "busy", True), probe(3, "failed", "failed", True),
+       probe(30, "provisioned", "provisioned", True), probe(600, "failed", "failed", True), probe(30, "failed", "failed", True)])
+gcase("refused-closes-at-once", "Any other status is a real refusal and closes an open gate at once.",
+      "companion", "provisioned", True, "provisioned", [probe(600, "refused", "refused", False)])
 gcase("unsigned-uplink-closes", "The first uplink message without usig closes downlink at once; it is still forwarded unchanged.", "companion", "provisioned", True, "provisioned",
       [{"uplink": "signed_event", "enrolment_after": None, "gate_open_after": True, "forwarded": True},
        {"uplink": "unsigned_event", "enrolment_after": "none", "gate_open_after": False, "forwarded": True}])

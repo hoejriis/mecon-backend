@@ -15,7 +15,7 @@ import sys
 import zipfile
 
 OUT = pathlib.Path(__file__).resolve().parents[2] / "contracts" / "connector-hold" / "v1" / "fixtures"
-CONTRACT = "mecon-connector-hold/1.0.0-draft.3"
+CONTRACT = "mecon-connector-hold/1.0.0-draft.4"
 
 
 def j(o):

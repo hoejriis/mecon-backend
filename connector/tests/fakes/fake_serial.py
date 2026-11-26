@@ -27,7 +27,7 @@ class FakeSerialDevice:
     def __init__(self, mode: str = "companion", enrolment: str = "provisioned") -> None:
         self.mode = mode
         # How the device answers deployment.get: provisioned | none | corrupt | silent | garbage |
-        # refused | bad_state | wrong_id
+        # refused | bad_state | wrong_id | busy | failed
         self.enrolment = enrolment
         self.epoch = 1
         self.signed = True  # while a record exists the device signs every event and result
@@ -153,12 +153,16 @@ class FakeSerialDevice:
         base = {"v": 1, "id": rid, "status": "ok", "epoch": self.epoch}
         if e == "refused":
             base.update(status="refused", error="not-permitted")
+        elif e == "busy":  # the firmware had no memory for the answer
+            base.update(status="busy", error="no-memory")
+        elif e == "failed":  # the firmware could not read its storage
+            base.update(status="failed", error="storage")
         elif e == "wrong_id":
             base["id"] = "cg-999999"
             base["result"] = {"state": "provisioned"}
         else:
             base["result"] = {"state": "weird" if e == "bad_state" else e}
-        if e in ("provisioned", "corrupt") and self.signed:
+        if e in ("provisioned", "corrupt", "busy", "failed") and self.signed:  # an enrolled device signs its errors too
             base.update({"usig_boot": self.epoch, "usig_seq": self._next_seq(), "usig": "U1lOVEhFVElD"})
         self.say(json.dumps(base, separators=(",", ":")).encode())
 

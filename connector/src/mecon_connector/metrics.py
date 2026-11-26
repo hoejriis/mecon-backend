@@ -50,7 +50,7 @@ REASONS = {
     "downlink_gate_closes_total": {
         "unsigned_uplink", "not_provisioned", "probe_failed", "epoch_changed", "serial_lost", "reconnect",
     },
-    "downlink_gate_probes_total": {"provisioned", "none", "corrupt", "malformed", "refused", "timeout", "late"},
+    "downlink_gate_probes_total": {"provisioned", "none", "corrupt", "malformed", "busy", "failed", "refused", "timeout", "late"},
     "serial_frames_total": {"native", "mecon_frame", "console_line"},
     "serial_anomalies_total": {
         "oversize_length", "empty_frame", "malformed_frame", "duplicate_frame",

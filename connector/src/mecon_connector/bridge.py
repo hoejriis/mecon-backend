@@ -31,6 +31,7 @@ from .framing import (
     encode_mecon_frames,
     encode_serial_frame,
 )
+from .gate import classify_probe, probe_log_fields
 from .logutil import Log
 from .metrics import Metrics
 from .transport import (
@@ -162,6 +163,7 @@ class Bridge:
         self._probe_id: str | None = None  # the request in flight, if any
         self._probe_deadline = 0.0
         self._next_probe = 0.0
+        self._gate_failures = 0  # consecutive `failed` answers to deployment.get
         self._epoch: int | None = None
 
     # ---- broker callbacks (any thread) -------------------------------------------------
@@ -571,6 +573,7 @@ class Bridge:
         self._serial_note = None
         self._epoch = None
         self._next_probe = now
+        self._gate_failures = 0  # a new link starts a new count
         self.m.set("serial_connected", 1)
         self.log.info("serial_connected")
         self._publish_status(online=True)
@@ -689,6 +692,7 @@ class Bridge:
 
     def _gate_result(self, provisioned: bool, reason: str, now: float) -> None:
         g = self.cfg.gate
+        self._gate_failures = 0  # a decided answer ends a run of `failed` answers
         if provisioned:
             if not self._gate_open:
                 self.log.info("downlink_open")
@@ -737,23 +741,32 @@ class Bridge:
             return
         self._probe_id = None
         res = obj.get("result")
-        state = res.get("state") if isinstance(res, dict) else None
         epoch = res.get("epoch") if isinstance(res, dict) else obj.get("epoch")
         if isinstance(obj.get("epoch"), int) and not isinstance(obj.get("epoch"), bool):
             self._epoch = obj["epoch"]
         elif isinstance(epoch, int) and not isinstance(epoch, bool):
             self._epoch = epoch
+        self._on_probe_class(obj, now)
+
+    def _on_probe_class(self, obj: dict, now: float) -> None:
+        """busy: ask again soon, change nothing; failed: close only after failed_threshold in a row;
+        provisioned opens; none, corrupt, an unreadable state and any other status close."""
+        label = classify_probe(obj)
+        self.m.inc("downlink_gate_probes_total", 1, label)
         if obj.get("status") != "ok":
-            self.m.inc("downlink_gate_probes_total", 1, "refused")
-            self._gate_result(False, "not_provisioned", now)
-        elif state == "provisioned":
-            self.m.inc("downlink_gate_probes_total", 1, "provisioned")
+            self.log.warn("gate_probe_not_ok", **probe_log_fields(obj))
+        g = self.cfg.gate
+        if label == "provisioned":
             self._gate_result(True, "", now)
-        elif state in ("none", "corrupt"):
-            self.m.inc("downlink_gate_probes_total", 1, state)
-            self._gate_result(False, "not_provisioned", now)
+        elif label == "busy":
+            self._next_probe = now + g.busy_retry_s  # the gate and the downlink stay exactly as they are
+        elif label == "failed":
+            self._gate_failures += 1
+            if self._gate_failures >= g.failed_threshold:
+                self._gate_result(False, "probe_failed", now)
+            else:
+                self._next_probe = now + g.retry_s
         else:
-            self.m.inc("downlink_gate_probes_total", 1, "malformed")
             self._gate_result(False, "not_provisioned", now)
 
     # ---- observability -----------------------------------------------------------------

@@ -43,6 +43,8 @@ password_file = "/etc/mecon-connector/broker-password"   # a file, mode 600; the
 # recheck_s = 600   # while open
 # retry_s = 30      # while closed
 # timeout_s = 8     # an unanswered request counts as closed
+# busy_retry_s = 3  # a "busy" answer (no memory) changes nothing and is asked again this soon (1-60)
+# failed_threshold = 3  # this many "failed" answers (storage) in a row close the gate; fewer change nothing (1-10)
 
 [queues]
 upstream_max_messages = 64

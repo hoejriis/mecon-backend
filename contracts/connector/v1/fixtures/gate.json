@@ -1,5 +1,5 @@
 {
- "contract": "mecon-usb-connector/1.0.0-draft.1",
+ "contract": "mecon-usb-connector/1.0.0-draft.2",
  "synthetic": true,
  "note": "Synthetic test data. No real device id, key, signature or credential.",
  "direction": "enrolment_gate",
@@ -107,6 +107,166 @@
     "upstream_publishes": 0
    },
    "then": []
+  },
+  {
+   "id": "closed-busy",
+   "description": "Device answer 'busy' (no memory) changes nothing: a closed gate stays closed and is asked again after busy_retry_s.",
+   "mode": "companion",
+   "enrolment": "busy",
+   "expect": {
+    "probe_request_hex": "3c2d007f0100017b2276223a312c226964223a2263672d31222c226f70223a226465706c6f796d656e742e676574227d",
+    "gate_open": false,
+    "probe_result": "busy",
+    "upstream_publishes": 0
+   },
+   "then": []
+  },
+  {
+   "id": "closed-failed",
+   "description": "Device answer 'failed' (storage) changes nothing below failed_threshold: a closed gate stays closed.",
+   "mode": "companion",
+   "enrolment": "failed",
+   "expect": {
+    "probe_request_hex": "3c2d007f0100017b2276223a312c226964223a2263672d31222c226f70223a226465706c6f796d656e742e676574227d",
+    "gate_open": false,
+    "probe_result": "failed",
+    "upstream_publishes": 0
+   },
+   "then": []
+  },
+  {
+   "id": "busy-keeps-an-open-gate-open",
+   "description": "A busy answer to a recheck is not 'not provisioned': the gate stays open and is asked again after busy_retry_s (3 s).",
+   "mode": "companion",
+   "enrolment": "provisioned",
+   "expect": {
+    "probe_request_hex": "3c2d007f0100017b2276223a312c226964223a2263672d31222c226f70223a226465706c6f796d656e742e676574227d",
+    "gate_open": true,
+    "probe_result": "provisioned",
+    "upstream_publishes": 0
+   },
+   "then": [
+    {
+     "probe_after_s": 600,
+     "enrolment_after": "busy",
+     "probe_result_after": "busy",
+     "gate_open_after": true
+    },
+    {
+     "probe_after_s": 3,
+     "enrolment_after": "busy",
+     "probe_result_after": "busy",
+     "gate_open_after": true
+    },
+    {
+     "probe_after_s": 3,
+     "enrolment_after": "provisioned",
+     "probe_result_after": "provisioned",
+     "gate_open_after": true
+    }
+   ]
+  },
+  {
+   "id": "failed-closes-at-the-threshold",
+   "description": "failed answers keep the gate open until failed_threshold (3) of them come in a row, asked again after retry_s.",
+   "mode": "companion",
+   "enrolment": "provisioned",
+   "expect": {
+    "probe_request_hex": "3c2d007f0100017b2276223a312c226964223a2263672d31222c226f70223a226465706c6f796d656e742e676574227d",
+    "gate_open": true,
+    "probe_result": "provisioned",
+    "upstream_publishes": 0
+   },
+   "then": [
+    {
+     "probe_after_s": 600,
+     "enrolment_after": "failed",
+     "probe_result_after": "failed",
+     "gate_open_after": true
+    },
+    {
+     "probe_after_s": 30,
+     "enrolment_after": "failed",
+     "probe_result_after": "failed",
+     "gate_open_after": true
+    },
+    {
+     "probe_after_s": 30,
+     "enrolment_after": "failed",
+     "probe_result_after": "failed",
+     "gate_open_after": false
+    }
+   ]
+  },
+  {
+   "id": "failed-run-ends-on-provisioned",
+   "description": "A provisioned answer between failed answers starts the count again; a busy answer neither counts nor ends the run.",
+   "mode": "companion",
+   "enrolment": "provisioned",
+   "expect": {
+    "probe_request_hex": "3c2d007f0100017b2276223a312c226964223a2263672d31222c226f70223a226465706c6f796d656e742e676574227d",
+    "gate_open": true,
+    "probe_result": "provisioned",
+    "upstream_publishes": 0
+   },
+   "then": [
+    {
+     "probe_after_s": 600,
+     "enrolment_after": "failed",
+     "probe_result_after": "failed",
+     "gate_open_after": true
+    },
+    {
+     "probe_after_s": 30,
+     "enrolment_after": "busy",
+     "probe_result_after": "busy",
+     "gate_open_after": true
+    },
+    {
+     "probe_after_s": 3,
+     "enrolment_after": "failed",
+     "probe_result_after": "failed",
+     "gate_open_after": true
+    },
+    {
+     "probe_after_s": 30,
+     "enrolment_after": "provisioned",
+     "probe_result_after": "provisioned",
+     "gate_open_after": true
+    },
+    {
+     "probe_after_s": 600,
+     "enrolment_after": "failed",
+     "probe_result_after": "failed",
+     "gate_open_after": true
+    },
+    {
+     "probe_after_s": 30,
+     "enrolment_after": "failed",
+     "probe_result_after": "failed",
+     "gate_open_after": true
+    }
+   ]
+  },
+  {
+   "id": "refused-closes-at-once",
+   "description": "Any other status is a real refusal and closes an open gate at once.",
+   "mode": "companion",
+   "enrolment": "provisioned",
+   "expect": {
+    "probe_request_hex": "3c2d007f0100017b2276223a312c226964223a2263672d31222c226f70223a226465706c6f796d656e742e676574227d",
+    "gate_open": true,
+    "probe_result": "provisioned",
+    "upstream_publishes": 0
+   },
+   "then": [
+    {
+     "probe_after_s": 600,
+     "enrolment_after": "refused",
+     "probe_result_after": "refused",
+     "gate_open_after": false
+    }
+   ]
   },
   {
    "id": "unsigned-uplink-closes",

@@ -45,6 +45,7 @@ from .framing import (
     encode_mecon_frames,
     encode_serial_frame,
 )
+from .gate import classify_probe, probe_log_fields
 from .logutil import Log
 from .metrics import Metrics
 from .nordic_dfu import BAUD as DFU_BAUD
@@ -179,6 +180,7 @@ class HoldBridge:
         self._gate_closed_for_good = False  # the last deployment.get said "not enrolled" (not merely "asking")
         self._probe_seq = 0
         self._next_probe = 0.0
+        self._gate_failures = 0  # consecutive `failed` answers to deployment.get
 
         # hold side
         self._state = "idle"  # idle | connecting | connected | stopped
@@ -795,6 +797,7 @@ class HoldBridge:
         self._gate_open = False
         self._gate_closed_for_good = False
         self._next_probe = now
+        self._gate_failures = 0  # a new link starts a new count
         self.m.set("serial_connected", 1)
         self.log.info("serial_connected")
         self._dfu_app_returned(now)
@@ -892,6 +895,7 @@ class HoldBridge:
 
     def _gate_result(self, provisioned: bool, reason: str, now: float) -> None:
         g = self.cfg.gate
+        self._gate_failures = 0  # a decided answer ends a run of `failed` answers
         if provisioned:
             if not self._gate_open:
                 self.log.info("downlink_open")
@@ -993,19 +997,27 @@ class HoldBridge:
                 if not self._finish_paging(why):
                     self._next_hello = now + HELLO_RETRY_S
             return
-        res = obj.get("result")
-        state = res.get("state") if isinstance(res, dict) else None
+        self._on_probe_class(obj, now)
+
+    def _on_probe_class(self, obj: dict, now: float) -> None:
+        """busy: ask again soon, change nothing (the hold stays); failed: close only after failed_threshold in a
+        row; provisioned opens; none, corrupt, an unreadable state and any other status close."""
+        label = classify_probe(obj)
+        self.m.inc("downlink_gate_probes_total", 1, label)
         if obj.get("status") != "ok":
-            self.m.inc("downlink_gate_probes_total", 1, "refused")
-            self._gate_result(False, "not_provisioned", now)
-        elif state == "provisioned":
-            self.m.inc("downlink_gate_probes_total", 1, "provisioned")
+            self.log.warn("gate_probe_not_ok", **probe_log_fields(obj))
+        g = self.cfg.gate
+        if label == "provisioned":
             self._gate_result(True, "", now)
-        elif state in ("none", "corrupt"):
-            self.m.inc("downlink_gate_probes_total", 1, state)
-            self._gate_result(False, "not_provisioned", now)
+        elif label == "busy":
+            self._next_probe = now + g.busy_retry_s  # the gate, the relay and the hold stay exactly as they are
+        elif label == "failed":
+            self._gate_failures += 1
+            if self._gate_failures >= g.failed_threshold:
+                self._gate_result(False, "probe_failed", now)
+            else:
+                self._next_probe = now + g.retry_s
         else:
-            self.m.inc("downlink_gate_probes_total", 1, "malformed")
             self._gate_result(False, "not_provisioned", now)
 
     # ---- bootloader DFU (contracts/connector-hold/v1, section 12) --------------------------------

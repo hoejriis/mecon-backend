@@ -69,7 +69,16 @@ GATE = load_fixture("gate.json")["cases"]
 @pytest.mark.parametrize("case", GATE, ids=[c["id"] for c in GATE])
 def test_gate_fixture(case):
     rig = Rig(cfg=make_cfg(mode=case["mode"]), enrolment=case["enrolment"])
-    rig.step(int(10 / 0.05), dt=0.05)
+    answered = {"n": 0, "t": rig.clock.t}
+
+    def run(seconds):  # steps the rig, remembering when the last answer to deployment.get was counted
+        for _ in range(int(seconds / 0.05)):
+            rig.step(1, dt=0.05)
+            n = rig.metrics.total("downlink_gate_probes_total")
+            if n != answered["n"]:
+                answered["n"], answered["t"] = n, rig.clock.t
+
+    run(10)
     exp = case["expect"]
     assert rig.dev.probe_writes[0].hex() == exp["probe_request_hex"]
     assert (rig.metrics.get("downlink_gate_open") == 1) == exp["gate_open"]
@@ -77,6 +86,18 @@ def test_gate_fixture(case):
     assert len(rig.published()) == exp["upstream_publishes"]
     sent = []
     for step in case["then"]:
+        if "probe_after_s" in step:
+            # The next deployment.get, answered as enrolment_after, after_s after the previous answer.
+            label = step["probe_result_after"]
+            asked, before = len(rig.dev.probe_writes), rig.metrics.get("downlink_gate_probes_total", label)
+            rig.dev.enrolment = step["enrolment_after"]
+            run(answered["t"] + step["probe_after_s"] - 0.5 - rig.clock.t)
+            assert len(rig.dev.probe_writes) == asked, "asked too early"
+            run(1.0)
+            assert len(rig.dev.probe_writes) == asked + 1, "not asked in time"
+            assert rig.metrics.get("downlink_gate_probes_total", label) == before + 1, label
+            assert (rig.metrics.get("downlink_gate_open") == 1) == step["gate_open_after"], label
+            continue
         if step["enrolment_after"]:
             rig.dev.enrolment = step["enrolment_after"]
         kind = step["uplink"]
@@ -87,5 +108,5 @@ def test_gate_fixture(case):
         rig.dev.say(ev)
         rig.step(6)
         assert (rig.metrics.get("downlink_gate_open") == 1) == step["gate_open_after"], kind
-    if case["then"]:
+    if sent:
         assert rig.published() == sent  # forwarded unchanged, in order

@@ -93,6 +93,8 @@ class GateConfig:
     recheck_s: float  # while open, ask again this often
     retry_s: float  # while closed, ask again this often
     timeout_s: float  # an unanswered request counts as "closed"
+    busy_retry_s: float = 3.0  # a `busy` answer (the device had no memory) is asked again this soon; nothing changes
+    failed_threshold: int = 3  # this many `failed` answers in a row (storage) close the gate; fewer keep it as it is
 
 
 @dataclass(frozen=True)
@@ -457,14 +459,18 @@ def parse(raw: dict[str, Any]) -> Config:
         )
     _check_unknown(dl, {"enabled", "gate"}, "downlink", errs)
     g = dl.get("gate", {})
-    _check_unknown(g, {"recheck_s", "retry_s", "timeout_s"}, "downlink.gate", errs)
+    _check_unknown(g, {"recheck_s", "retry_s", "timeout_s", "busy_retry_s", "failed_threshold"}, "downlink.gate", errs)
     gate = GateConfig(
         float(_get(g, "recheck_s", (int, float), 600.0, errs, "downlink.gate")),
         float(_get(g, "retry_s", (int, float), 30.0, errs, "downlink.gate")),
         float(_get(g, "timeout_s", (int, float), 8.0, errs, "downlink.gate")),
+        float(_get(g, "busy_retry_s", (int, float), 3.0, errs, "downlink.gate")),
+        _get(g, "failed_threshold", int, 3, errs, "downlink.gate"),
     )
     if not (30 <= gate.recheck_s <= 3600 and 5 <= gate.retry_s <= 600 and 2 <= gate.timeout_s <= 30):
         errs.append("downlink.gate: recheck_s must be 30-3600, retry_s 5-600, timeout_s 2-30")
+    if not (1 <= gate.busy_retry_s <= 60 and 1 <= gate.failed_threshold <= 10):
+        errs.append("downlink.gate: busy_retry_s must be 1-60, failed_threshold 1-10")
     q = raw.get("queues", {})
     _check_unknown(
         q,

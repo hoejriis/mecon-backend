@@ -1,5 +1,5 @@
 {
- "contract": "mecon-usb-connector/1.0.0-draft.1",
+ "contract": "mecon-usb-connector/1.0.0-draft.2",
  "synthetic": true,
  "note": "Synthetic test data. No real device id, key, signature or credential.",
  "direction": "device_to_broker",

@@ -101,9 +101,10 @@
       "properties": { "silent_drops": { "const": "forbidden: every drop increments a metric" } }
     },
     "enrolment_gate": {
-      "type": "object", "required": ["decision", "request", "open_only_when", "closed_when", "ask_when", "own_traffic_upstream", "unsigned_rule"],
+      "type": "object", "required": ["decision", "request", "open_only_when", "classification", "closed_when", "ask_when", "own_traffic_upstream", "unsigned_rule"],
       "properties": {
         "request": { "type": "object", "required": ["op", "text"], "properties": { "op": { "const": "deployment.get" } } },
+        "classification": { "type": "object", "required": ["provisioned", "none_or_corrupt", "malformed", "busy", "failed", "refused"] },
         "closed_when": { "type": "array", "minItems": 6 },
         "ask_when": { "type": "array", "minItems": 5 }
       }

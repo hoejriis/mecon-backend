@@ -966,6 +966,89 @@ def test_gate_is_closed_by_a_device_that_says_none_after_a_reset(mk):
     assert r.m("downlink_gate_probes_total", "none") == 1
 
 
+def probe_answered(r, label, n):
+    r.wait(lambda: r.m("downlink_gate_probes_total", label) == n)
+
+
+def test_conf_28_gate_busy_keeps_the_hold_and_is_asked_again_within_busy_retry_s(mk):
+    r = mk()
+    conn = r.up()
+    r.dev.enrolment = "busy"
+    r.jump(601)
+    probe_answered(r, "busy", 1)
+    r.settle(20)
+    assert not conn.closed.is_set() and r.bridge._state == "connected"
+    assert r.bridge.snapshot()["downlink"] == "open" and r.metrics.total("downlink_gate_closes_total") == 0
+    answer_all(r)
+    req(conn, "b1")  # relaying goes on
+    r.wait(lambda: [rid_of(m) for m in r.dev.messages] == ["b1"])
+    r.dev.enrolment = "provisioned"
+    r.jump(3.5)  # busy_retry_s (3), well before retry_s (30)
+    probe_answered(r, "provisioned", 2)
+    assert not conn.closed.is_set()
+
+
+def test_conf_28_gate_failed_keeps_the_hold_below_the_threshold_and_releases_it_at_it(mk):
+    r = mk()
+    conn = r.up()
+    r.dev.enrolment = "failed"
+    r.jump(601)
+    probe_answered(r, "failed", 1)
+    r.jump(31)
+    probe_answered(r, "failed", 2)
+    r.settle(20)
+    assert not conn.closed.is_set() and r.bridge.snapshot()["downlink"] == "open"
+    r.jump(31)
+    probe_answered(r, "failed", 3)
+    assert conn.closed.wait(3) and conn.close_code == 1000
+    assert r.m("downlink_gate_closes_total", "probe_failed") == 1
+
+
+def test_conf_28_gate_a_provisioned_answer_starts_the_failed_count_again(mk):
+    r = mk()
+    conn = r.up()
+    r.dev.enrolment = "failed"
+    r.jump(601)
+    probe_answered(r, "failed", 1)
+    r.jump(31)
+    probe_answered(r, "failed", 2)
+    r.dev.enrolment = "provisioned"
+    r.jump(31)
+    probe_answered(r, "provisioned", 2)
+    r.dev.enrolment = "failed"
+    r.jump(601)
+    probe_answered(r, "failed", 3)
+    r.jump(31)
+    probe_answered(r, "failed", 4)
+    r.settle(20)
+    assert not conn.closed.is_set() and r.metrics.total("downlink_gate_closes_total") == 0
+
+
+def test_conf_28_gate_an_unknown_status_releases_the_hold_at_once(mk):
+    r = mk()
+    conn = r.up()
+    r.dev.enrolment = "refused"
+    r.jump(601)
+    probe_answered(r, "refused", 1)
+    assert conn.closed.wait(3) and conn.close_code == 1000
+    assert r.m("downlink_gate_closes_total", "not_provisioned") == 1
+
+
+@pytest.mark.parametrize("answer,error", [("busy", "no-memory"), ("failed", "storage")])
+def test_conf_28_gate_a_not_ok_answer_is_logged_with_status_and_error_only(mk, answer, error):
+    r = mk()
+    r.up()
+    r.dev.enrolment = answer
+    r.jump(601)
+    probe_answered(r, answer, 1)
+    lines = [json.loads(ln) for ln in r.logbuf.getvalue().splitlines()]
+    warns = [ln for ln in lines if ln["event"] == "gate_probe_not_ok"]
+    assert len(warns) == 1 and warns[0]["level"] == "warn"
+    assert (warns[0]["status"], warns[0]["error"]) == (answer, error)
+    assert set(warns[0]) == {"ts", "level", "event", "status", "error"}
+    assert "usig" not in r.logbuf.getvalue() and "U1lOVEhFVElD" not in r.logbuf.getvalue()
+
+
 # ---- the token never leaks (credentials) ------------------------------------------------------
 
 

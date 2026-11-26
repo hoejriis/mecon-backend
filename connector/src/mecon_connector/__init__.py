@@ -6,4 +6,4 @@ inspects or rewrites payloads, fabricates acknowledgements or routes.
 """
 
 __version__ = "0.1.0"
-CONTRACT_VERSION = "1.0.0-draft.1"
+CONTRACT_VERSION = "1.0.0-draft.2"

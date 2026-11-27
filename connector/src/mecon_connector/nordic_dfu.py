@@ -23,7 +23,7 @@ import urllib.parse
 import urllib.request
 import zipfile
 from dataclasses import dataclass
-from typing import Callable
+from typing import Any, Callable
 
 from .config import ConfigError, HoldConfig, read_token
 from .transport import SerialGone, SerialLink
@@ -341,14 +341,33 @@ class TransferError(Exception):
     """A transfer attempt that did not complete. The bootloader takes a fresh start at any time."""
 
 
+class TransferInterrupted(Exception):
+    """The transfer was told to stop (the Connector is shutting down) and ended between two frames. It is not a
+    failure of the bootloader and never a success: no stop packet was sent. `sent` data packets were acknowledged
+    of `total`."""
+
+    def __init__(self, sent: int, total: int) -> None:
+        super().__init__("interrupted")
+        self.sent = sent
+        self.total = total
+
+
 class Transfer:
     """Sends one package to a bootloader over `link`. One instance per attempt: the sequence numbers start
-    again at 1 (nrfutil numbers its first packet 1)."""
+    again at 1 (nrfutil numbers its first packet 1).
 
-    def __init__(self, link: SerialLink, clock: Callable[[], float], sleep: Callable[[float], None]) -> None:
+    `stop` (anything with is_set(), such as threading.Event) is looked at before every frame is written, never
+    inside one: once it is set the frame in flight is finished and acknowledged, no further frame is written,
+    and run() raises TransferInterrupted. The caller closes the port."""
+
+    def __init__(self, link: SerialLink, clock: Callable[[], float], sleep: Callable[[float], None],
+                 stop: Any = None) -> None:
         self.link = link
         self.clock = clock
         self.sleep = sleep
+        self.stop = stop
+        self.sent = 0  # data packets acknowledged
+        self.total = 0  # data packets in the package
         self.seq = 0
         self.reader = SlipReader()
         self.resends = 0
@@ -359,6 +378,7 @@ class Transfer:
         frame = encode_packet(self.seq, payload)
         want = (self.seq + 1) % 8
         for attempt in range(SEND_ATTEMPTS):
+            self._check_stop()
             if attempt:
                 self.resends += 1
             try:
@@ -368,6 +388,10 @@ class Transfer:
             if self._wait_ack(want):
                 return
         raise TransferError("no-ack")
+
+    def _check_stop(self) -> None:
+        if self.stop is not None and self.stop.is_set():
+            raise TransferInterrupted(self.sent, self.total)
 
     def _wait_ack(self, want: int) -> bool:
         deadline = self.clock() + ACK_TIMEOUT_S
@@ -389,15 +413,17 @@ class Transfer:
 
     def run(self, pkg: Package, progress: Callable[[int, int], None] | None = None) -> None:
         size = len(pkg.image)
+        chunks = data_payloads(pkg.image)
+        self.total = len(chunks)
         self.send(start_payload(size))
         self.sleep(erase_wait_s(size))
         self.send(init_payload(pkg.init))
         self.sleep(INIT_PACKET_WAIT_S)
-        chunks = data_payloads(pkg.image)
         for count, payload in enumerate(chunks):
             self.send(payload)
+            self.sent = count + 1
             if progress is not None:
-                progress(count + 1, len(chunks))
+                progress(self.sent, self.total)
             # nrfutil: the bootloader erases and writes a flash page per 8 packets (4096 bytes) with its CPU
             # blocked; it waits after packets 0, 8, 16 ...
             if count % 8 == 0:
@@ -406,5 +432,6 @@ class Transfer:
         self.send(stop_payload())
 
 
-def run_transfer(link: SerialLink, pkg: Package, clock: Callable[[], float], sleep: Callable[[float], None]) -> None:
-    Transfer(link, clock, sleep).run(pkg)
+def run_transfer(link: SerialLink, pkg: Package, clock: Callable[[], float], sleep: Callable[[float], None],
+                 stop: Any = None, progress: Callable[[int, int], None] | None = None) -> None:
+    Transfer(link, clock, sleep, stop).run(pkg, progress)

@@ -30,7 +30,7 @@ import threading
 import time
 from collections import deque
 from dataclasses import dataclass
-from typing import Callable
+from typing import Any, Callable
 
 from .config import Config
 from .framing import (
@@ -49,7 +49,16 @@ from .gate import BusyRun, classify_probe, probe_log_fields
 from .logutil import Log
 from .metrics import Metrics
 from .nordic_dfu import BAUD as DFU_BAUD
-from .nordic_dfu import Package, PackageError, TransferError, make_fetcher, read_package, run_transfer, verify_package
+from .nordic_dfu import (
+    Package,
+    PackageError,
+    Transfer,
+    TransferError,
+    TransferInterrupted,
+    make_fetcher,
+    read_package,
+    verify_package,
+)
 from .serial_link import SelectorOverlap, make_opener
 from .transport import (
     SerialAmbiguous,
@@ -83,6 +92,7 @@ CONNECT_GRACE_S = 5.0  # beyond the transport's own connect timeout
 JOB_RE = re.compile(r"^[0-9A-Za-z][0-9A-Za-z._:-]{0,63}$")  # a DFU job id: one URL path segment
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 BOOT_LOOK_S = 0.5  # how often the bootloader port is looked for
+DFU_PROGRESS_EVERY = 64  # data packets between dfu_progress lines
 BOOT_SETTLE_S = 1.0  # before a fresh transfer attempt on the same bootloader
 DFU_KEEPS = ("waiting-bootloader", "transferring", "rebooting", "resuming", "failed")  # phases that keep the socket
 DFU_RECONNECT = ("waiting-bootloader", "transferring", "rebooting", "failed")  # reconnect a lost socket, no device link
@@ -104,8 +114,11 @@ class _Req:
     at: float
 
 
-def _thread_runner(fn: Callable[[], None]) -> None:
-    threading.Thread(target=fn, name="dfu", daemon=True).start()
+def _thread_runner(fn: Callable[[], None]) -> threading.Thread:
+    """Runs fn on a daemon thread and returns it, so a transfer can be waited for (bounded) at shutdown."""
+    t = threading.Thread(target=fn, name="dfu", daemon=True)
+    t.start()
+    return t
 
 
 def _is_int(v: object) -> bool:
@@ -132,7 +145,7 @@ class HoldBridge:
         clock: Callable[[], float] = time.monotonic,
         dfu_fetcher: Callable[[str], bytes] | None = None,
         boot_opener: SerialOpener | None = None,
-        runner: Callable[[Callable[[], None]], None] | None = None,
+        runner: Callable[[Callable[[], None]], Any] | None = None,
         sleep: Callable[[float], None] = time.sleep,
     ) -> None:
         assert cfg.hold is not None
@@ -205,6 +218,8 @@ class HoldBridge:
         self._boot_opener = boot_opener or (make_opener(dc.bootloader, DFU_BAUD) if dc else None)
         self._runner = runner or _thread_runner
         self._sleep = sleep
+        self._dfu_halt = threading.Event()  # set at shutdown: a running transfer stops before its next frame
+        self._dfu_writer: Any = None  # what the runner returned for the running transfer (a thread), to wait for
         self._dfu_phase = "none"  # none | armed | waiting-bootloader | transferring | rebooting | resuming | failed
         self._dfu_job: dict | None = None  # {"job", "sha256", "size"} as the Backend sent them
         self._dfu_armed_at = 0.0
@@ -257,6 +272,7 @@ class HoldBridge:
         if self._stopped:
             return
         self._stopped = True
+        self._dfu_halt.set()  # a transfer ends on its current frame; the writer closes the bootloader port itself
         self._dfu_gen += 1  # a fetch or transfer still running reports into nothing
         self.transport.close(1000, "stopped")
         if self._state != "stopped":
@@ -272,6 +288,16 @@ class HoldBridge:
         self._update_gauges(self.clock())
         self.m.set("serial_connected", 0)
         self.m.set("hold_connected", 0)
+        self._wait_for_writer()
+
+    def _wait_for_writer(self) -> None:
+        """Waits, at most dfu.stop_wait_s, for a running transfer to stop and close its port. A writer that
+        hangs past the bound is left (a daemon thread): the process still exits."""
+        w, dc = self._dfu_writer, self._dfu_cfg
+        if w is not None and dc is not None and hasattr(w, "join"):
+            w.join(dc.stop_wait_s)
+            if w.is_alive():
+                self.log.warn("dfu_writer_not_stopped", wait_s=dc.stop_wait_s)
 
     # ---- hold events -------------------------------------------------------------------
 
@@ -1205,11 +1231,22 @@ class HoldBridge:
         self._dfu_phase = "transferring"
         self._dfu_state("transferring")
         gen, pkg, events, clock, sleep = self._dfu_gen, self._dfu_pkg, self._events, self.clock, self._sleep
+        halt, log, jid = self._dfu_halt, self.log, self._dfu_job["job"]
+        if sleep is time.sleep:
+            sleep = halt.wait  # a long wait (the erase) ends at once when shutdown comes
+
+        def progress(sent: int, total: int) -> None:
+            if sent % DFU_PROGRESS_EVERY == 0 or sent == total:
+                log.info("dfu_progress", job=jid, sent=sent, total=total)
 
         def work() -> None:
             err: str | None = None
+            tr = Transfer(link, clock, sleep, halt)
             try:
-                run_transfer(link, pkg, clock, sleep)
+                tr.run(pkg, progress)
+            except TransferInterrupted as e:
+                log.warn("dfu_interrupted", job=jid, sent=e.sent, total=e.total)
+                err = "interrupted"
             except TransferError as e:
                 err = str(e) or "transfer"
             except Exception:  # noqa: BLE001
@@ -1218,7 +1255,7 @@ class HoldBridge:
                 link.close()
             events.append(("dfu", gen, "transfer", err if err is not None else ""))
 
-        self._runner(work)
+        self._dfu_writer = self._runner(work)
 
     def _on_transfer_done(self, now: float, err: str | None) -> None:
         dc = self._dfu_cfg

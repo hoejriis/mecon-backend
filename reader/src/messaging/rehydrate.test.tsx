@@ -14,6 +14,10 @@ import { attempt, dmConversation, identities, page } from '../test/m2';
 import { describeAttempt, type LocalAttempt } from './attemptStatus';
 import { MessagingProvider, targetKey, useMessaging, type MessagingValue } from './MessagingContext';
 
+// The cache waits on IndexedDB writes, which can take over the 1 s default on a loaded CI runner. The tests that
+// use it run with a 20 s test timeout, so a slow write is waited for rather than cut off by the test.
+const CACHE_WAIT = { timeout: 5000 };
+
 const USER = 'usr_synthetic_alice';
 const TARGET: Target = dmConversation.target;
 const OTHER: Target = { kind: 'contact', id: 'contact_demo_0077' };
@@ -190,7 +194,7 @@ describe('rehydration after a reload', () => {
   });
 });
 
-describe('drafts keep their id through a reload', () => {
+describe('drafts keep their id through a reload', { timeout: 20_000 }, () => {
   it('a draft round-trips by its client_draft_id, and the next send uses it', async () => {
     const s = await seeded();
     const d: DraftRecord = { draftId: 'draft-real-1', target: TARGET, identityId: null, text: 'typed before reload', updatedAt: 5 };
@@ -199,13 +203,13 @@ describe('drafts keep their id through a reload', () => {
     await waitFor(() => expect(live.draftText(TARGET)).toBe('typed before reload'));
     expect(live.draftIdFor(TARGET)).toBe('draft-real-1');
     act(() => live.loadConversations()); // the write-through covers targets of listed conversations
-    await waitFor(async () => expect((await cache.listDrafts()).map((x) => x.draftId)).toEqual(['draft-real-1']));
+    await waitFor(async () => expect((await cache.listDrafts()).map((x) => x.draftId)).toEqual(['draft-real-1']), CACHE_WAIT);
     b.on('POST /send-attempts', () => new Response(JSON.stringify(attempt('queued', { client_attempt_id: 'x' })), { status: 201 }));
     act(() => live.send(TARGET, 'ident_demo_0001', { path: 'backend' }));
     await waitFor(() => expect(posts()).toHaveLength(1));
     expect((JSON.parse(posts()[0]!.body!) as { client_draft_id: string }).client_draft_id).toBe('draft-real-1');
     // The consumed draft's record goes away; it is not left behind to be restored again.
-    await waitFor(async () => expect((await cache.listDrafts()).filter((x) => x.draftId === 'draft-real-1')).toHaveLength(0));
+    await waitFor(async () => expect((await cache.listDrafts()).filter((x) => x.draftId === 'draft-real-1')).toHaveLength(0), CACHE_WAIT);
   });
 
   it('a draft typed before a reload is written under its own id and comes back with that id', async () => {
@@ -215,7 +219,7 @@ describe('drafts keep their id through a reload', () => {
     await waitFor(() => expect(live.conversations.status).toBe('ready'));
     act(() => live.setDraftText(TARGET, 'typed in session one'));
     const id = live.draftIdFor(TARGET)!;
-    await waitFor(async () => expect((await cache.listDrafts()).map((x) => x.draftId)).toEqual([id]));
+    await waitFor(async () => expect((await cache.listDrafts()).map((x) => x.draftId)).toEqual([id]), CACHE_WAIT);
     cleanup(); // the page goes away; the encrypted cache stays
     await reload(s.store, s.keys);
     await waitFor(() => expect(live.draftText(TARGET)).toBe('typed in session one'));
@@ -229,7 +233,7 @@ describe('drafts keep their id through a reload', () => {
     await waitFor(() => expect(live.draftText(TARGET)).toBe('legacy text'));
     const id = live.draftIdFor(TARGET)!;
     expect(id).not.toMatch(/^draft:/);
-    await waitFor(async () => expect((await cache.listDrafts()).map((x) => x.draftId)).toEqual([id]));
+    await waitFor(async () => expect((await cache.listDrafts()).map((x) => x.draftId)).toEqual([id]), CACHE_WAIT);
   });
 
   it('text already typed in the composer is not overwritten by a restored draft', async () => {

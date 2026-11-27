@@ -332,6 +332,8 @@ HOLD_MUTANTS = [
      [('            finally:\n                link.close()\n            events.append(("dfu", gen, "transfer"', '            finally:\n                pass\n            events.append(("dfu", gen, "transfer"')]),
     ("z3", "the stop packet is sent anyway when the stop comes after the last data packet", "nordic_dfu.py",
      [("        if self.stop is not None and self.stop.is_set():\n            raise TransferInterrupted", "        if self.stop is not None and self.stop.is_set() and self.sent < self.total:\n            raise TransferInterrupted")]),
+    ("z7", "the real sleep is not swapped for the stop signal (a stop sits out the erase wait)", "hold.py",
+     [("            sleep = halt.wait  # a long wait", "            pass  # a long wait")]),
     ("z4", "shutdown waits for the writer without a bound", "hold.py",
      [("            w.join(dc.stop_wait_s)", "            w.join()")]),
     ("z5", "dfu_interrupted carries the wrong packet count", "hold.py",

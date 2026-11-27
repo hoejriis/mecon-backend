@@ -136,3 +136,32 @@ def test_dfu_progress_every_64_data_packets_and_at_the_end(mk, n_data, expect):
     assert all(g["job"] == "fw-1" and g["total"] == n_data for g in got)
     assert not any("bytes" in g or "wire" in g for g in got)
     assert lines(r, "dfu_interrupted") == []
+
+
+def test_with_the_real_sleep_a_stop_during_the_erase_wait_ends_it_at_once(mk, monkeypatch):
+    """The bridge's default sleep is time.sleep; the transfer then waits on the stop signal instead, so a stop
+    during the erase wait ends it at once: only the start packet is written and the writer closes the port well
+    inside stop_wait_s (with a plain time.sleep it would sit out the 30 s erase and be left behind)."""
+    import mecon_connector.nordic_dfu as nd
+
+    monkeypatch.setattr(nd, "erase_wait_s", lambda size: 30.0)
+    boot = CutBootloader(cut_at=-1)  # never blocks inside a frame
+    r = mk(runner=thread_runner)
+    r.bridge._sleep = time.sleep  # the default, as in production
+    conn = r.up()
+    armed(r, conn)
+    reset_into_bootloader(r)
+    r.boot.appear(boot)
+    r.jump(0.6)
+    end = time.monotonic() + 5
+    while boot.frames < 1 and time.monotonic() < end:
+        time.sleep(0.005)
+    assert boot.frames == 1, "the start packet was not written"
+    t0 = time.monotonic()
+    r.bridge.stop()
+    took = time.monotonic() - t0
+    assert took < 2.0, f"stop() took {took:.2f} s: the erase wait did not end on the stop signal"
+    assert boot.frames == 1  # nothing after the start packet: no init, data or stop packet
+    assert boot.closed
+    assert lines(r, "dfu_writer_not_stopped") == []
+    assert len(lines(r, "dfu_interrupted")) == 1

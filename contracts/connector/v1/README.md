@@ -1,6 +1,6 @@
 # USB Connector contract v1 (draft)
 
-The versioned interface between a MECON USB device and an MQTT broker, as carried by the standalone [USB Connector](../../../connector/README.md). Version `1.0.0-draft.2`. Draft 2 classifies the device's answer to the gate's `deployment.get`: `busy` and `failed` no longer read as not provisioned (see the enrolment gate below). **Draft:** the topic and ACL mapping is the Backend's (relayed for stage C3); nothing here has been verified against hardware or the real Backend yet. Fixtures are synthetic.
+The versioned interface between a MECON USB device and an MQTT broker, as carried by the standalone [USB Connector](../../../connector/README.md). Version `1.0.0-draft.2`. Draft 2 classifies the device's answer to the gate's `deployment.get`: `busy` and `failed` no longer read as not provisioned (see the enrolment gate below). **Draft:** the topic and ACL mapping is the Backend's (relayed for stage C3); the MQTT mapping has not been verified against hardware or the real Backend yet. Fixtures are synthetic.
 
 | File | What it is |
 | --- | --- |
@@ -8,7 +8,7 @@ The versioned interface between a MECON USB device and an MQTT broker, as carrie
 | `mapping.schema.json` | JSON Schema for `mapping.json`. |
 | `fixtures/upstream.json` | Serial bytes from a device and the MQTT publishes they must produce, with the topic each goes to (28 cases, each replayed at several chunkings). |
 | `fixtures/downlink.json` | A broker message on `req` and the exact serial bytes it becomes, or the reason it is dropped (7 cases, run with the gate open). |
-| `fixtures/gate.json` | The enrolment gate: how each device answer to `deployment.get` opens or keeps closed downlink, and how an unsigned uplink or a new epoch closes it, and how `busy`, `failed` and other statuses are treated on a recheck (16 cases). |
+| `fixtures/gate.json` | The enrolment gate: how each device answer to `deployment.get` opens or keeps closed downlink, and how an unsigned uplink or a new epoch closes it, and how `busy`, `failed` and other statuses are treated on a recheck (19 cases). |
 | `fixtures.schema.json` | JSON Schema for the fixtures. |
 
 All fixture data is synthetic: no real device id, key, signature or credential. Regenerate with `python3 connector/scripts/gen_fixtures.py`; the generator builds the bytes from the documented layout without importing the Connector, and one case reproduces the public firmware's own framing fixture (`docs/contract/fixtures/framing.json`) as an independent check.

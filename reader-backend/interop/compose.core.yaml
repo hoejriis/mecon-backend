@@ -1,0 +1,66 @@
+# One-off interop run of reader-core v1: a real core and a driver on one internal network, nothing published.
+# Driven by run_core.sh, which sets every ${...} below. The core's own settings come from CORE_ENV_FILE. All values are made up.
+name: ${INTEROP_PROJECT:-reader-core-interop}
+
+x-token: &token
+  type: bind
+  source: ${INTEROP_TOKEN_FILE:?set by run_core.sh}
+  target: /run/interop/service_token
+  read_only: true
+
+services:
+  # The core, started by the launcher the runner supplies (CORE_LAUNCHER): it serves the ops agent on a unix socket
+  # in the core's own process, then starts the core. The world actions of the cases need that: the core's rate
+  # limits, mailer and database handle live in its process.
+  core:
+    image: ${CORE_IMAGE:?set CORE_IMAGE, or CORE_DIR (run_core.sh builds it)}
+    command: ["python3", "/ops-impl/${CORE_LAUNCHER_FILE:?set by run_core.sh}"]
+    env_file: ${CORE_ENV_FILE:?set by run_core.sh}   # the core's own settings, supplied by whoever runs this
+    environment:
+      CORE_OPS: /ops-impl/${CORE_OPS_FILE:?set by run_core.sh}
+      OPS_SOCKET: /ops/ops.sock
+    volumes:
+      - { <<: *token }
+      - core-data:/data   # the env file keeps the core's database under /data
+      - ./:/interop:ro
+      - ${CORE_OPS_DIR:?set by run_core.sh}:/ops-impl:ro
+      - ops:/ops
+    networks: [internal]
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import os, stat, sys, urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=8).status == 200 and stat.S_ISSOCK(os.stat('/ops/ops.sock').st_mode) else 1)"]
+      interval: 5s
+      timeout: 10s
+      retries: 60
+      start_period: 20s
+
+  # Idle until run_core.sh execs the replay in it (`python /app/reader-backend/interop/core_driver.py`).
+  driver:
+    image: reader-core-interop-driver:local
+    build:
+      context: ../..
+      dockerfile: reader-backend/interop/Dockerfile
+    user: "${INTEROP_UID:-1000}:${INTEROP_GID:-1000}"
+    command: ["sleep", "infinity"]
+    environment:
+      CORE_URL: http://core:8000/internal/reader-core/v1
+      SERVICE_TOKEN_FILE: /run/interop/service_token
+      OPS_SOCKET: /ops/ops.sock
+    volumes:
+      - { <<: *token }
+      - ops:/ops
+    depends_on:
+      core: { condition: service_healthy }
+    networks: [internal]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import mecon_reader_backend"]
+      interval: 3s
+      timeout: 5s
+      retries: 10
+
+networks:
+  internal:
+    internal: true   # no route out and nothing published: the cases reach the core only from inside
+
+volumes:
+  core-data: {}
+  ops: {}

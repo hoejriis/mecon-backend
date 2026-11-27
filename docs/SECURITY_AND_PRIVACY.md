@@ -26,7 +26,7 @@ Invitation-only multi-user service; passkeys and magic links (when email configu
 
 ## Transport and recovery
 
-HTTPS/WSS for Reader APIs, signed device authority separate from broker auth, mutual authenticated Backend federation, protected continuity packages and separately controlled cold Recovery. No public secrets, private instance addresses, production messages or credentials in public docs/issues.
+HTTPS for Reader APIs (REST, with server-sent events for updates), signed device authority separate from broker auth, mutual authenticated Backend federation, protected continuity packages and separately controlled cold Recovery. The internal contract routes between a Reader facade and a core (session lookup and reader-core, gated by a per-deployment service token) belong on a private network only and must never be reachable through a public reverse proxy; the facade reads that token from a mode-600 file. No public secrets, private instance addresses, production messages or credentials in public docs/issues.
 
 ## Reader MVP2 offline continuity and desktop USB (approved target)
 

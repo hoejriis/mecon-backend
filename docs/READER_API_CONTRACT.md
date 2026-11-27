@@ -1,6 +1,6 @@
-# Reader API contract — target v1
+# Reader API contract — v1
 
-This public contract defines the interface between the MECON Reader and an authorized MECON Backend. It is a **target specification**, not an assertion that endpoints are already available. MeshCore native device operations remain governed by the firmware contract.
+This public contract defines the interface between the MECON Reader and an authorized MECON Backend. The machine-readable form is [`contracts/reader-api/v1/openapi.yaml`](../contracts/reader-api/v1/openapi.yaml), version `1.0.0-draft.11`, with replayable conformance cases. It is a **specification**, not an assertion that any Backend from this repository serves it: the hosted Backend serves the session operations the restricted Reader uses, and the public facade in `reader-backend/` passes the cases against fakes and a stub only. MeshCore native device operations remain governed by the firmware contract.
 
 ## Transport and authentication
 
@@ -18,6 +18,10 @@ This public contract defines the interface between the MECON Reader and an autho
 
 | Method/path | Purpose |
 |---|---|
+| `GET /health` | Unauthenticated liveness and the deployed commit |
+| `POST /login` | Request a magic-link login for an existing account; the same 202 whether or not the account exists |
+| `GET /login/{request_id}` | Poll the request; the session cookie is set on the single `approved` answer |
+| `POST /logout` | Revoke the current session server-side |
 | `GET /session` | Current user, authorized scopes, API capabilities and contract version |
 | `GET /devices` | Assigned Companion IDs, role, capability evidence, battery, reachability and freshness |
 | `GET /identities` | Authorized messaging identities and assigned device relationships |
@@ -30,6 +34,7 @@ This public contract defines the interface between the MECON Reader and an autho
 | `POST /send-attempts` | Explicit Backend-path send with idempotency key, selected identity, target and content |
 | `GET /send-attempts/{id}` | Send attempt and evidenced state |
 | `GET /events?cursor=` (or `Last-Event-ID`) | SSE authorized incremental updates |
+| `POST /leases`, `GET /leases/keys` | Offline lease issue or renew, and its verification keys (see below) |
 
 All list responses carry `items`, `next_cursor` (nullable) and `as_of`. IDs are opaque strings; timestamps UTC ISO-8601. `/session` advertises capability flags and contract minor version. Contract major version changes require a new prefix.
 

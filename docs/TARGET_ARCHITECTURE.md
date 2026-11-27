@@ -1,6 +1,6 @@
 # Target architecture — public MECON application
 
-**Target specification, not current implementation.** MVP1 was only the Device User Reader GUI. As of 2026-11-25 the staged migration of Backend blocks into this repository is approved and under way (see [migration status](MIGRATION_STATUS.md)); it does not mean the public Backend replaces the hosted Backend, and the later architecture below remains target design until evidenced.
+**Target specification, not current implementation.** MVP1 was only the Device User Reader GUI. As of 2026-11-27 the staged migration of Backend blocks into this repository is approved and under way (see [migration status](MIGRATION_STATUS.md)). So far this repository holds contracts and conformance cases, the Reader, the USB Connector, the observation capture and processing services, and a Reader API facade (`reader-backend/`) that serves REST and server-sent events and reaches a core only through the session-lookup and reader-core contracts. There is no public core implementation yet, and nothing here is deployed as a Backend. The migration does not mean the public Backend replaces the hosted Backend, and the later architecture below remains target design until evidenced.
 
 ## Design goals
 
@@ -20,7 +20,7 @@ flowchart TB
   end
   RF["MeshCore Companions / Repeaters / Room servers"]
   OTHER["Other Backend in same Deployment"]
-  R <-->|"HTTPS REST + WebSocket"| B
+  R <-->|"HTTPS REST + SSE"| B
   R <-->|"supported local BLE/USB"| BLE
   BLE <--> RF
   B <--> DB
@@ -33,10 +33,12 @@ flowchart TB
 
 ## Components and boundaries
 
-1. **Backend + Reader:** one deployed application. Backend is a Python/FastAPI modular monolith, SQLite application database, versioned HTTPS REST/WebSocket APIs, account/session/authorization, messages/observations/history, device orchestration, and federation. Reader is a TypeScript/React client served by Backend. An offline-capable shell is possible later; the Reader is not a separately hosted server.
+1. **Backend + Reader:** one deployed application. Backend is a Python/FastAPI modular monolith (target; the facade in this repository is Starlette), SQLite application database, versioned HTTPS REST and server-sent events (SSE) APIs, not WebSocket, account/session/authorization, messages/observations/history, device orchestration, and federation. Reader is a TypeScript/React client served by Backend. An offline-capable shell is possible later; the Reader is not a separately hosted server.
 2. **MQTT broker:** standard Mosquitto with transparent transport and topic ACLs; no message decryption, user roles, device identity substitution or business logic. Devices use one active broker profile; Backends may attach to several brokers.
 3. **USB Connector:** transparent serial-to-MQTT transport for local attached devices, not an identity authority, packet inspector or route planner. Direct browser BLE/USB is a separate Reader-device adapter.
 4. **Firmware:** native MeshCore continues working without MECON. The independent [mecon-firmware](https://github.com/hoejriis/mecon-firmware) project defines optional managed-device capabilities, not a requirement to use MECON messaging.
+
+**Reader facade and core (staged).** The target Reader API is served by a facade that owns the HTTP side (cookie, CSRF and Origin checks, request validation, error bodies, the SSE stream) and hands everything else to a core through two contracts: session lookup and reader-core. The facade's `HttpSessionLookup` and `HttpReaderCore` adapters are merged; the core (accounts, identity, key custody, domain persistence) is the part that moves last. The internal contract routes (service-token gated, not user-facing) are for a private network only: they must never be reachable through a public reverse proxy.
 
 ## Identity and trust
 
@@ -44,7 +46,7 @@ Companion remains canonical custodian of its MeshCore private key. A separately 
 
 ## Messaging, observations and authorization
 
-The Backend deduplicates packets while preserving independent reception evidence and provenance. Raw observations never confer message decryption rights. Device Users read messages addressed to public channels or their authorized identities/private channels; they do not receive a fleet packet-explorer entitlement. Fleet Owner and Instance Admin authority cannot bypass another user's private-message access. See [roles](ROLES_AND_PERMISSIONS.md), [User](USER_EXPERIENCE.md), [Fleet Owner](FLEET_OWNER_EXPERIENCE.md), [Admin](ADMIN_EXPERIENCE.md).
+The Backend deduplicates packets while preserving independent reception evidence and provenance. Raw observations never confer message decryption rights. Observation reads serve direct receptions only; an unreported value is null, never an estimate. The anonymous public map is a separate, polled feed (`/api/public/v1`, specified by `contracts/public-map/v1`), not SSE and not part of the authorized projection. Device Users read messages addressed to public channels or their authorized identities/private channels; they do not receive a fleet packet-explorer entitlement. Fleet Owner and Instance Admin authority cannot bypass another user's private-message access. See [roles](ROLES_AND_PERMISSIONS.md), [User](USER_EXPERIENCE.md), [Fleet Owner](FLEET_OWNER_EXPERIENCE.md), [Admin](ADMIN_EXPERIENCE.md).
 
 ## Continuity, offline and federation
 

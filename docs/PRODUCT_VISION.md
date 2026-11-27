@@ -30,7 +30,7 @@ A Fleet Owner assigns each device to at most one Device User, including themselv
 
 ## What MVP1 is not
 
-Not a new firmware protocol, standalone fully offline Reader, Fleet Owner/Admin GUI, observation explorer, OTA manager, public Backend rewrite, or replacement for the stock MeshCore app or for MeshCore One. Direct BLE in Bluefy may work while Backend is unavailable, but **offline authorization, secure local private-history storage and Backend reconciliation are later product work**. Do not market this MVP as full offline operation.
+Not a new firmware protocol, standalone fully offline Reader, Fleet Owner/Admin GUI, observation explorer, OTA manager, public Backend rewrite, or replacement for the stock MeshCore app or for MeshCore One. Direct BLE in Bluefy may work while Backend is unavailable, but **offline authorization, secure local private-history storage and Backend reconciliation are later product work** (the restricted Reader implements an offline cache and leases that still await acceptance; see [availability](DEPLOYMENTS.md#restricted-reader-deployment-and-availability)). Do not market this MVP as full offline operation.
 
 ## Outcome
 

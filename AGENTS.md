@@ -7,7 +7,9 @@ Human contributor detail lives in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
 
 - `reader/`: the MECON Reader web app (React, TypeScript, Vite).
 - `connector/`: the standalone USB serial-to-MQTT Connector (Python). See `connector/README.md`.
-- `contracts/`: versioned API contracts (OpenAPI; the USB Connector's JSON Schema contract in `contracts/connector/v1`, the WebSocket hold in `contracts/connector-hold/v1`, the receive-only observation subscription profile in `contracts/observation-subscription/v1`, and the raw capture append in `contracts/raw-capture/v1`) and synthetic fixtures.
+- `contracts/`: versioned API contracts (OpenAPI; the USB Connector's JSON Schema contract in `contracts/connector/v1`, the WebSocket hold in `contracts/connector-hold/v1`, the receive-only observation subscription profile in `contracts/observation-subscription/v1`, and the raw capture append in `contracts/raw-capture/v1`; also the observation reads in `contracts/observations/v1`, the anonymous public map feed in `contracts/public-map/v1`, the facade-to-core calls in `contracts/session-lookup/v1` and `contracts/reader-core/v1`, and the job lifecycle and device dispatch drafts) and synthetic fixtures.
+- `capture/`, `processing/`: the public receive-only observation capture service and the processor that turns its archive into receptions (Python; each has a README and a mutation script).
+- `reader-backend/`: the Reader API facade (Python/Starlette): REST plus SSE, reaching a core only through the session-lookup and reader-core contracts. Not deployed.
 - `deploy/`: Caddy config and security headers shared by the container image and static hosts.
 - `docs/`: product, architecture and protocol documentation. `docs/ARCHITECTURE_DECISIONS.md` is the decision register; read it before changing behaviour it covers.
 
@@ -20,6 +22,7 @@ cd connector && pip install --require-hashes --no-deps -r requirements-dev.lock 
 npm run typecheck && npm run lint && npm test && npm run build
 npx playwright install chromium && npm run e2e         # headless
 docker build -f reader/Dockerfile .                     # from the repo root
+# capture/, processing/, reader-backend/: the same pip command and `python -m pytest -q`, then `python scripts/mutation.py`
 ```
 
 ## Rules that tests and review enforce

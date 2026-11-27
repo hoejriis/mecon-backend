@@ -38,6 +38,7 @@ token_presentation = "header"
 # attempts = 3                # transfer attempts before the job is reported failed
 # package_max_bytes = 2097152
 # failed_hold_s = 1800        # how long a failed job keeps the hold without a device link
+# stop_wait_s = 5             # at shutdown: how long to wait for a running transfer to finish its frame and close the port
 
 # The enrolment gate (deployment.get). Requests are relayed only while the device says "provisioned";
 # these only tune how often it asks and how a transient answer is treated (see the README).

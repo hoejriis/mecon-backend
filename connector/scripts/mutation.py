@@ -187,7 +187,7 @@ MUTANTS = [
 # Mutants of the WebSocket hold transport (hold.py, hold_transport.py, the hold config and exit status). They can
 # only change what the hold tests cover, so each runs just those files.
 HOLD_TESTS = ["tests/test_hold.py", "tests/test_hold_main.py", "tests/test_hold_contract_fixtures.py", "tests/test_hold_tls.py",
-              "tests/test_dfu.py", "tests/test_nordic_dfu.py"]
+              "tests/test_dfu.py", "tests/test_nordic_dfu.py", "tests/test_dfu_stop.py"]
 HOLD_MUTANTS = [
     ("h1", "the wire is re-serialised before it reaches the device", "hold.py",
      [("if self._write_request(r.wire, now):", "if self._write_request(json.dumps(json.loads(r.wire)).encode(), now):")]),
@@ -323,6 +323,29 @@ HOLD_MUTANTS = [
     ("x12", "an application port the bootloader selector also takes is used while a DFU waits", "hold.py",
      [("            self.opener.avoid = dc.bootloader if dc is not None and self._dfu_phase in DFU_RECONNECT else None",
        "            self.opener.avoid = None")]),
+    # a stop during a bootloader transfer
+    ("z1", "the transfer ignores the stop signal (no check before a frame)", "nordic_dfu.py",
+     [("        if self.stop is not None and self.stop.is_set():\n            raise TransferInterrupted", "        if False:\n            raise TransferInterrupted")]),
+    ("z1b", "shutdown never sets the transfer's stop signal", "hold.py",
+     [("        self._dfu_halt.set()  # a transfer ends", "        pass  # a transfer ends")]),
+    ("z2", "the bootloader port is not closed by the writer", "hold.py",
+     [('            finally:\n                link.close()\n            events.append(("dfu", gen, "transfer"', '            finally:\n                pass\n            events.append(("dfu", gen, "transfer"')]),
+    ("z3", "the stop packet is sent anyway when the stop comes after the last data packet", "nordic_dfu.py",
+     [("        if self.stop is not None and self.stop.is_set():\n            raise TransferInterrupted", "        if self.stop is not None and self.stop.is_set() and self.sent < self.total:\n            raise TransferInterrupted")]),
+    ("z4", "shutdown waits for the writer without a bound", "hold.py",
+     [("            w.join(dc.stop_wait_s)", "            w.join()")]),
+    ("z5", "dfu_interrupted carries the wrong packet count", "hold.py",
+     [('sent=e.sent, total=e.total)', 'sent=e.sent + 1, total=e.total)')]),
+    ("z5b", "the acknowledged data packets are not counted as they go", "nordic_dfu.py",
+     [("            self.sent = count + 1\n", "            self.sent = count\n")]),
+    ("z5c", "dfu_interrupted carries the wrong total", "nordic_dfu.py",
+     [("        self.total = len(chunks)\n", "        self.total = len(chunks) - 1\n")]),
+    ("z6", "dfu_progress cadence is off by one", "hold.py",
+     [("            if sent % DFU_PROGRESS_EVERY == 0 or sent == total:", "            if (sent + 1) % DFU_PROGRESS_EVERY == 0 or sent == total:")]),
+    ("z6b", "dfu_progress is not logged at the end", "hold.py",
+     [("            if sent % DFU_PROGRESS_EVERY == 0 or sent == total:", "            if sent % DFU_PROGRESS_EVERY == 0:")]),
+    ("z6c", "dfu_progress is logged for every packet", "hold.py",
+     [("            if sent % DFU_PROGRESS_EVERY == 0 or sent == total:", "            if True:")]),
     ('gp1h', 'a busy answer to deployment.get is read as not provisioned (the code before Issue 151)', 'hold.py',
      [('        if label == "busy":\n            # The gate', '        if label == "busy":\n            self._gate_result(False, "not_provisioned", now)\n            return\n        if label == "busy":\n            # The gate')]),
     ('gp2h', 'no quick retry after a busy answer (asked again on the normal interval)', 'hold.py',

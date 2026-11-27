@@ -15,7 +15,7 @@ import sys
 import zipfile
 
 OUT = pathlib.Path(__file__).resolve().parents[2] / "contracts" / "connector-hold" / "v1" / "fixtures"
-CONTRACT = "mecon-connector-hold/1.0.0-draft.4"
+CONTRACT = "mecon-connector-hold/1.0.0-draft.5"
 
 
 def j(o):
@@ -237,6 +237,30 @@ def build():
          {"step": "send", "frame": relay_dfu},
          {"step": "send", "frame": {"type": "iface_hello", "ref": 3, "hello": hello2}},
          {"step": "recv", "frame": {"type": "iface_ack", "of": "iface_hello", "ref": 3, "outcome": "recorded"}}])
+    stranded = {"type": "dfu_state", "job": F_JOB, "state": "needs-uf2-recovery", "sent": 689, "total": 1358}
+    out["I-needs-uf2-recovery.json"] = fixture(
+        "I", "A board that needs a UF2 copy, reported on a new socket and ended by the hello",
+        "A serial DFU was interrupted after data writing began (689 of 1358 data packets acknowledged), and the agent recorded it "
+        "locally. The process has since restarted: the application port is absent and the bootloader's port is listed. On the new "
+        "socket the agent declares, reports the device as being in its bootloader and the needs-uf2-recovery state, and sends the "
+        "dfu_state. A dfu_job for another job is answered with the same state for that job id: nothing is fetched and no serial "
+        "transfer starts. The operator copies the release's recovery UF2 to the board; the application port returns, the agent "
+        "declares and says hello again, and the record ends with that hello. The Backend confirms the version from the hello.",
+        "companion",
+        [HANDSHAKE_HDR,
+         {"step": "send", "frame": {"type": "iface_relay", "serial_dfu": True}},
+         {"step": "device_link", "port": "application", "event": "absent"},
+         {"step": "device_link", "port": "bootloader", "event": "present"},
+         {"step": "send", "frame": {"type": "connector_device", "device": "bootloader", "dfu_state": "needs-uf2-recovery",
+                                    "job": F_JOB, "sent": 689, "total": 1358}},
+         {"step": "send", "frame": stranded},
+         {"step": "recv", "frame": {"type": "dfu_job", "job": "fw-8", "sha256": hashlib.sha256(pkg).hexdigest(), "size": len(pkg)}},
+         {"step": "send", "frame": {**stranded, "job": "fw-8"}},
+         {"step": "device_link", "port": "application", "event": "opened"},
+         {"step": "send", "frame": {"type": "iface_relay", "serial_dfu": True}},
+         {"step": "send", "frame": {"type": "iface_hello", "ref": 1, "hello": hello2}},
+         {"step": "recv", "frame": {"type": "iface_ack", "of": "iface_hello", "ref": 1, "outcome": "recorded"}},
+         {"step": "send", "frame": {"type": "connector_device", "device": "application"}}])
     own_close = {"step": "close", "by": "network", "code": 1006, "t": 60}
     out["G-refused-after-own-close-retried.json"] = fixture(
         "G", "A refusal right after the agent's own close is retried",
@@ -284,6 +308,10 @@ def build():
             {"direction": "agent_to_backend", "why": "dfu_state failed without a stage", "frame": {"type": "dfu_state", "job": "fw-1", "state": "failed", "error": "no-ack"}},
             {"direction": "agent_to_backend", "why": "dfu_state with a stage on a state that is not failed", "frame": {"type": "dfu_state", "job": "fw-1", "state": "transferring", "stage": "transfer", "error": "x"}},
             {"direction": "agent_to_backend", "why": "dfu_state ready with a stage", "frame": {"type": "dfu_state", "job": "fw-1", "state": "ready", "stage": "fetch", "error": "x"}},
+            {"direction": "agent_to_backend", "why": "dfu_state needs-uf2-recovery without sent and total", "frame": {"type": "dfu_state", "job": "fw-1", "state": "needs-uf2-recovery"}},
+            {"direction": "agent_to_backend", "why": "dfu_state needs-uf2-recovery with a stage", "frame": {"type": "dfu_state", "job": "fw-1", "state": "needs-uf2-recovery", "sent": 5, "total": 9, "stage": "transfer", "error": "x"}},
+            {"direction": "agent_to_backend", "why": "dfu_state failed with sent and total", "frame": {"type": "dfu_state", "job": "fw-1", "state": "failed", "stage": "transfer", "error": "no-ack", "sent": 5, "total": 9}},
+            {"direction": "agent_to_backend", "why": "connector_device with a device that is not one of the three", "frame": {"type": "connector_device", "device": "uf2"}},
             {"direction": "agent_to_backend", "why": "dfu_state with an extra member", "frame": {"type": "dfu_state", "job": "fw-1", "state": "rebooting", "progress": 50}},
         ],
     }

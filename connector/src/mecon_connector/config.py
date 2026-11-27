@@ -133,6 +133,7 @@ class DfuConfig:
     package_max_bytes: int
     failed_hold_s: float = 1800.0  # how long a failed job keeps the socket without a device link
     stop_wait_s: float = 5.0  # at shutdown: how long to wait for a running transfer to finish its frame and close the port
+    state_dir: str = "/var/lib/mecon-connector"  # where the "needs a UF2 copy" marker is kept (the unit's StateDirectory)
 
 
 @dataclass(frozen=True)
@@ -268,7 +269,7 @@ def parse_dfu(d: dict[str, Any], device_sel: Selector, transport: str, errs: lis
     _check_unknown(
         d,
         {"enabled", "bootloader", "bootloader_wait_s", "app_return_wait_s", "arm_window_s", "attempts",
-         "package_max_bytes", "failed_hold_s", "stop_wait_s"},
+         "package_max_bytes", "failed_hold_s", "stop_wait_s", "state_dir"},
         "dfu",
         errs,
     )
@@ -292,6 +293,7 @@ def parse_dfu(d: dict[str, Any], device_sel: Selector, transport: str, errs: lis
     max_bytes = _get(d, "package_max_bytes", int, 2 * 1024 * 1024, errs, "dfu")
     failed_hold = float(_get(d, "failed_hold_s", (int, float), 1800.0, errs, "dfu"))
     stop_wait = float(_get(d, "stop_wait_s", (int, float), 5.0, errs, "dfu"))
+    state_dir = _get(d, "state_dir", str, "/var/lib/mecon-connector", errs, "dfu")
     if not enabled:
         return None
     if transport != "hold":
@@ -316,7 +318,10 @@ def parse_dfu(d: dict[str, Any], device_sel: Selector, transport: str, errs: lis
         errs.append("dfu.failed_hold_s must be 60-86400")
     if not 0.5 <= stop_wait <= 30:
         errs.append("dfu.stop_wait_s must be 0.5-30")
-    return DfuConfig(sel, boot_wait, app_wait, window, attempts, max_bytes, failed_hold, stop_wait)
+    if not isinstance(state_dir, str) or not state_dir.startswith("/"):
+        errs.append("dfu.state_dir must be an absolute path")
+        state_dir = "/var/lib/mecon-connector"
+    return DfuConfig(sel, boot_wait, app_wait, window, attempts, max_bytes, failed_hold, stop_wait, state_dir)
 
 
 def parse(raw: dict[str, Any]) -> Config:

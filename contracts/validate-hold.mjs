@@ -7,7 +7,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import Ajv2020 from 'ajv/dist/2020.js';
 
-const AGENT = ['iface_relay', 'status', 'iface_hello', 'iface_result', 'iface_event', 'dfu_state'];
+const AGENT = ['iface_relay', 'status', 'connector_device', 'iface_hello', 'iface_result', 'iface_event', 'dfu_state'];
 const BACKEND = ['iface_req', 'iface_ack', 'refused', 'dfu_job'];
 // dfu_state order (section 12): each state may follow only these
 const DFU_NEXT = {
@@ -15,10 +15,11 @@ const DFU_NEXT = {
   fetching: ['ready', 'failed'],
   ready: ['waiting-bootloader', 'failed'],
   'waiting-bootloader': ['transferring', 'failed'],
-  transferring: ['transferring', 'rebooting', 'failed'],
+  transferring: ['transferring', 'rebooting', 'failed', 'needs-uf2-recovery'],
   rebooting: ['installed-pending-hello', 'failed'],
   'installed-pending-hello': [],
   failed: ['fetching'],
+  'needs-uf2-recovery': ['needs-uf2-recovery'], // only the hello ends it, and the agent never sends it as a state
 };
 const OPCODE = { 3: 'start', 1: 'init', 4: 'data', 5: 'stop' };
 // section 2.5: the one refusal that may be retried, after the agent's own close
@@ -152,6 +153,7 @@ function scenario(doc, file, check, fail) {
   let declaredDfu = false;
   let dfu = null; // the armed job
   let dfuState = 'start';
+  let uf2 = null; // a board that needs a UF2 copy: only the hello after the application port returns ends it
   let appUp = true;
   let bootOpen = false;
   let reopened = false; // the application port came back; iface_relay must come again before iface_hello
@@ -204,18 +206,31 @@ function scenario(doc, file, check, fail) {
           if (s.frame.serial_dfu === true) declaredDfu = true;
           if (reopened) relayedAgain = true;
         }
+        if (s.frame.type === 'iface_hello' && uf2 && appUp) uf2 = null; // the hello ends needs-uf2-recovery
         if (s.frame.type === 'iface_hello' && reopened && !relayedAgain) at(i, 'after the application port returns, iface_relay comes before iface_hello');
         if (s.frame.type === 'dfu_state') {
-          if (!dfu) at(i, 'dfu_state without a dfu_job');
-          else if (s.frame.job !== dfu.job) at(i, 'dfu_state for another job');
           const st = s.frame.state;
-          if (!(DFU_NEXT[dfuState] || []).includes(st)) at(i, `dfu_state ${st} may not follow ${dfuState}`);
+          if (st === 'needs-uf2-recovery') {
+            // may open a socket (a restart remembers it) or follow a cut transfer; a refused dfu_job answers it for its own job
+            if (dfuState !== 'start' && dfuState !== 'transferring' && dfuState !== st) at(i, `dfu_state ${st} may not follow ${dfuState}`);
+            if (s.frame.sent > s.frame.total) at(i, 'needs-uf2-recovery with sent above total');
+            if (dfuState === 'transferring' && packets.length < 3) at(i, 'needs-uf2-recovery after a cut before any data packet');
+            if (uf2 && uf2.sent !== s.frame.sent) at(i, 'needs-uf2-recovery with a different sent');
+            if (!uf2) uf2 = { job: s.frame.job, sent: s.frame.sent };
+            else if (dfu && s.frame.job !== dfu.job) at(i, 'needs-uf2-recovery for a job that was not the last one asked');
+          } else {
+            if (uf2) at(i, `dfu_state ${st} while needs-uf2-recovery stands`);
+            if (!dfu) at(i, 'dfu_state without a dfu_job');
+            else if (s.frame.job !== dfu.job) at(i, 'dfu_state for another job');
+            if (!(DFU_NEXT[dfuState] || []).includes(st)) at(i, `dfu_state ${st} may not follow ${dfuState}`);
+          }
           if (st === 'waiting-bootloader' && appUp) at(i, 'waiting-bootloader before the application port dropped');
           if (st === 'transferring' && !bootOpen) at(i, 'transferring without the bootloader port open');
           if (st === 'rebooting' && packets.at(-1) !== 'stop') at(i, 'rebooting before the stop packet was acknowledged');
           if (st === 'installed-pending-hello' && !appUp) at(i, 'installed-pending-hello before the application port returned');
           dfuState = st;
         }
+        if (s.frame.type === 'connector_device' && s.frame.dfu_state === 'needs-uf2-recovery' && !uf2) uf2 = { job: s.frame.job, sent: s.frame.sent };
         if ('ref' in s.frame) {
           const key = JSON.stringify(s.frame.ref);
           if (usedRefs.has(key)) at(i, `ref ${key} reused`);
@@ -247,7 +262,7 @@ function scenario(doc, file, check, fail) {
         if (s.frame.type === 'dfu_job') {
           if (!declaredDfu) at(i, 'dfu_job on a socket that did not declare serial_dfu');
           dfu = { job: s.frame.job, sha256: s.frame.sha256, size: s.frame.size };
-          dfuState = 'start';
+          if (!uf2) dfuState = 'start';
         }
         if (s.frame.type === 'iface_req') {
           let op; try { op = JSON.parse(JSON.parse(s.frame.wire).body).op; } catch { op = undefined; }
@@ -323,6 +338,11 @@ function scenario(doc, file, check, fail) {
         if (s.port === 'application' && s.event === 'lost') {
           if (!dfu || dfuState !== 'ready') at(i, 'the socket stays only for a job that is ready; otherwise the agent closes it');
           appUp = false;
+        } else if (s.port === 'application' && s.event === 'absent') {
+          if (i !== 2) at(i, 'absent describes the start of the socket: right after the declaration');
+          appUp = false;
+        } else if (s.port === 'bootloader' && s.event === 'present') {
+          if (appUp) at(i, 'the bootloader port is reported present only while the application port is absent');
         } else if (s.port === 'application' && s.event === 'opened') {
           appUp = true;
           reopened = true;

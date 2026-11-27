@@ -48,6 +48,7 @@ from .framing import (
 from .gate import BusyRun, classify_probe, probe_log_fields
 from .logutil import Log
 from .metrics import Metrics
+from .dfu_marker import check_writable, clear_marker, read_marker, write_marker
 from .nordic_dfu import BAUD as DFU_BAUD
 from .nordic_dfu import (
     Package,
@@ -94,8 +95,26 @@ SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 BOOT_LOOK_S = 0.5  # how often the bootloader port is looked for
 DFU_PROGRESS_EVERY = 64  # data packets between dfu_progress lines
 BOOT_SETTLE_S = 1.0  # before a fresh transfer attempt on the same bootloader
-DFU_KEEPS = ("waiting-bootloader", "transferring", "rebooting", "resuming", "failed")  # phases that keep the socket
-DFU_RECONNECT = ("waiting-bootloader", "transferring", "rebooting", "failed")  # reconnect a lost socket, no device link
+UF2 = "needs-uf2-recovery"  # the phase and the dfu_state of a board that needs a UF2 copy (section 12.9)
+BOOT_PRESENT_S = 2.0  # how often the bootloader port is looked for (listed, never opened) with no application port
+DFU_KEEPS = ("waiting-bootloader", "transferring", "rebooting", "resuming", "failed", UF2)  # phases that keep the socket
+DFU_RECONNECT = ("waiting-bootloader", "transferring", "rebooting", "failed", UF2)  # reconnect a lost socket, no device link
+
+
+def hello_identity(hello: dict) -> str | None:
+    """Who the hello says the device is: its node key. None when it carries none (then nothing can clear a marker)."""
+    for k in ("node_public_key_hex", "node_key", "device_id"):
+        v = hello.get(k)
+        if isinstance(v, str) and 0 < len(v) <= 128:
+            return v
+    return None
+
+
+def past_erase(sent: int) -> bool:
+    """A transfer that ended without completing is past the flash erase once a data packet was acknowledged. On the
+    nRF52 boards tested only a UF2 copy recovered a board from then on, while a cut in the erase phase (after the
+    start packet, before any data packet) was recovered by a serial run again."""
+    return sent > 0
 
 
 @dataclass
@@ -233,6 +252,28 @@ class HoldBridge:
         self._dfu_last: dict | None = None  # the last dfu_state sent: sent again once on a new socket
         self._dfu_failed_at = 0.0
         self._dfu_overlap_noted = False
+        # a board that needs a UF2 copy: the marker in the state directory, read once here so a restart remembers
+        self._uf2: dict | None = None
+        self._boot_present = False  # no application port, and the bootloader's port is listed
+        self._boot_next_check = 0.0
+        self._last_identity: str | None = None  # the device identity the last hello carried (kept across a link loss)
+        self._other_hello: dict | None = None  # a hello from another device, already logged
+        self._dfu_usable = dc is not None  # false when state_dir cannot hold a marker: no serial DFU at all
+        self._erase_cut = False  # an attempt of this job ended before its first data packet
+        self._backstop = False  # a retry after such a cut completed: no application port after it is not a plain failure
+        self._backstop_pos = (0, 0)
+        self._status_sent: tuple | None = None  # what the last connector_device frame on this socket said
+        if dc is not None:
+            try:
+                check_writable(dc.state_dir)
+            except OSError as e:
+                self._dfu_usable = False  # a restart could then forget a marker and serial-DFU a dead board
+                self.log.warn("dfu_state_dir_unwritable", path=dc.state_dir, error=f"{type(e).__name__}: {e.strerror or e}")
+            self._uf2 = read_marker(dc.state_dir)
+            if self._uf2 is not None:
+                self.log.warn("dfu_needs_uf2_found", job=self._uf2["job"], sent=self._uf2["sent"], total=self._uf2["total"],
+                              reason=self._uf2["reason"])
+                self._enter_uf2(self._uf2)
 
     # ---- transport callbacks (any thread) ----------------------------------------------
 
@@ -327,6 +368,7 @@ class HoldBridge:
         self._attempt = 0
         self._refused = None
         self._forget_pending()  # normally empty: every way a session ends already settled them
+        self._status_sent = None
         self.m.inc("hold_connect_attempts_total", 1, "ok")
         self.log.info("hold_connected", subprotocol=subprotocol)
         if self._dfu_phase == "resuming":
@@ -341,7 +383,7 @@ class HoldBridge:
     def _relay_frame(self) -> dict:
         """iface_relay, with serial_dfu only when this Connector is configured to run a bootloader DFU: the Backend
         lifts its refusal of a bootloader-dfu offer only for a socket that made this declaration."""
-        if self._dfu_cfg is not None:
+        if self._dfu_cfg is not None and self._dfu_usable:
             return {"type": "iface_relay", "serial_dfu": True}
         return {"type": "iface_relay"}
 
@@ -599,6 +641,7 @@ class HoldBridge:
         if acc is None:
             if nxt is None:
                 self._hello = res
+                self._note_identity(res)
                 self._hello_paging_reset()
                 self._hello_done()
                 return
@@ -641,9 +684,13 @@ class HoldBridge:
         if why:
             self.log.warn("hello_paging_stopped", reason=why, pages=self._hello_pages)
         self._hello = acc
+        self._note_identity(acc)
         self._hello_paging_reset()
         self._hello_done()
         return True
+
+    def _note_identity(self, hello: dict) -> None:
+        self._last_identity = hello_identity(hello)
 
     def _hello_done(self) -> None:
         self._need_hello = False
@@ -1074,7 +1121,7 @@ class HoldBridge:
         return now - self._dfu_armed_at > self._dfu_cfg.arm_window_s
 
     def _on_dfu_job(self, now: float, obj: dict) -> None:
-        if self._dfu_cfg is None:
+        if self._dfu_cfg is None or not self._dfu_usable:
             self._ignored("dfu_disabled")  # never declared serial_dfu: nothing is fetched and nothing is armed
             return
         job, sha, size = obj.get("job"), obj.get("sha256"), obj.get("size")
@@ -1083,7 +1130,12 @@ class HoldBridge:
             self._ignored("malformed_dfu_job")
             return
         phase = self._dfu_phase
-        if phase in ("none", "armed") and self._link is None:
+        if phase == UF2:
+            # Never a serial transfer for this board: the job is answered with the state and nothing is fetched.
+            self._ignored("dfu_needs_uf2")
+            self.log.warn("dfu_job_ignored", job=job, phase=phase, why=UF2)
+            self._send(self._uf2_frame(job))
+        elif phase in ("none", "armed") and self._link is None:
             self._ignored("dfu_no_device")
             self.log.warn("dfu_job_ignored", job=job, phase=phase, why="no_device")
         elif phase in ("none", "armed"):
@@ -1098,6 +1150,9 @@ class HoldBridge:
         assert self._dfu_cfg is not None
         self._dfu_gen += 1
         self._dfu_job = {"job": job, "sha256": sha, "size": size}
+        if self._dfu_phase != "failed":
+            self._erase_cut = False  # a run again of a failed job keeps what was learned about it
+        self._backstop = False
         self._dfu_armed_at = now
         self._dfu_pkg = None
         self._dfu_attempt = 0
@@ -1148,7 +1203,8 @@ class HoldBridge:
             else:
                 self._dfu_clear()  # never ready: the Backend does not offer, and the device stays up
         elif kind == "transfer":
-            self._on_transfer_done(now, payload if isinstance(payload, str) else None)
+            err, mark, pos = payload  # type: ignore[misc]
+            self._on_transfer_done(now, err or None, mark, pos)
 
     def _dfu_on_link_lost(self, now: float) -> None:
         """Called when the application port drops, before the hold would be released."""
@@ -1178,10 +1234,15 @@ class HoldBridge:
 
     def _dfu_step(self, now: float) -> None:
         dc = self._dfu_cfg
-        if dc is None or self._dfu_phase == "none":
+        if dc is None:
+            return
+        self._watch_device(now)
+        if self._dfu_phase == "none":
             return
         ph = self._dfu_phase
-        if ph == "armed":
+        if ph == UF2:
+            self._uf2_step()
+        elif ph == "armed":
             if self._dfu_fetch_state == "ok" and self._dfu_window_over(now):
                 self._dfu_disarm("window_over")
         elif ph == "failed":
@@ -1200,10 +1261,16 @@ class HoldBridge:
                 self._dfu_look_for_bootloader(now)
         elif ph == "rebooting":
             if self._dfu_deadline is not None and now >= self._dfu_deadline:
-                self._dfu_fail("app-return", "not-found")  # still waits for the port, without relaying
+                if self._backstop:  # a retry after an erase-phase cut finished, and no application port came back
+                    self._enter_uf2(self._record_uf2(self._dfu_job["job"], *self._backstop_pos, "no-app-after-retry"))
+                else:
+                    self._dfu_fail("app-return", "not-found")  # still waits for the port, without relaying
         elif ph == "resuming":
             if self._link is not None and self._hello is not None and self._gate_open:
                 self._dfu_resume()
+            elif self._backstop and self._hello is None and self._dfu_deadline is not None and now >= self._dfu_deadline:
+                self._enter_uf2(self._record_uf2(self._dfu_job["job"], self._backstop_pos[0], self._backstop_pos[1],
+                                                 "no-app-after-retry"))  # the port came back and never said hello
             elif self._gate_closed_for_good or (self._dfu_deadline is not None and now >= self._dfu_deadline):
                 self.log.warn("dfu_resume_abandoned", job=self._dfu_job and self._dfu_job["job"])
                 self._dfu_clear()  # the normal rules decide again (a device that is not enrolled releases the hold)
@@ -1241,6 +1308,7 @@ class HoldBridge:
 
         def work() -> None:
             err: str | None = None
+            mark: dict | None = None
             tr = Transfer(link, clock, sleep, halt)
             try:
                 tr.run(pkg, progress)
@@ -1253,28 +1321,106 @@ class HoldBridge:
                 err = "internal"
             finally:
                 link.close()
-            events.append(("dfu", gen, "transfer", err if err is not None else ""))
+            if err is not None and past_erase(tr.sent):
+                mark = self._record_uf2(jid, tr.sent, tr.total, err)  # here, so a stop at shutdown records it too
+            events.append(("dfu", gen, "transfer", (err if err is not None else "", mark, (tr.sent, tr.total))))
 
         self._dfu_writer = self._runner(work)
 
-    def _on_transfer_done(self, now: float, err: str | None) -> None:
+    def _on_transfer_done(self, now: float, err: str | None, mark: dict | None = None, pos: tuple = (0, 0)) -> None:
         dc = self._dfu_cfg
         assert dc is not None
         if not err:
             self.m.inc("hold_dfu_transfer_attempts_total", 1, "ok")
             self._dfu_pkg = None  # held only for the transfer
+            self._backstop = self._erase_cut  # a retry that follows a cut in the erase phase
+            self._backstop_pos = pos
             self._dfu_phase = "rebooting"
             self._dfu_deadline = now + dc.app_return_wait_s
             self._dfu_state("rebooting")
             return
         self.m.inc("hold_dfu_transfer_attempts_total", 1, "failed")
         self.log.warn("dfu_transfer_failed", attempt=self._dfu_attempt, error=err)
+        if mark is not None:
+            self._enter_uf2(mark)  # past the erase: never a serial retry, never reported as recovered
+            return
+        self._erase_cut = True  # before the first data packet: still recoverable by a serial run, but watched
         if self._dfu_attempt < dc.attempts:
             self._dfu_phase = "waiting-bootloader"  # the bootloader takes a fresh start
             self._dfu_deadline = now + dc.bootloader_wait_s
             self._dfu_next_look = now + BOOT_SETTLE_S
         else:
             self._dfu_fail("transfer", err)
+
+    def _record_uf2(self, job: str, sent: int, total: int, reason: str) -> dict:
+        """Writes the marker (atomically) and logs it. Runs on the writer's thread, so a transfer cut by a stop
+        leaves it behind even though the loop never sees the result."""
+        assert self._dfu_cfg is not None
+        mark = {"job": job, "sent": sent, "total": total, "at": int(time.time()), "reason": reason[:64],
+                "device": self._last_identity}
+        try:
+            write_marker(self._dfu_cfg.state_dir, mark)
+        except OSError as e:
+            self.log.error("dfu_marker_unwritable", job=job, error=type(e).__name__)  # still reported while up
+        self.log.warn("dfu_needs_uf2", job=job, sent=sent, total=total, reason=mark["reason"])
+        return mark
+
+    def _enter_uf2(self, mark: dict) -> None:
+        self._uf2 = mark
+        self._dfu_gen += 1
+        self._dfu_pkg = None
+        self._dfu_deadline = None
+        self._dfu_job = {"job": mark["job"], "sha256": "", "size": 0}
+        self._dfu_phase = UF2
+        self._dfu_state(UF2, extra={"sent": mark["sent"], "total": mark["total"]})
+
+    def _uf2_frame(self, job: str) -> dict:
+        assert self._uf2 is not None
+        return {"type": "dfu_state", "job": job, "state": UF2, "sent": self._uf2["sent"], "total": self._uf2["total"]}
+
+    def _uf2_step(self) -> None:
+        """The marker goes only when the application port is back and its hello has arrived. The Backend then
+        confirms the version from that hello, as for any update."""
+        if self._link is not None and self._hello is not None:
+            assert self._dfu_cfg is not None and self._uf2 is not None
+            mark = self._uf2
+            who = mark.get("device")
+            if who is None or hello_identity(self._hello) != who:
+                if who is not None and self._other_hello is not self._hello:
+                    self._other_hello = self._hello
+                    self.log.warn("dfu_needs_uf2_other_device", job=mark["job"])  # kept: only the same device clears it
+                return
+            try:
+                clear_marker(self._dfu_cfg.state_dir)
+            except OSError as e:
+                self.log.error("dfu_marker_unclearable", job=mark["job"], error=type(e).__name__)
+                return  # stays marked, tried again at the next step
+            self._uf2 = None
+            self.log.info("dfu_needs_uf2_cleared", job=mark["job"], sent=mark["sent"], total=mark["total"])
+            self._dfu_clear()
+
+    def _watch_device(self, now: float) -> None:
+        """With no application port, whether the bootloader's port is there (listed, never opened); and what the
+        Backend is told about the device while a socket is open."""
+        if self._link is not None:
+            self._boot_present = False
+        elif self._dfu_phase in ("none", UF2) and now >= self._boot_next_check:
+            self._boot_next_check = now + BOOT_PRESENT_S
+            probe = getattr(self._boot_opener, "present", None)
+            present = bool(probe()) if probe is not None else False
+            if present != self._boot_present:
+                self._boot_present = present
+                self.log.warn("dfu_bootloader_present", needs_uf2=self._uf2 is not None) if present else self.log.info(
+                    "dfu_bootloader_gone")
+        dev = "application" if self._link is not None else ("bootloader" if self._boot_present else "absent")
+        relevant = self._uf2 is not None or dev == "bootloader"
+        want = (dev, self._uf2["job"] if self._uf2 else None)
+        if self._state == "connected" and ((relevant and want != self._status_sent) or (not relevant and self._status_sent)):
+            frame: dict = {"type": "connector_device", "device": dev}
+            if self._uf2 is not None:
+                frame.update({"dfu_state": UF2, "job": self._uf2["job"], "sent": self._uf2["sent"], "total": self._uf2["total"]})
+            if self._send(frame):
+                self._status_sent = want if relevant else None
 
     def _dfu_failed_cap_over(self, now: float) -> bool:
         assert self._dfu_cfg is not None
@@ -1311,9 +1457,11 @@ class HoldBridge:
         self._dfu_deadline = None
         self._dfu_attempt = 0
         self._dfu_last = None
+        self._erase_cut = False
+        self._backstop = False
         self._dfu_overlap_noted = False
 
-    def _dfu_state(self, state: str, stage: str | None = None, error: str | None = None) -> None:
+    def _dfu_state(self, state: str, stage: str | None = None, error: str | None = None, extra: dict | None = None) -> None:
         """dfu_state to the Backend, which records it on the job. Not sent while the socket is down."""
         assert self._dfu_job is not None
         self.m.inc("hold_dfu_states_total", 1, state)
@@ -1321,6 +1469,8 @@ class HoldBridge:
         if stage is not None:
             frame["stage"] = stage
             frame["error"] = error or "unknown"
+        if extra:
+            frame.update(extra)
         self.log.info("dfu_state", job=self._dfu_job["job"], state=state, stage=stage, error=error)
         self._dfu_last = frame
         if self._state == "connected":
@@ -1347,6 +1497,10 @@ class HoldBridge:
         }
         if self._dfu_phase != "none":
             snap["dfu"] = self._dfu_phase
+        if self._dfu_cfg is not None:
+            snap["device"] = "application" if self._link is not None else ("bootloader" if self._boot_present else "absent")
+        if self._uf2 is not None:
+            snap["dfu_needs_uf2"] = {k: self._uf2[k] for k in ("job", "sent", "total", "reason")}
         if self.hold_stop is not None:
             snap["hold_stop"] = self.hold_stop[0]
             snap["hold_stop_detail"] = self.hold_stop[1][:200]

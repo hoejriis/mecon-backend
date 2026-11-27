@@ -14,7 +14,7 @@
       "properties": {
         "contract": { "$ref": "#/$defs/contract" },
         "synthetic": { "const": true },
-        "id": { "enum": ["A", "B", "C", "D", "E", "F", "G", "H"] },
+        "id": { "enum": ["A", "B", "C", "D", "E", "F", "G", "H", "I"] },
         "title": { "type": "string" },
         "description": { "type": "string" },
         "link": { "enum": ["companion", "console", "none"] },
@@ -84,7 +84,7 @@
       "properties": {
         "step": { "const": "device_link" },
         "port": { "enum": ["application", "bootloader"] },
-        "event": { "enum": ["lost", "opened", "closed"] }
+        "event": { "enum": ["lost", "opened", "closed", "absent", "present"] }
       }
     },
     "bootloaderWrite": {

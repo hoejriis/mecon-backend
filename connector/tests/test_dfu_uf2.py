@@ -70,6 +70,8 @@ def test_conf_29_a_cut_after_the_first_data_packet_leaves_a_marker_and_is_never_
     r = mk()
     conn = run_cut(r, gone_after=6)
     r.wait(lambda: r.bridge._dfu_phase == UF2)
+    # The frame reaches the fake Backend over its socket a moment after the phase changes: wait for it, not the phase.
+    r.wait(lambda: bool(states(conn)) and states(conn)[-1][0] == UF2)
     for _ in range(30):
         r.jump(2)
     assert r.boot.opens == 1 and r.m("hold_dfu_transfer_attempts_total", "failed") == 1

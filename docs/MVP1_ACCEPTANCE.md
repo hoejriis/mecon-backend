@@ -19,10 +19,19 @@ Reader build under test: commit `b3f63c54c7888b99ecb48983d7a8e9fd7867cf80`, as `
 
 - Unit tests (`cd reader && npm test`): 612 passed of 612 (47 files). Mock-based, so they support Simulated rows only.
 - Mock-Backend and simulated-device e2e (`npm run e2e`): 114 passed of 114 in CI for the same commit; not re-run locally for this matrix. Simulated rows only.
-- Live acceptance, unauthenticated part against https://reader.mecon.cloud (`npm run acceptance`): **24 passed, 0 failed, 9 skipped.** The 9 skipped are the signed-in suite (no test sessions yet). An earlier run the same day had 23 passed and 1 failed: the new service-worker registration check read the worker while it was still activating. That was a flaw in the check, not in the host; it now waits for the activated state.
+- Live acceptance, unauthenticated part against the restricted Reader host (`npm run acceptance`): **24 passed, 0 failed, 9 skipped.** The 9 skipped are the signed-in suite (no test sessions yet). An earlier run the same day had 23 passed and 1 failed: the new service-worker registration check read the worker while it was still activating. That was a flaw in the check, not in the host; it now waits for the activated state.
 - Live acceptance, signed-in part, with two test users (Backend releases of the same day): **33 passed, 0 failed, 1 skipped.** The skipped one is the cross-site check, a manual row. The run needed one readable conversation, so a bench Companion was assigned to a test user for the run with sending off, then unassigned. The live offline-cache test (passkey, Backend lease, offline unlock, removed credential) passed 1 of 1 in the same window.
 - Live send, two bounded attempts with explicit owner approval, one direct message each between bench radios. The first was refused by the device as a replay (a Backend sequence lag, since fixed). The second was queued, transmitted and received by the recipient; the sender heard no ACK, so the Reader showed it truthfully as timed out.
 - Connector tests, contract validation and the Connector mutation check: not re-run for this matrix.
+
+## Status update, 2026-11-27
+
+No row below changed status after its recorded evidence date. A row that says Not run, Simulated or awaiting a tester is still that. What has shipped since the run above, and what it does and does not change:
+
+- **Reader v0.9.4** (released 2026-11-25) fixed two things found in a hardware sitting: an offline cold start now shows the passkey unlock screen, and a first Bluetooth connect now survives the system PIN dialog (the reply timer starts after the first write). Both are covered by unit and mock-Backend tests and await a re-check on a desktop browser by a person; neither moves a hardware row. The later tags, v0.9.5 and v0.9.6, are Connector and contract releases; the v0.9.6 notes state that the served Reader is unchanged apart from its commit stamp.
+- **Connector.** The hold transport has run on a bench host against the production reference Backend (the Connector README, "What has run on hardware"); that is not the MQTT transport row CON-07 asks about. v0.9.5 changed the enrolment gate so that a `busy` or `failed` answer to its own `deployment.get` is no longer read as "not provisioned". v0.9.6 makes a stop during a serial DFU end on a whole frame and close the port. Known limitation: an nRF52 serial DFU interrupted after data writing has begun can be recovered only by copying a UF2 file; detecting and reporting that state is planned, not shipped.
+- **Mutation counts.** CON-06 records 99 mutants as of 2026-11-23. The Connector's set has grown since (the release notes of v0.9.5 and v0.9.6 give 150 and 161); the matrix row was not re-run.
+- **Still open as before:** Bluefy on a real iPhone or iPad, Android hardware, a real passkey PRF on a phone, a Connector MQTT run on a real device, and the live checks listed under the gates below.
 
 ## Matrix
 
@@ -32,7 +41,7 @@ Methods: **Auto** = automated suite, **Manual** = manual (hardware or live accou
 
 | ID | Criterion | Method | Where automated, or manual steps | Evidence status | Notes |
 | --- | --- | --- | --- | --- | --- |
-| M1-01 | `reader.mecon.cloud` is reachable over TLS and serves the shell | Auto | live: "shell answers 200 with security headers" | Passed on 2026-11-19 | HTTP/2 over TLS, 200. |
+| M1-01 | The restricted Reader host is reachable over TLS and serves the shell | Auto | live: "shell answers 200 with security headers" | Passed on 2026-11-19 | HTTP/2 over TLS, 200. |
 | M1-02 | Security headers: CSP, nosniff, Referrer-Policy, HSTS | Auto | live: "shell answers 200 with security headers" | Passed on 2026-11-19 | Also frame-ancestors none in the CSP. |
 | M1-03 | SPA routes fall back to the shell and revalidate; hashed assets are immutable | Auto | live: "SPA fallback serves the shell at ..." (6 routes), "hashed assets are immutable" | Passed on 2026-11-19 |  |
 | M1-04 | Served build identifies its commit | Auto | live: "/version.json carries a 40-hex commit" | Passed on 2026-11-19 | Stale-shell repair logic itself: `src/staleShell.test.ts`, Simulated. |
@@ -41,14 +50,14 @@ Methods: **Auto** = automated suite, **Manual** = manual (hardware or live accou
 | M1-07 | `GET /session` signed out answers 401 | Auto | live: "GET /session signed out answers 401" | Passed on 2026-11-19 | Against the build at commit `b3f63c5`. |
 | M1-08 | Only existing users authenticate; no Reader-side user store, signup or role expansion | Review | Review `src/auth/` and the API contract: no signup operation, identity comes only from the Backend session | Passed on 2026-11-23 | Review of `reader/src/auth/` and the OpenAPI contract: 18 paths, none a signup, invite or role operation; identity comes only from `GET /session`; `POST /login` answers the same for an unknown address. That the Backend refuses an unknown address is Backend behaviour, outside this repository. |
 | M1-09 | Login through the Backend sign-in flow, request-id polling, session set | Manual | Sign in as a test user on the live host | Not run | Needs the API routed and a test user. Mock flow: `e2e/auth.spec.ts` "login -> signed in -> sign out", `src/test/auth.test.tsx` "walks email -> pending -> approved", both Simulated. |
-| M1-10 | Cookie is `__Host-mecon_session`: host-only, no `Domain` | Manual | After a real login, inspect the cookie in browser devtools; the live suite also checks `Domain` on the logout `Set-Cookie` when one is sent | Passed on 2026-11-19 | Live: the test-user cookie is host-only on reader.mecon.cloud, and the logout `Set-Cookie` carries no `Domain`. |
-| M1-11 | A Reader session is not accepted on mecon.cloud | Manual | Present the Reader session cookie to the mecon.cloud signed-in surface and confirm it is refused | Passed on 2026-11-19 | Live: the test-user session cookie was refused on mecon.cloud (independent check). Cookie is host-only, so it should never be sent there; the check confirms the server also refuses it. |
+| M1-10 | Cookie is `__Host-mecon_session`: host-only, no `Domain` | Manual | After a real login, inspect the cookie in browser devtools; the live suite also checks `Domain` on the logout `Set-Cookie` when one is sent | Passed on 2026-11-19 | Live: the test-user cookie is host-only on the Reader host, and the logout `Set-Cookie` carries no `Domain`. |
+| M1-11 | A Reader session is not accepted on the existing hosted Backend | Manual | Present the Reader session cookie to the hosted Backend's signed-in surface and confirm it is refused | Passed on 2026-11-19 | Live: the test-user session cookie was refused on the hosted Backend (independent check). Cookie is host-only, so it should never be sent there; the check confirms the server also refuses it. |
 | M1-12 | Logout returns 204, then the session is 401 and the login screen shows | Auto | live: "logout answers 204 ..." (signed-in) | Passed on 2026-11-19 | Live signed-in: logout 204, cookie clear without `Domain`, then `/session` 401. |
 | M1-13 | Session expiry fails closed | Manual | Let a test session expire, reload, expect the login screen | Not run | Mock: `src/test/auth.test.tsx` "a 401 from any call clears the session and cached data and shows login", Simulated. |
 | M1-14 | Server-side revocation: the next Reader call after revocation is 401 and shows login | Manual | Revoke a test user's session elsewhere, then use the Reader | Not run | |
 | M1-15 | Cross-origin and CSRF protection on writes | Auto | `src/test/auth.test.tsx` "csrf_failed" group; `src/api/m2client.test.ts` csrf retry cases | Simulated | Server-side enforcement is a Backend check: Not run live. |
 | M1-16 | Separate deployment and rollback exist | Review | Review the deployment doc and the image build | Passed on 2026-11-23 | Separate deployment: the Reader's own image (`reader/Dockerfile`) and a tagged release tarball with its checksum (`release.yml`). Rollback: the policy in `docs/DEVELOPMENT.md` ("Version compatibility and rollback policy": the host points back at an earlier release directory) and the client side in `reader/e2e/rollback.spec.ts`, with a kill switch. A rollback on the real host has not been exercised. |
-| M1-17 | Existing mecon.cloud and MQTT unchanged by the Reader's rollout | Manual | Smoke-test mecon.cloud and an MQTT client before and after | Not run | |
+| M1-17 | The existing hosted Backend and MQTT unchanged by the Reader's rollout | Manual | Smoke-test the hosted Backend and an MQTT client before and after | Not run | |
 | M1-18 | No production RF action is needed or performed | Review | Review the M1 scope: no send path is reachable without the messaging capability | Passed on 2026-11-23 | The Backend send path throws `CapabilityError` unless `messaging` and `send` are available (`reader/src/api/client.ts`, `need`), and `MessagingContext` refuses both send and send-again otherwise. Local Bluetooth or USB sending is gated on the device, identity ownership, the destination mapping and the offline guard, and needs `messaging` for identities and contacts, but not `send`. Development pages are built only in development mode. Real sends were made only with the owner's explicit approval (MSG-02). |
 | M1-19 | No CSP violations on the shell | Auto | live: "signed-out screen renders, passes axe, and raises no CSP violation" | Passed on 2026-11-19 |  |
 
@@ -196,7 +205,7 @@ Sends transmit over radio, so the automated suites never send. Before running an
 | CON-04 | A publish whose outcome is unknown is never resent, and every drop is counted | Auto | `connector/tests/test_bridge.py` ("publish_in_doubt_at_disconnect_is_never_resent", "queue_full_drops_newest_and_counts_each") | Simulated |  |
 | CON-05 | Relays broker messages only while the device reports an enrolled Deployment record (fail closed) | Auto | `connector/tests/test_gate.py` | Simulated |  |
 | CON-06 | Mutation check of the Connector rules | Auto | `python connector/scripts/mutation.py` | Passed on 2026-11-23 | 99 of 99 mutants killed (60 transport and packaging, 39 hold), each by a named failing test; the unmutated suite passed before (448 passed, 10 skipped) and after. |
-| CON-07 | The Connector on a real USB device, against a real broker and the real Backend | Manual | Run the Connector on a bench host with a stable-id serial device | Not run | Not verified on any device or Backend. |
+| CON-07 | The Connector on a real USB device, against a real broker and the real Backend | Manual | Run the Connector on a bench host with a stable-id serial device | Not run | The MQTT transport has not run on any device or against the Backend. The hold transport has run on a real device against the production reference Backend (see the status update above); that does not count for this row. |
 
 ### Security
 
@@ -222,13 +231,13 @@ Sends transmit over radio, so the automated suites never send. Before running an
 
 ## Go / no-go
 
-**Current state, 2026-11-19: no-go beyond the restricted deployment.** The static shell, headers, service worker, probes and the signed-out Map and device-code boundaries pass live. Everything that needs a signed-in user, a real device or a Backend release is Simulated or Not run.
+**Current state, 2026-11-27 (evidence as of 2026-11-19 to 2026-11-23): no-go beyond the restricted deployment.** The static shell, headers, service worker, probes and the signed-out Map and device-code boundaries pass live. Everything that needs a signed-in user, a real device or a Backend release is Simulated or Not run.
 
 What blocks each gate:
 
 | Gate | Blocked by |
 | --- | --- |
-| M1 restricted shell | The real sign-in flow (M1-09; test users sign in through a test-only route), session expiry and server-side revocation (M1-13, M1-14), and the rollout smoke test of mecon.cloud and MQTT (M1-17). Cookie attributes, the cross-site refusal and logout pass live. |
+| M1 restricted shell | The real sign-in flow (M1-09; test users sign in through a test-only route), session expiry and server-side revocation (M1-13, M1-14), and the rollout smoke test of the hosted Backend and MQTT (M1-17). Cookie attributes, the cross-site refusal and logout pass live. |
 | M2 messaging and Map | Chats lists, mark-read, the send-path state, Map gating with pins, device isolation, leases and the offline cache pass live. Still open: an `acked` send seen live, a channel send (MSG-03), the two-user observation comparison (MAP-02), and the live event stream (MSG-12). Sending stays switched off outside approved test windows. |
 | M3 hardware | Real devices: Bluefy on an iPhone or iPad, Android Chrome, desktop Chromium with Web Bluetooth and Web Serial, real passkey PRF authenticators, and the Connector on a real USB device with a real broker. All of it is simulated today; no hardware compatibility is claimed. |
 | M4 acceptance | Every row Passed or an accepted, recorded limitation; real-device end-to-end; the manual send journeys (explicit approval, bench radios only); the stock-familiarity review. |

@@ -31,7 +31,7 @@ You need an iPhone or iPad, a MeshCore Companion that is powered on, and the
 Bluefy browser (Safari has no Web Bluetooth).
 
 1. Install **Bluefy** from the App Store.
-2. In Bluefy open `https://reader.mecon.cloud/probe/ble`.
+2. In Bluefy open the `/probe/ble` page of the restricted Reader (the testers are given its address).
 3. Tap **Connect and run probe**.
 4. In the chooser pick your Companion. If the chooser is empty see below.
 5. Enter the Companion's PIN if the phone asks for it.

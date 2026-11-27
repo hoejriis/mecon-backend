@@ -17,7 +17,7 @@ Bound a run so a hung network cannot linger: `perl -e 'alarm shift; exec @ARGV' 
 
 | Variable | Meaning |
 | --- | --- |
-| `ACCEPTANCE_BASE_URL` | Reader to test. Default `https://reader.mecon.cloud`. |
+| `ACCEPTANCE_BASE_URL` | Reader to test. The default is set in `acceptance/api.ts`. |
 | `ACCEPTANCE_SESSION_A` | Value of the `__Host-mecon_session` cookie of test user A. |
 | `ACCEPTANCE_SESSION_B` | The same for test user B. |
 

@@ -47,12 +47,26 @@ Docker image, built from the repository root:
 - `reader/src/styles/tokens.css`: design tokens (palette, light and dark via `prefers-color-scheme`).
 - `reader/public/brand/`: official brand SVGs.
 - `deploy/`: Caddy configuration (`reader-headers.caddy` defines the `(reader_headers)` snippet; `Caddyfile` serves the built app).
-- `.github/workflows/ci.yml`: checks and image smoke test.
+- `.github/workflows/`: the CI jobs, described under "Continuous integration" below.
 
 The build stamp `__BUILD_COMMIT__` is set from the `RENDER_GIT_COMMIT`
 environment variable at build time and is `null` when unset. The full value
 is exposed as `BUILD_COMMIT` in `reader/src/buildInfo.ts`; Settings shows the
 first 12 characters, and stale-shell repair compares the whole string.
+
+## Continuous integration
+
+`ci.yml` runs on every pull request and every push to `main`. The component workflows run on the same events but only when their own paths change. `release.yml` runs on a version tag.
+
+| Workflow | Jobs and what they run |
+| --- | --- |
+| `ci.yml` | `reader`: `npm ci`, `npm run typecheck`, `npm run lint`, `npm test` (once with `RENDER_GIT_COMMIT` set to the commit, once without), `npm run build`, Playwright's Chromium, `npm run e2e`; the e2e screenshots are uploaded. `reader-mutation`: `node scripts/mutation.mjs`. `docker`: builds `reader/Dockerfile`, starts it and checks a 200, the `default-src 'self'` CSP and `nosniff`. Node 22. |
+| `contracts.yml` | `validate` in `contracts/`: `npm ci --ignore-scripts`, `npm test` (every schema and fixture), and `node scripts/mutation-public-map.mjs` (the public map case checks and their mutation check). Runs for changes under `contracts/`. |
+| `connector.yml` | `test` (hash-pinned install, mosquitto, unit and integration tests, the mutation check, and the fixtures-in-sync checks for both contracts), `image` (the runtime image for amd64 and arm64, a smoke test, a read-only root filesystem run, the compose example), `deploy-static` (shellcheck, `systemd-analyze verify` and `security`, the udev template) `systemd-run` (a real systemd VM: install, start, stop, uninstall), `install-test` (install and uninstall in a Debian container, and the packaging mutation check) and `measure` (60 s on the runner, labelled as not a Pi). Runs for changes under `connector/` and the two Connector contracts. |
+| `capture.yml`, `processing.yml`, `reader-backend.yml` | One `test` job each: a hash-pinned install, the component's tests including every published contract fixture or case it replays, and its mutation check; each uploads a pytest report. |
+| `release.yml` | On a tag `vX.Y.Z`: typecheck, tests and build of the Reader with the commit stamped in, a check that the stamp is in the bundle, then `mecon-reader-dist-<tag>.tar.gz` and its `.sha256` attached to the GitHub release. |
+
+Run the component suites locally from their own READMEs (`connector/`, `capture/`, `processing/`, `reader-backend/`) and the contracts with `cd contracts && npm ci && npm test`.
 
 ## Authentication client
 
@@ -201,7 +215,8 @@ drafts or uncertain attempts.
 - **Client rollback.** The previous version's cache is retained until the new
   version has booted and is the only tab (above); a failed install never
   replaces the running version.
-- **Local data.** The future encrypted cache is migrated by
+- **Local data.** The encrypted offline cache (`offline/cache.ts`, in
+  IndexedDB through `offline/idbStore.ts`) is migrated by
   `storage/migrations.ts`: a schema version marker, ordered one-step
   migrations, run on a copy of the live generation, verified, then switched by
   one write. On failure, or when the stored schema is newer than this build
@@ -210,8 +225,9 @@ drafts or uncertain attempts.
   with guidance to go back to the version used before or reload the latest.
   The generation kept before a switch is freed only by
   `discardPreviousGeneration`. Today there is one registered migration (0 to 1,
-  no data) and nothing stores content; the runner is exercised only by tests
-  against an in-memory fake, and is not yet wired to IndexedDB.
+  schema v1 is the encrypted offline cache), so no migration with data has run
+  in a release yet; the runner is exercised by tests against an in-memory fake
+  and, through the cache, against IndexedDB.
 - **Never lost by an update:** nothing in web storage holds message text. Drafts
   are in memory and are lost by a reload, which is why a reload asks first.
 

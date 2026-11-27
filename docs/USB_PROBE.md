@@ -39,7 +39,7 @@ server. Run it once per device you have.
 1. Plug the device into the laptop with a **data** cable (some cables only
    charge). Close any serial monitor, flasher or other Reader tab that might
    hold the port.
-2. In Chrome open `https://reader.mecon.cloud/probe/usb`.
+2. In Chrome open the `/probe/usb` page of the restricted Reader (the testers are given its address).
 3. Click **Connect and run probe**.
 4. In Chrome's port chooser pick the device's port (it is named like `USB
    Serial`, `usbmodem...` or `ttyACM...`) and click **Connect**. If the list is
@@ -48,7 +48,8 @@ server. Run it once per device you have.
    (up to about 45 s: boards often restart when the port opens and answer 13 to 26 s later).
 6. Click **Copy report**. If copying is blocked, select the text in the report
    box and copy it by hand.
-7. Post the report on the tracking Issue (hoejriis/mecon-backend #30) with the
+7. Post the report on the laptop USB Companion tracking Issue in this repository's
+   issue tracker with the
    laptop OS and version, the Chrome version, the board model and the firmware
    version.
 

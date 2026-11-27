@@ -76,4 +76,4 @@ SIGTERM or SIGINT stops the loop after the batch in flight has committed (or rol
 - The duplicate check reads the store for earlier receptions of the packet (indexed by packet and source); it is not measured under load.
 - One processor per store file; the store is not meant to be shared.
 - The input is a single archive file; there is no multi-archive merge. A source with no configured adapter holds up everything after it until it is configured.
-- No packet or reception retention, pruning, or export; no reads API. Those belong to other contracts.
+- No packet or reception retention, pruning, or export; no reads API in the processor itself. Those belong to other contracts; the Reader facade ([`reader-backend/`](../reader-backend/README.md)) reads the store on read-only connections to serve the observation projection.

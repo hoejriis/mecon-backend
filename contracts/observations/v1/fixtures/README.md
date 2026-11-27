@@ -6,5 +6,6 @@ place. `contracts/validate.mjs` checks each fixture against the schema the
 OpenAPI document links it from, and fails on a fixture nothing references.
 
 Covered states: empty, single observer, multi-observer correlated receptions,
-location withheld, delayed and duplicate delivery, `410 cursor_expired`, and
-`access_revoked`.
+location withheld, delayed and duplicate delivery, the 401, 403 and
+`410 cursor_expired` error bodies, and the `access_revoked` and
+`resync_required` stream events.

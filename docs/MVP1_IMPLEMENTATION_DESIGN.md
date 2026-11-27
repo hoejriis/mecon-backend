@@ -4,10 +4,10 @@
 
 ## Objective and release stages
 
-Build a public TypeScript/React **Device User Reader** that uses the existing **private Backend**, not a new public Backend. **First independently deployable milestone:** restricted `https://reader.mecon.cloud`, sharing exactly the existing `mecon.cloud` user population and Backend authority. This milestone precedes full BLE/messaging completion and is not a public beta.
+Build a public TypeScript/React **Device User Reader** that uses the existing **private Backend**, not a new public Backend. **First independently deployable milestone:** a restricted Reader host, sharing exactly the existing hosted-Backend user population and Backend authority. This milestone precedes full BLE/messaging completion and is not a public beta.
 
 1. **M0 design and contracts:** use this approved UX and brand; public [Reader API contract](READER_API_CONTRACT.md) and [OpenAPI](../contracts/reader-api/v1/openapi.yaml), the compatible private Backend API, the [live observation contract](LIVE_OBSERVATION_API_CONTRACT.md); sanitized fixtures. Do not block shell work on live hardware.
-2. **M1 restricted shell:** HTTPS/DNS, separate deployment/rollback, same Backend login/session and capability checks, responsive bottom navigation, MC1-like five-tab Device User navigation, map empty/loading/error and authorized feed integration when available. Existing `mecon.cloud` remains unchanged.
+2. **M1 restricted shell:** HTTPS/DNS, separate deployment/rollback, same Backend login/session and capability checks, responsive bottom navigation, MC1-like five-tab Device User navigation, map empty/loading/error and authorized feed integration when available. The existing hosted Backend remains unchanged.
 3. **M2 Backend-connected messaging/map:** Chats (Channels inside), authorized messages/contacts/identities, safe send/status and live packet observation map from permitted projection; no BLE required to operate Backend-only.
 4. **M3 BLE hardware and adapter:** prove Bluefy on real iPhone/iPad and supported Companion; implement only verified GATT/protocol capabilities, no assumptions of background support.
 5. **M4 MVP1 acceptance:** real-device E2E, privacy, duplicates, reconnection, usability, failure paths and release evidence. Public beta/GA remains separately approved.
@@ -29,7 +29,7 @@ Use actual `hoejriis/MeshContinuum/brand/` SVG assets (`lockup-dark.svg`, `locku
 
 ## Authentication, API and isolation
 
-- `reader.mecon.cloud` is independently hosted and connects by HTTPS to the **existing private Backend**. Existing users only; **no Reader-side user store, signup, role expansion or bypass**. Sessions, logout, revocation and capability resolution come from Backend.
+- The restricted Reader host is independently hosted and connects by HTTPS to the **existing private Backend**. Existing users only; **no Reader-side user store, signup, role expansion or bypass**. Sessions, logout, revocation and capability resolution come from Backend.
 - The private Backend owns the compatible versioned Reader API and secure cross-origin auth ([contract](READER_API_CONTRACT.md)); the public Reader consumes it. Agree safe cookie/domain strategy or equivalent, CORS allowlist, CSRF, SSE authorization, TLS, cache controls, reconnect and logout before real-account integration. Never put secrets, MQTT credentials, private API keys or user content into public source/fixtures.
 - Unauthorized/expired sessions fail closed. Server independently enforces every message, device, Fleet and live-feed permission; hiding a tab is not authorization. Admin/Fleet Owner grants never imply permission to decrypt another Device User's private messages.
 - Backend-path sends: user chooses authorized **sender identity and destination**; Backend automatically coordinates Companion-first or eligible Repeater Gateway origins. No gateway chooser in Reader. Show truthful logical send and ACK state.
@@ -38,7 +38,7 @@ Use actual `hoejriis/MeshContinuum/brand/` SVG assets (`lockup-dark.svg`, `locku
 
 ## Acceptance criteria
 
-**M1 deploy gate:** DNS/TLS and separate rollback; only existing mecon.cloud users can authenticate; authorized login/logout/session expiry/revocation tested; no cross-user data or unauthorized management access; MC1-like five-tab bottom navigation on phone/tablet/desktop; safe map unavailable state; smoke-tested Backend connectivity; no regression to existing UI/Backend; no production RF action required.
+**M1 deploy gate:** DNS/TLS and separate rollback; only existing hosted-Backend users can authenticate; authorized login/logout/session expiry/revocation tested; no cross-user data or unauthorized management access; MC1-like five-tab bottom navigation on phone/tablet/desktop; safe map unavailable state; smoke-tested Backend connectivity; no regression to existing UI/Backend; no production RF action required.
 
 **M2 feature gate:** authorized Chats (including Channels) and observation map use actual API evidence; no invented RF paths; packet feed privacy/source rights respected; no duplicate/ambiguous send; accurate errors and no cross-user history.
 
@@ -52,6 +52,6 @@ Normative sources: this document, the [Reader API contract](READER_API_CONTRACT.
 
 Deferred: public Backend replacement, desktop/tablet Admin GUI design, broad offline history, delegated receive identity completion, full BLE/Backend history reconciliation, advanced analytics, and public beta/GA. Do not silently promote deferred work into MVP1.
 
-**Availability as of 2026-11-18:** see the [availability table](MVP1_PLAN.md#restricted-reader-deployment-and-availability); the shell is deployed to existing users only, and BLE is simulated only.
+**Availability as of 2026-11-27:** see the [availability table](MVP1_PLAN.md#restricted-reader-deployment-and-availability); the Reader is deployed to existing users only, and BLE is simulated only.
 
 **Implementation unknowns to resolve in code/contract tests rather than new product decisions:** exact cross-origin session mechanism, deployed DNS/TLS/proxy wiring, API readiness, Bluefy hardware support, feed rights/latency, and map projection details. Record evidence before marking functionality implemented.

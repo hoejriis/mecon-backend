@@ -2,6 +2,10 @@
 
 A public implementation of the Reader API ([`contracts/reader-api/v1`](../contracts/reader-api/v1/openapi.yaml)): a Starlette app that serves the HTTP side of the contract and hands everything else to a core through two ports. It also serves the authorized observation projection ([`contracts/observations/v1`](../contracts/observations/v1/openapi.yaml), see below). It is groundwork. Each port has one real adapter, an HTTP client: for the session lookup contract ([`contracts/session-lookup/v1`](../contracts/session-lookup/v1/openapi.yaml)) and for the reader-core contract ([`contracts/reader-core/v1`](../contracts/reader-core/v1/openapi.yaml)), which the fake core follows too (both below). `--core-url` wires both into the run command. The facade is not deployed anywhere, and nothing in production depends on it.
 
+**Contract versions on main:** Reader API `1.0.0-draft.11`, observations `1.0.0-draft.4`, session lookup `1.0.0-draft.3` and reader-core `1.0.0-draft.2`. Events reach the browser as server-sent events (SSE) over plain HTTP, not WebSocket. There is no public implementation of the core behind the two ports yet: the adapters are proved against stubs that serve their contracts and against the fakes, and an interop run against the private reference Backend's reader-core is still pending. The anonymous public map feed (`public-map/v1`, polled, not SSE) is a separate contract and is not served by this facade.
+
+**Deployment.** The session lookup and reader-core routes are internal contract routes (`/lookup`, `/revocations` and `/reader/...` on the core, gated by a service token). Do not make them reachable through a public reverse proxy. The facade reaches them over the deployment's private network, which is why both adapters use plain HTTP and ignore proxy settings from the environment.
+
 ## What the facade owns
 
 - The host-only session cookie `__Host-mecon_session` (`Secure`, `HttpOnly`, `SameSite=Strict`, `Path=/`, no `Domain`): set on the single `approved` login poll, cleared on logout and whenever a presented session is refused.

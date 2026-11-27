@@ -18,6 +18,7 @@ The format and the replay rules are the Reader API's, in [`../../../reader-api/v
 2. Steps run in order; the first unmet expectation fails the case.
 3. An expectation checks the status, that the status is declared for the operation, the body against the named schema (`null`: no body), each `body` pointer's exact value, each `match` count, and a `lease` check (the token verifies under the listed keys, its payload is a `LeasePayload` for `user_id`, lives at most `max_lifetime_s`, and its identities carry the listed operations).
 4. A case or step a core cannot express is reported not applicable with its reason, never passed.
+5. A world's `public_key_prefix` is the start of the identity's key, not its required length: a core returns any prefix the schema allows (2 to 16 hex characters), so cases find an identity by its `display_name`.
 
 **Optional case.** `leases-03` (`lease_signing: absent`: a core that does not issue leases answers 404 on both lease operations) applies only to a core that can run without leases. A core that always offers leases reports it not applicable; every other case is required.
 

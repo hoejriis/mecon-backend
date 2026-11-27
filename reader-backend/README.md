@@ -74,7 +74,7 @@ Read answers are cached for at most `lookup_cache_s` (5 s), never past the calle
 
 ## HTTP core adapter
 
-[`http_core.py`](src/mecon_reader_backend/http_core.py) implements the `ReaderCore` port over HTTP, as the reader-core contract (1.0.0-draft.2) describes it: `HttpReaderCore(base_url, token_file, timeout_s=5, events_margin_s=5)`.
+[`http_core.py`](src/mecon_reader_backend/http_core.py) implements the `ReaderCore` port over HTTP, as the reader-core contract (1.0.0-draft.3) describes it: `HttpReaderCore(base_url, token_file, timeout_s=5, events_margin_s=5)`.
 
 - **One method, one operation.** Each port method is a `POST {base}/reader/...` with the operation's JSON body: the `caller` reference (`{user_id, session_ref}`, nothing else about the caller) and the arguments. `getHealth` is a `GET`. `base_url` includes any path prefix in front of `/reader/`. A first page sends no `cursor`; `limit` is always sent. Login start and poll carry `client_address`, which the facade derives behind its trusted proxies. An over-long Origin or Sec-Fetch-Site is sent as absent, which never accepts what the core would refuse. A `wait_s` outside 0 to 25 is sent at the nearer bound.
 - **The service token** is handled as by the session lookup adapter: read from `token_file` by path, again whenever the file changes, sent as `Authorization: Bearer` on every call, never logged and never in a repr. A missing or empty file answers `core_unavailable` without a request.

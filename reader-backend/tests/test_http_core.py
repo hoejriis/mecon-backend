@@ -143,7 +143,7 @@ def test_the_generated_schemas_match_the_document():
     gen = _generator()
     assert (ROOT / "src" / "mecon_reader_backend" / "reader_core_schemas.py").read_text() == gen.render(), \
         "run scripts/reader_core_schemas.py"
-    assert VERSION == CORE.openapi["info"]["version"] == "1.0.0-draft.2"
+    assert VERSION == CORE.openapi["info"]["version"] == "1.0.0-draft.3"
     assert set(OPERATIONS) == set(CORE.ops)
     for op_id, spec in OPERATIONS.items():
         assert (spec["method"], spec["path"]) == (CORE.ops[op_id]["method"], CORE.ops[op_id]["path"])

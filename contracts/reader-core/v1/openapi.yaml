@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: MECON Reader Core (facade to core)
-  version: 1.0.0-draft.2
+  version: 1.0.0-draft.3
   summary: The calls the public Reader facade makes into the core behind its ReaderCore port.
   description: |
     Target specification, not a claim that any core serves it today. This
@@ -129,6 +129,18 @@ info:
     core does not send `session_revoked` in a batch: a read for an ended
     session is 403 `session_ended`, and the facade frames `session_revoked`
     itself.
+
+    A batch is a state sync, not a log: an envelope says "this resource
+    changed, refetch it" and carries no payload, so a batch holds **at most
+    one envelope per (`kind`, `resource_id`)**, the newest. A core whose log
+    records several changes to one resource between two reads sends one
+    envelope for them; a client never counts envelopes. The kept envelope is
+    the newest change's own (its `event_id`, `version` and `occurred_at`),
+    and it sits at that change's place in the batch's oldest-first order.
+    The answer's `cursor` is past every change the batch covers, coalesced
+    ones included. Control events (null `resource_id`) coalesce per `kind`
+    the same way: one `authorization_changed` and one `resync_required` at
+    most, each at its newest place.
 
     **Stream cap.** The facade holds the browser streams and enforces the
     per-user cap on concurrent streams; the core sees only reads and keeps no

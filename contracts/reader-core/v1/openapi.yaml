@@ -134,7 +134,13 @@ info:
     changed, refetch it" and carries no payload, so a batch holds **at most
     one envelope per (`kind`, `resource_id`)**, the newest. A core whose log
     records several changes to one resource between two reads sends one
-    envelope for them; a client never counts envelopes.
+    envelope for them; a client never counts envelopes. The kept envelope is
+    the newest change's own (its `event_id`, `version` and `occurred_at`),
+    and it sits at that change's place in the batch's oldest-first order.
+    The answer's `cursor` is past every change the batch covers, coalesced
+    ones included. Control events (null `resource_id`) coalesce per `kind`
+    the same way: one `authorization_changed` and one `resync_required` at
+    most, each at its newest place.
 
     **Stream cap.** The facade holds the browser streams and enforces the
     per-user cap on concurrent streams; the core sees only reads and keeps no

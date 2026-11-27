@@ -90,7 +90,8 @@
         "ref": 1,
         "hello": {
           "epoch": 2,
-          "node_public_key_hex": "<pubkey>"
+          "node_key": "<pubkey>",
+          "device_id": "<device_id>"
         }
       }
     },

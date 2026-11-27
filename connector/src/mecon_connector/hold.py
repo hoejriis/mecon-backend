@@ -48,7 +48,7 @@ from .framing import (
 from .gate import BusyRun, classify_probe, probe_log_fields
 from .logutil import Log
 from .metrics import Metrics
-from .dfu_marker import check_writable, clear_marker, read_marker, write_marker
+from .dfu_marker import check_writable, clear_marker, marker_path, read_marker, write_marker
 from .nordic_dfu import BAUD as DFU_BAUD
 from .nordic_dfu import (
     Package,
@@ -102,11 +102,12 @@ DFU_RECONNECT = ("waiting-bootloader", "transferring", "rebooting", "failed", UF
 
 
 def hello_identity(hello: dict) -> str | None:
-    """Who the hello says the device is: its node key. None when it carries none (then nothing can clear a marker)."""
-    for k in ("node_public_key_hex", "node_key", "device_id"):
-        v = hello.get(k)
-        if isinstance(v, str) and 0 < len(v) <= 128:
-            return v
+    """Who the hello says the device is: `node_key`, the node's public key (64 hex), a top-level field of the hello's
+    result, which the Connector keeps as `_hello`. It survives a reset and a re-enrolment (`device_id` derives from
+    it). None when the hello carries none or a malformed one: then nothing can clear a marker."""
+    v = hello.get("node_key")
+    if isinstance(v, str) and 0 < len(v) <= 128:
+        return v
     return None
 
 
@@ -256,7 +257,9 @@ class HoldBridge:
         self._uf2: dict | None = None
         self._boot_present = False  # no application port, and the bootloader's port is listed
         self._boot_next_check = 0.0
-        self._last_identity: str | None = None  # the device identity the last hello carried (kept across a link loss)
+        self._last_identity: str | None = None  # the identity the current application link's hello carried; kept across a
+        # link loss (the DFU reset) and cleared when a new application link opens
+        self._job_identity: str | None = None  # the identity the armed job's pre-transfer hello carried
         self._other_hello: dict | None = None  # a hello from another device, already logged
         self._dfu_usable = dc is not None  # false when state_dir cannot hold a marker: no serial DFU at all
         self._erase_cut = False  # an attempt of this job ended before its first data packet
@@ -856,6 +859,7 @@ class HoldBridge:
             self._next_open = now + SERIAL_RETRY_S
             return
         self._link = link
+        self._last_identity = None  # a new application link is a device not yet heard from (a bootloader port is not one)
         self._last_rx = now
         self._reset_readers()
         if self._opened_before:
@@ -1138,7 +1142,13 @@ class HoldBridge:
         elif phase in ("none", "armed") and self._link is None:
             self._ignored("dfu_no_device")
             self.log.warn("dfu_job_ignored", job=job, phase=phase, why="no_device")
+        elif phase in ("none", "armed") and self._hello is None:
+            # The marker must name the device the job was armed for, which only its hello says: ignored, like a job
+            # with no device, and the Backend sends it again by its own rules.
+            self._ignored("dfu_no_hello")
+            self.log.warn("dfu_job_ignored", job=job, phase=phase, why="no_hello")
         elif phase in ("none", "armed"):
+            self._job_identity = self._last_identity
             self._dfu_begin(now, job, sha, size, "armed")  # a newer job replaces one that is only armed
         elif phase == "failed" and self._dfu_job is not None and self._dfu_job["job"] == job:
             self._dfu_begin(now, job, sha, size, "waiting-bootloader")  # run again: the device is in its bootloader
@@ -1357,7 +1367,7 @@ class HoldBridge:
         leaves it behind even though the loop never sees the result."""
         assert self._dfu_cfg is not None
         mark = {"job": job, "sent": sent, "total": total, "at": int(time.time()), "reason": reason[:64],
-                "device": self._last_identity}
+                "device": self._job_identity}
         try:
             write_marker(self._dfu_cfg.state_dir, mark)
         except OSError as e:
@@ -1388,7 +1398,9 @@ class HoldBridge:
             if who is None or hello_identity(self._hello) != who:
                 if who is not None and self._other_hello is not self._hello:
                     self._other_hello = self._hello
-                    self.log.warn("dfu_needs_uf2_other_device", job=mark["job"])  # kept: only the same device clears it
+                    path = marker_path(self._dfu_cfg.state_dir)
+                    self.log.warn("dfu_needs_uf2_other_device", job=mark["job"],  # kept: only the same device clears it
+                                  hint=f"if this board was recovered by UF2 and its node key changed, remove {path}")
                 return
             try:
                 clear_marker(self._dfu_cfg.state_dir)

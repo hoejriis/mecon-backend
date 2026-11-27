@@ -42,7 +42,7 @@ def frames_hex(wire: bytes, xid: int):
 
 HANDSHAKE_SUB = {"step": "handshake", "presentation": "subprotocol", "offered": ["mecon-bridge", "bearer.<token>"], "selected": "mecon-bridge"}
 HANDSHAKE_HDR = {"step": "handshake", "presentation": "header", "offered": ["Authorization: Bearer <token>"], "selected": None}
-HELLO = {"epoch": 1, "node_public_key_hex": "<pubkey>"}
+HELLO = {"epoch": 1, "node_key": "<pubkey>", "device_id": "<device_id>"}
 
 
 def prelude(ref=1):
@@ -201,7 +201,7 @@ def build():
     offer = wrapper("j11", "update.offer")
     offered = j({"v": 1, "id": "j11", "op": "update.offer", "status": "ok", "usig_boot": 1, "usig_seq": 20,
                  "result": {"job": F_JOB, "state": "awaiting-confirm", "dfu": "serial"}, "usig": "<sig>"})
-    hello2 = {"epoch": 2, "node_public_key_hex": "<pubkey>"}
+    hello2 = {"epoch": 2, "node_key": "<pubkey>", "device_id": "<device_id>"}
     relay_dfu = {"type": "iface_relay", "serial_dfu": True}
     out["F-serial-dfu.json"] = fixture(
         "F", "Bootloader serial DFU on a held device",

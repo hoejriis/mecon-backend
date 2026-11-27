@@ -268,7 +268,20 @@ def test_conf_32_the_marker_stores_the_identity_of_the_device_the_transfer_was_f
     r = mk()
     run_cut(r, gone_after=6)
     r.wait(lambda: r.bridge._dfu_phase == UF2)
-    assert read_marker(sdir(r))["device"] == SAME
+    assert read_marker(sdir(r))["device"] == SAME  # node_key, not device_id (the fake's hello has both)
+
+
+@pytest.mark.parametrize("hello", [
+    {"v": 1, "device_id": "0123456789abcdef", "epoch": 1},  # no node_key
+    {"v": 1, "node_public_key_hex": "00" * 32, "epoch": 1},  # a field the firmware's hello never carries
+    {"v": 1, "node_key": 7, "epoch": 1},
+])
+def test_conf_32_a_hello_without_a_node_key_gives_the_marker_no_identity(mk, hello):
+    r = mk()
+    r.dev.hello_result = hello
+    run_cut(r, gone_after=6)
+    r.wait(lambda: r.bridge._dfu_phase == UF2)
+    assert read_marker(sdir(r))["device"] is None
 
 
 def back_with_hello(r, key):
@@ -286,7 +299,11 @@ def test_conf_32_a_hello_from_another_device_keeps_the_marker_and_warns(mk, tmp_
     back_with_hello(r, "11" * 32)
     assert r.bridge._hello is not None and r.bridge._dfu_phase == UF2 and os.path.exists(marker_file(r))
     assert len(lines(r, "dfu_needs_uf2_other_device")) == 1 and lines(r, "dfu_needs_uf2_cleared") == []
-    assert lines(r, "dfu_needs_uf2_other_device")[0]["level"] == "warn"
+    w = lines(r, "dfu_needs_uf2_other_device")[0]
+    assert w["level"] == "warn"
+    want = "if this board was recovered by UF2 and its node key changed, remove " + marker_file(r)
+    assert w["hint"] == (want if len(want) <= 200 else want[:200] + "...")  # the log cuts a field at 200 characters
+    assert w["hint"].startswith("if this board was recovered by UF2 and its node key changed, remove ")
 
 
 def test_conf_32_a_marker_with_no_identity_clears_on_no_hello(mk, tmp_path):
@@ -422,3 +439,46 @@ def test_conf_29_a_retry_after_an_erase_cut_whose_port_returns_without_a_hello_n
 def test_a_marker_path_that_cannot_be_read_still_counts_as_a_marker(tmp_path):
     (tmp_path / MARKER_NAME).mkdir()  # reading it is an OSError, not "no marker"
     assert read_marker(str(tmp_path))["reason"] == "marker-unreadable"
+
+
+# ---- the identity belongs to the application link that said hello -----------------------------------------
+
+
+KEY_B = "11" * 32
+
+
+def test_conf_34_a_job_before_the_new_devices_hello_is_ignored_and_the_marker_never_holds_the_old_key(mk):
+    r = mk()
+    r.up()  # device A has said hello (node key SAME)
+    assert r.bridge._last_identity == SAME
+    r.opener.unplug()
+    r.wait(lambda: r.bridge._link is None)
+    assert r.bridge._last_identity == SAME  # kept across a link loss: the DFU reset needs it
+    dev_b = r.opener.plug()  # device B, not yet answering hello
+    dev_b.hello_result = {"v": 1, "name": "synthetic", "node_key": KEY_B, "device_id": "ffffffffffffffff", "epoch": 1}
+    r.wait(lambda: r.bridge._link is not None)
+    assert r.bridge._last_identity is None and r.bridge._hello is None
+    # a job frame that reaches the bridge now (the old socket's last frame, in the step that opened B's link)
+    r.bridge._on_dfu_job(r.clock(), {"type": "dfu_job", "job": "fw-1", "sha256": __import__("hashlib").sha256(PKG).hexdigest(),
+                                     "size": len(PKG)})
+    assert r.m("hold_frames_ignored_total", "dfu_no_hello") == 1
+    assert r.bridge._dfu_phase == "none" and r.server.package_requests == []
+    assert lines(r, "dfu_job_ignored")[0]["why"] == "no_hello"
+    dev_b.answers_hello = True  # B's hello arrives; now a job arms
+    for _ in range(4):
+        r.jump(16)
+    r.wait(lambda: r.bridge._hello is not None)
+    conn = r.up()
+    armed(r, conn)
+    reset_into_bootloader(r)
+    r.boot.appear(factory=lambda: FakeBootloader(clock=r.clock, gone_after=6))
+    r.jump(0.6)
+    r.wait(lambda: r.bridge._dfu_phase == UF2)
+    assert read_marker(sdir(r))["device"] == KEY_B
+
+
+def test_conf_34_the_normal_dfu_path_stores_the_pre_transfer_devices_key(mk):
+    r = mk()
+    run_cut(r, gone_after=6)  # the application port is lost before the transfer: the identity is kept
+    r.wait(lambda: r.bridge._dfu_phase == UF2)
+    assert read_marker(sdir(r))["device"] == SAME

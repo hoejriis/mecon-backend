@@ -43,7 +43,7 @@ class FakeSerialDevice:
         self.closed = False
         # hold transport: the Connector's own `hello`, bare console CRs, and decoded relayed requests
         self.answers_hello = False
-        self.hello_result = {"v": 1, "name": "synthetic", "node_key": "00" * 32, "epoch": 1}
+        self.hello_result = {"v": 1, "name": "synthetic", "node_key": "00" * 32, "device_id": "0123456789abcdef", "epoch": 1}
         self.hello_writes: list[bytes] = []
         self.hello_page_fn = None  # callable(cursor: int) -> result dict | None (None: no answer); default: hello_result
         self.cr_writes = 0

@@ -28,6 +28,12 @@ The complete application brings together a Python/FastAPI Backend, served TypeSc
 
 See [deployments](DEPLOYMENTS.md), [components](COMPONENTS.md), [security](SECURITY_AND_PRIVACY.md) and [roles](ROLES_AND_PERMISSIONS.md).
 
+## Staged public Backend
+
+The Backend moves into this repository one testable block at a time: the contract and synthetic conformance cases live here, the private reference Backend replays them in its own CI, and a block has moved when a public implementation passes the same cases and runs behind a switch with a tested way back. The order is capture and processing, then the observation contracts, the Reader API facade, the job lifecycle and device dispatch, and last the core (accounts, identity, key custody, domain persistence, federation).
+
+**Shipped so far (merged, none serving users):** contracts with conformance cases or fixtures for the Reader API, session lookup, reader-core, observations, the anonymous public map feed, observation capture and processing, job lifecycle and device dispatch; public capture and processing services; the Reader facade with its session-lookup and reader-core HTTP adapters, which serves REST and SSE and has run only against fakes and a stub. **Next:** an interop run of the facade against the reference Backend's reader-core, and then a public core, with message history, deduplication and send outcomes. **Planned, not built:** the anonymous public map feed in a public Backend, job lifecycle and device dispatch implementations, and the core. Per-block status and the conformance replays are in [migration status](MIGRATION_STATUS.md).
+
 ## Availability
 
 The roadmap describes intended capabilities, not a claim that they are implemented. See the [public availability statement](https://github.com/hoejriis/MeshContinuum/blob/main/docs/CAPABILITIES.md) for current software and hardware evidence.

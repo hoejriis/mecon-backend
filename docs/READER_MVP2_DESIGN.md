@@ -4,7 +4,7 @@
 
 ## Scope and separation
 - **Offline cache and lease:** bounded, per-user encrypted local cache, drafts, trusted unlock, server-authorized time-limited offline lease, safe reconnect and reconciliation.
-- **Safe updates:** the independently deployed Reader at `reader.mecon.cloud` gets versioned assets, user-confirmed activation, compatible cache migration, preservation of unique drafts and uncertain RF attempts, rollback.
+- **Safe updates:** the independently deployed Reader gets versioned assets, user-confirmed activation, compatible cache migration, preservation of unique drafts and uncertain RF attempts, rollback.
 - Direct browser USB: laptop/desktop **Chromium Web Serial** where available, foreground user gesture and permission, direct USB-attached Companion. Share the BLE Companion protocol/operation abstraction and truthful send/receive status. No direct MQTT or private Backend USB-agent dependency.
 - The [USB Connector](USB_CONNECTOR_IMPLEMENTATION_DESIGN.md) is a **different** standalone headless serial-to-MQTT Connector; no coupling to browser USB.
 - Fleet Owner/Admin web GUI, public Backend implementation, federation and broad public deployment remain deferred.

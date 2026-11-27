@@ -94,14 +94,14 @@
        {
         "at": "/items",
         "where": {
-         "/public_key_prefix": "c3c3c3c3"
+         "/display_name": "Carol (synthetic)"
         },
         "count": 1
        },
        {
         "at": "/items",
         "where": {
-         "/public_key_prefix": "a1a1a1a1"
+         "/display_name": "Alice (synthetic)"
         },
         "count": 0
        }

@@ -29,6 +29,8 @@ def mk(tmp_path):
         sub = tmp_path / f"r{len(rigs)}"
         sub.mkdir()
         boot = boot or FakeBootOpener()
+        if dfu is not None and "state_dir" not in dfu:
+            dfu = {**dfu, "state_dir": str(sub / "state")}
         r = HoldRig(sub, dfu=dfu, bridge_kw={"boot_opener": boot, "runner": runner or (lambda fn: fn())}, **kw)
         r.bridge._sleep = r.clock.advance  # the transfer's waits pass in fake time
         r.boot = boot

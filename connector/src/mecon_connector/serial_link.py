@@ -148,5 +148,17 @@ class PortOpener:
         return self.link_factory(port.device, self.baud)
 
 
+    def present(self) -> bool:
+        """Whether a port the selector names exists now. Nothing is opened or written. A port that also matches
+        `avoid` is not counted (it is not told apart from the other device)."""
+        try:
+            found = [p for p in self.lister() if matches(p, self.sel)]
+        except OSError:
+            return False
+        if self.avoid is not None:
+            found = [p for p in found if not matches(p, self.avoid)]
+        return len({p.device for p in found}) == 1
+
+
 def make_opener(sel: Selector, baud: int) -> PortOpener:
     return PortOpener(sel, baud)

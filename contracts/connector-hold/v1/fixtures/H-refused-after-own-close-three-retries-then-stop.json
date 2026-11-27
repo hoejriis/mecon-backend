@@ -1,5 +1,5 @@
 {
-  "contract": "mecon-connector-hold/1.0.0-draft.4",
+  "contract": "mecon-connector-hold/1.0.0-draft.5",
   "synthetic": true,
   "id": "H",
   "title": "Three retries after the agent's own close, then the fourth refusal stops it",
@@ -28,7 +28,8 @@
         "ref": 1,
         "hello": {
           "epoch": 1,
-          "node_public_key_hex": "<pubkey>"
+          "node_key": "<pubkey>",
+          "device_id": "<device_id>"
         }
       }
     },

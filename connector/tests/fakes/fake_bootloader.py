@@ -201,11 +201,16 @@ class FakeBootOpener:
         self.device: FakeBootloader | None = None
         self.opens = 0
         self.calls = 0  # every attempt, also while no port exists
+        self.probes = 0  # present(): a look at the port list, nothing opened
         self.factory = None  # callable() -> FakeBootloader: a fresh one per open (a new attempt)
 
     def appear(self, dev: FakeBootloader | None = None, factory=None) -> None:
         self.device = dev
         self.factory = factory
+
+    def present(self) -> bool:
+        self.probes += 1
+        return self.device is not None or self.factory is not None
 
     def vanish(self) -> None:
         self.device = None

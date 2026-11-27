@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mecon:connector-hold:v1:connector_device",
+  "title": "connector_device (agent to Backend, optional)",
+  "description": "What the agent sees of the device's ports, in the agent's own frame type so it is never read as the device's status (status). Sent only by an agent that runs bootloader serial DFU, while a socket is open, when the bootloader's port is listed or a board needs a UF2 copy, and once more when that ends. dfu_state, job, sent and total are present together, only while the agent holds the needs-uf2-recovery record (section 12.9). A Backend that does not know the type ignores it.",
+  "type": "object",
+  "required": [
+    "type",
+    "device"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "type": {
+      "const": "connector_device"
+    },
+    "device": {
+      "enum": [
+        "application",
+        "bootloader",
+        "absent"
+      ]
+    },
+    "dfu_state": {
+      "const": "needs-uf2-recovery"
+    },
+    "job": {
+      "type": "string",
+      "pattern": "^[0-9A-Za-z][0-9A-Za-z._:-]{0,63}$"
+    },
+    "sent": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "total": {
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "dependentRequired": {
+    "dfu_state": [
+      "job",
+      "sent",
+      "total"
+    ],
+    "job": [
+      "dfu_state"
+    ],
+    "sent": [
+      "dfu_state"
+    ],
+    "total": [
+      "dfu_state"
+    ]
+  }
+}

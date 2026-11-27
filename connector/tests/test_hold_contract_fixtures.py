@@ -127,7 +127,7 @@ def test_scenario_f_serial_dfu_replays(tmp_path):
     doc = json.loads((V1 / "fixtures" / "F-serial-dfu.json").read_text())
     steps = doc["steps"]
     boot_opener = FakeBootOpener()
-    r = HoldRig(tmp_path, dfu={"enabled": True, "bootloader": {"by_id": "usb-TEST_bootloader-*"}},
+    r = HoldRig(tmp_path, dfu={"enabled": True, "bootloader": {"by_id": "usb-TEST_bootloader-*"}, "state_dir": str(tmp_path / "state")},
                 bridge_kw={"boot_opener": boot_opener, "runner": lambda fn: fn()})
     try:
         r.bridge._sleep = r.clock.advance
@@ -246,12 +246,12 @@ def test_generator_reproduces_the_fixture_files():
 
 
 def test_every_checklist_item_has_a_test():
-    """contracts/connector-hold/v1/README.md section 9 numbers 28 items; tests/test_hold.py and tests/test_dfu.py
+    """contracts/connector-hold/v1/README.md section 9 numbers 34 items; tests/test_hold.py, tests/test_dfu.py and tests/test_dfu_uf2.py
     name their tests test_conf_NN for each, so a new item cannot ship without one."""
     text = (V1 / "README.md").read_text()
     items = re.findall(r"(?m)^(\d+)\. ", text.split("## 9. Conformance checklist")[1].split("## 10.")[0])
-    assert items == [str(n) for n in range(1, 28 + 1)]
-    src = "".join((pathlib.Path(__file__).parent / f).read_text() for f in ("test_hold.py", "test_dfu.py"))
+    assert items == [str(n) for n in range(1, 34 + 1)]
+    src = "".join((pathlib.Path(__file__).parent / f).read_text() for f in ("test_hold.py", "test_dfu.py", "test_dfu_uf2.py"))
     covered = set(re.findall(r"def test_conf_(\d\d)", src))
     covered |= {n for grp in re.findall(r"def test_conf_((?:\d\d_)+)", src) for n in re.findall(r"\d\d", grp)}
-    assert {f"{n:02d}" for n in range(1, 28 + 1)} <= covered
+    assert {f"{n:02d}" for n in range(1, 34 + 1)} <= covered

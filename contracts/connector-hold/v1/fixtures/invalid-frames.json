@@ -1,5 +1,5 @@
 {
-  "contract": "mecon-connector-hold/1.0.0-draft.4",
+  "contract": "mecon-connector-hold/1.0.0-draft.5",
   "synthetic": true,
   "id": "invalid",
   "title": "Frames the schemas must reject",
@@ -252,6 +252,49 @@
         "state": "ready",
         "stage": "fetch",
         "error": "x"
+      }
+    },
+    {
+      "direction": "agent_to_backend",
+      "why": "dfu_state needs-uf2-recovery without sent and total",
+      "frame": {
+        "type": "dfu_state",
+        "job": "fw-1",
+        "state": "needs-uf2-recovery"
+      }
+    },
+    {
+      "direction": "agent_to_backend",
+      "why": "dfu_state needs-uf2-recovery with a stage",
+      "frame": {
+        "type": "dfu_state",
+        "job": "fw-1",
+        "state": "needs-uf2-recovery",
+        "sent": 5,
+        "total": 9,
+        "stage": "transfer",
+        "error": "x"
+      }
+    },
+    {
+      "direction": "agent_to_backend",
+      "why": "dfu_state failed with sent and total",
+      "frame": {
+        "type": "dfu_state",
+        "job": "fw-1",
+        "state": "failed",
+        "stage": "transfer",
+        "error": "no-ack",
+        "sent": 5,
+        "total": 9
+      }
+    },
+    {
+      "direction": "agent_to_backend",
+      "why": "connector_device with a device that is not one of the three",
+      "frame": {
+        "type": "connector_device",
+        "device": "uf2"
       }
     },
     {

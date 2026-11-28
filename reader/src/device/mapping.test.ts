@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MockCompanion, MockTransport, type MockCompanionOptions } from '../ble/mockCompanion';
 import type { BackendDest, DestinationToken } from './destinations';
 import { TARGET_ID, authFor, companionRig, repeaterRig, wait } from './rig.test-util';
@@ -87,7 +87,8 @@ describe(`${S}: the device channel list is read with channel.list`, () => {
     const m = r.session.mapDestination(channelDest('Crew'));
     expect(m).toMatchObject({ ok: false, code: 'channel_list_unavailable', reason: expect.stringContaining('stock Companion') });
     expect(asked(r)).toHaveLength(0);
-    // and a DM to a contact still maps (native contacts)
+    // and a DM to a contact still maps (native contacts), once they have loaded
+    await vi.waitFor(() => expect(r.session.getSnapshot().companion?.contactsState).toBe('loaded'));
     expect(r.session.mapDestination(contactDest('a1a1a1'))).toMatchObject({ ok: true });
   });
 

@@ -93,8 +93,14 @@ export interface BleSnapshot {
   transportKind: TransportKind;
   bleConnection: LinkState;
   device: BleDeviceInfo | null;
-  /** True once hello (app start, device query, contacts) completed on this link. */
+  /** True once hello (app start, device query) completed on this link. */
   helloComplete: boolean;
+  /**
+   * The contact list is read after the connection is up, in the background (its size grows with the
+   * contact count). `loading`: being read; `loaded`: `contacts` is complete; `failed`: the read
+   * stopped (the link stays up). Anything that needs a contact waits for `loaded`.
+   */
+  contactsState: 'idle' | 'loading' | 'loaded' | 'failed';
   lastError: BleErrorCode | null;
   selfInfo: SelfInfo | null;
   deviceInfo: DeviceInfo | null;
@@ -157,7 +163,8 @@ export class BleAdapter {
     this.transport = opts.transport;
     this.responseTimeoutMs = opts.responseTimeoutMs ?? 5000;
     this.writeTimeoutMs = opts.writeTimeoutMs ?? 60000;
-    this.connectTimeoutMs = opts.connectTimeoutMs ?? 10000;
+    // As long as the probe (20 s): where the OS pairs during the GATT connect, this window includes the user typing the PIN.
+    this.connectTimeoutMs = opts.connectTimeoutMs ?? 20000;
     this.nowSec = opts.nowSec ?? (() => Math.floor(Date.now() / 1000));
     this.backendPath = opts.backendPath;
     this.snap = {
@@ -165,6 +172,7 @@ export class BleAdapter {
       bleConnection: this.transport.support === 'supported' ? 'idle' : 'unsupported',
       device: null,
       helloComplete: false,
+      contactsState: 'idle',
       lastError: null,
       selfInfo: null,
       deviceInfo: null,
@@ -225,7 +233,7 @@ export class BleAdapter {
     const c = this.snap.bleConnection;
     if (c === 'unsupported') return Promise.resolve({ ok: false, error: 'unsupported' });
     if (c === 'requesting' || c === 'connected') return Promise.resolve({ ok: false, error: 'busy' });
-    this.set({ bleConnection: 'requesting', lastError: null, helloComplete: false });
+    this.set({ bleConnection: 'requesting', lastError: null, helloComplete: false, contactsState: 'idle', contacts: [] });
     const chooser = this.transport.requestDevice();
     return this.afterChooser(chooser);
   }
@@ -249,7 +257,7 @@ export class BleAdapter {
     const c = this.snap.bleConnection;
     if (c === 'connected' || c === 'requesting') return Promise.resolve({ ok: false, error: 'busy' });
     if (!this.snap.device) return Promise.resolve({ ok: false, error: 'not_connected' });
-    this.set({ bleConnection: 'requesting', lastError: null, helloComplete: false });
+    this.set({ bleConnection: 'requesting', lastError: null, helloComplete: false, contactsState: 'idle', contacts: [] });
     return this.link();
   }
 
@@ -277,6 +285,8 @@ export class BleAdapter {
       return { ok: false, error: code };
     }
     this.set({ helloComplete: true });
+    // Connected. The contact list can take minutes on a slow link; it loads in the background.
+    void this.loadContacts().catch(() => undefined);
     return { ok: true, error: null };
   }
 
@@ -287,7 +297,7 @@ export class BleAdapter {
   private handleDisconnect(reason?: DisconnectReason): void {
     this.linkEpoch++;
     const wasLive = this.snap.bleConnection === 'connected' || this.snap.bleConnection === 'requesting';
-    if (wasLive) this.set({ bleConnection: reason === 'port_lost' ? 'unplugged' : 'disconnected', helloComplete: false });
+    if (wasLive) this.set({ bleConnection: reason === 'port_lost' ? 'unplugged' : 'disconnected', helloComplete: false, contactsState: 'idle' });
     const f = this.inflight;
     this.inflight = null;
     f?.fail(new BleError('disconnected'));
@@ -330,19 +340,31 @@ export class BleAdapter {
       fail = rej;
     });
     done.catch(() => undefined);
+    let t: ReturnType<typeof setTimeout> | undefined;
+    // The reply bound is a silence bound: it restarts with every frame that belongs to the reply, so a
+    // long multi-frame answer (the contact list) on a slow link is not cut off while frames keep arriving.
+    const arm = (): void => {
+      if (t !== undefined) this.clear(t);
+      t = this.timer(() => {
+        if (this.inflight === me) this.inflight = null;
+        console.warn(`[reader] response_timeout: no answer to ${op} within ${this.responseTimeoutMs} ms`);
+        fail(new BleError('response_timeout', `no answer to ${op}`));
+      }, this.responseTimeoutMs);
+    };
     const me: Inflight = {
       onFrame: (f) => {
         if (f.kind === 'error') {
           error = f;
           return 'done';
         }
-        return onFrame(f);
+        const v = onFrame(f);
+        if (v === 'more' && t !== undefined) arm();
+        return v;
       },
       finish,
       fail,
     };
     this.inflight = me;
-    let t: ReturnType<typeof setTimeout> | undefined;
     try {
       // The reply timer starts only once the write has returned: a write can stay
       // pending for a long time (the OS pairing prompt), and that wait is not the
@@ -353,13 +375,7 @@ export class BleAdapter {
         if (e instanceof BleError && e.code === 'write_timeout') console.warn(`[reader] write_timeout during ${op} after ${this.writeTimeoutMs} ms`);
         throw e;
       }
-      if (this.inflight === me) {
-        t = this.timer(() => {
-          if (this.inflight === me) this.inflight = null;
-          console.warn(`[reader] response_timeout: no answer to ${op} within ${this.responseTimeoutMs} ms`);
-          fail(new BleError('response_timeout', `no answer to ${op}`));
-        }, this.responseTimeoutMs);
-      }
+      if (this.inflight === me) arm();
       await done;
     } finally {
       if (t !== undefined) this.clear(t);
@@ -419,7 +435,6 @@ export class BleAdapter {
         this.set({ deviceInfo: f.info });
         return 'done';
       }).then((err) => this.mustNotBeError(err));
-      await this.fetchContacts();
     });
   }
 
@@ -427,7 +442,7 @@ export class BleAdapter {
     if (err) throw new BleError('device_error', err.kind === 'error' ? err.name : 'error');
   }
 
-  private async fetchContacts(): Promise<void> {
+  private async fetchContacts(): Promise<Contact[]> {
     const found: Contact[] = [];
     const err = await this.exchange('GET_CONTACTS', encodeGetContacts(), (f) => {
       if (f.kind === 'contactsStart') return 'more';
@@ -440,11 +455,28 @@ export class BleAdapter {
       return 'ignore';
     });
     this.mustNotBeError(err);
-    this.set({ contacts: found });
+    return found;
+  }
+
+  /**
+   * Reads the contact list through the same exchange (silence bound, one request at a time). A
+   * failure marks the load `failed` and leaves the connection up; it never ends the link.
+   */
+  async loadContacts(): Promise<void> {
+    const epoch = this.linkEpoch;
+    this.set({ contactsState: 'loading' });
+    try {
+      const found = await this.serial(() => this.fetchContacts());
+      // The list and its state belong to the link that asked: a load that outlives its link writes nothing.
+      if (epoch === this.linkEpoch) this.set({ contacts: found, contactsState: 'loaded' });
+    } catch (e) {
+      if (epoch === this.linkEpoch) this.set({ contactsState: 'failed' });
+      throw e;
+    }
   }
 
   async refreshContacts(): Promise<void> {
-    await this.serial(() => this.fetchContacts());
+    await this.loadContacts();
   }
 
   // -- receive -------------------------------------------------------------

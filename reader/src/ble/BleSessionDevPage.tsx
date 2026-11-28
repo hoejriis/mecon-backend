@@ -72,6 +72,7 @@ export default function BleSessionDevPage() {
         <button type="button" onClick={() => void run(() => session.request('config.apply'))}>Request config.apply</button> <span data-testid="bs-reply">{reply}</span>
       </p>
       <h2>Contacts</h2>
+      <p data-testid="bs-contacts-state">contacts: {s.companion?.contactsState === 'failed' ? 'could not be read (list incomplete, not shown)' : (s.companion?.contactsState ?? 'idle')}</p>
       <ul data-testid="bs-contacts">
         {(s.companion?.contacts ?? []).map((c) => (
           <li key={c.publicKey}>{c.name}</li>

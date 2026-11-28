@@ -55,6 +55,23 @@ describe(`${S}: detection`, () => {
     expect(r.backend.post).not.toHaveBeenCalled();
   });
 
+  it('contacts still loading or failed: connected, a contact destination is not ready (with the reason), a channel one is not blocked by it', async () => {
+    const r = bleRig(MECON);
+    const rx = r.mock.receive.bind(r.mock);
+    r.mock.receive = (f) => {
+      if (f[0] !== CMD.GET_CONTACTS) rx(f); // the contact list never answers
+    };
+    expect(await r.session.connect()).toEqual({ ok: true, error: null });
+    expect(r.session.can('message.send.direct')).toBe(true);
+    const dest = { kind: 'contact' as const, targetId: 't-1', prefix: 'a1a1a1' };
+    expect(r.session.getSnapshot().companion!.contactsState).toBe('loading');
+    expect(r.session.mapDestination(dest)).toMatchObject({ ok: false, code: 'not_ready', reason: expect.stringContaining('Loading the contacts') });
+    await wait(260);
+    expect(r.session.getSnapshot()).toMatchObject({ link: 'connected', phase: 'ready' });
+    expect(r.session.getSnapshot().companion!.contactsState).toBe('failed');
+    expect(r.session.mapDestination(dest)).toMatchObject({ ok: false, code: 'not_ready', reason: expect.stringContaining('could not be read') });
+  });
+
   it('unknown device: nothing answers; unknown role, no capabilities, no driver, nothing sendable', async () => {
     const r = bleRig({ silent: true });
     expect(await r.session.connect()).toEqual({ ok: true, error: null });
@@ -103,6 +120,28 @@ describe(`${S}: detection`, () => {
     expect(d.commandsSent[0]).toBe('frame-iface:hello');
     expect(ifaceOps(mock)).toEqual(['hello']);
     expect(mock.writes[0]![0]).toBe(0x7f);
+  });
+
+  it('detection waits as long as the probe: a hello whose answer takes 3.7 s is still identified by default', async () => {
+    vi.useFakeTimers();
+    try {
+      const mock = new MockCompanion(MECON);
+      class Slow extends MockTransport {
+        override onFrame(cb: (f: Uint8Array) => void): () => void {
+          return super.onFrame((f) => void setTimeout(() => cb(f), 3700));
+        }
+      }
+      const t = new Slow(mock);
+      await t.requestDevice();
+      await t.connect();
+      const p = detectBleDevice(t);
+      await vi.advanceTimersByTimeAsync(12_000);
+      const d = await p;
+      expect(d).toMatchObject({ firmware: 'mecon', role: 'companion', carriage: 'companion-frames', companionBinary: true });
+      expect(d.interfaceOps.length).toBeGreaterThan(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('the link drops during detection: reported, not hung', async () => {

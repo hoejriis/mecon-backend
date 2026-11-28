@@ -48,6 +48,7 @@ describe(`${S}: connection states`, () => {
     expect(spy).toHaveBeenCalledTimes(1); // no await before the chooser: still inside the user gesture
     expect(snap(adapter).bleConnection).toBe('requesting');
     expect(await p).toEqual({ ok: true, error: null });
+    await vi.waitFor(() => expect(snap(adapter).contactsState).toBe('loaded'));
     const s = snap(adapter);
     expect(s.bleConnection).toBe('connected');
     expect(s.helloComplete).toBe(true);
@@ -396,5 +397,116 @@ describe(`${S}: reply timer starts after the write`, () => {
     expect(await adapter.connect()).toEqual({ ok: false, error: 'response_timeout' });
     expect(detail).toBe('no answer to APP_START');
     expect(errs[0]).not.toMatch(/key|text/i);
+  });
+});
+
+describe(`${S}: a slow multi-frame reply on a measured link`, () => {
+  /** Delivers every notification `gapMs` after the previous one (and after `firstMs` from the write), in order, like a slow BLE notify queue. */
+  class Paced extends MockTransport {
+    private freeAt = 0;
+    constructor(
+      peer: MockCompanion,
+      private gapMs: number,
+    ) {
+      super(peer);
+    }
+    override onFrame(cb: (f: Uint8Array) => void): () => void {
+      return super.onFrame((f) => {
+        const at = Math.max(Date.now(), this.freeAt) + this.gapMs;
+        this.freeAt = at;
+        setTimeout(() => cb(f), at - Date.now());
+      });
+    }
+  }
+  const contacts = Array.from({ length: 30 }, (_, i) => ({ key: i.toString(16).padStart(2, '0').repeat(32), name: `Contact ${i}` }));
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it('a contacts list that takes longer than 5 s in total connects while every frame arrives within 5 s of the last', async () => {
+    vi.useFakeTimers();
+    const peer = new MockCompanion({ contacts });
+    const adapter = new BleAdapter({ transport: new Paced(peer, 250), nowSec: () => 1700000000 });
+    adapters.push(adapter);
+    const p = adapter.connect();
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(await p).toEqual({ ok: true, error: null });
+    expect(adapter.getSnapshot().contacts).toHaveLength(30);
+  });
+
+  const stallAfter = (peer: MockCompanion, frames: number) => {
+    let n = 0;
+    const emit = (peer as unknown as { emit: (f: Uint8Array) => void }).emit.bind(peer);
+    (peer as unknown as { emit: (f: Uint8Array) => void }).emit = (f) => {
+      if (peer.writes.some((w) => w[0] === 4) && ++n > frames) return;
+      emit(f);
+    };
+  };
+
+  it('a reply that goes silent for more than 5 s mid-list fails the contact load naming GET_CONTACTS; the connection stays up', async () => {
+    vi.useFakeTimers();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const peer = new MockCompanion({ contacts });
+    const adapter = new BleAdapter({ transport: new Paced(peer, 250), nowSec: () => 1700000000 });
+    adapters.push(adapter);
+    stallAfter(peer, 6);
+    const p = adapter.connect();
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(await p).toEqual({ ok: true, error: null });
+    const sn = adapter.getSnapshot();
+    expect(sn).toMatchObject({ bleConnection: 'connected', helloComplete: true, contactsState: 'failed', lastError: null });
+    expect(String(warn.mock.calls[0]![0])).toContain('GET_CONTACTS');
+  });
+
+  it('500 contacts at 250 ms per frame: connected in under 2 s, contacts loaded about 125 s later, nothing fails meanwhile', async () => {
+    vi.useFakeTimers();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const many = Array.from({ length: 500 }, (_, i) => ({ key: i.toString(16).padStart(4, '0').repeat(16), name: `C${i}` }));
+    const peer = new MockCompanion({ contacts: many });
+    const adapter = new BleAdapter({ transport: new Paced(peer, 250), nowSec: () => 1700000000 });
+    adapters.push(adapter);
+    const p = adapter.connect();
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(await p).toEqual({ ok: true, error: null });
+    expect(adapter.getSnapshot()).toMatchObject({ bleConnection: 'connected', helloComplete: true, contactsState: 'loading' });
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(adapter.getSnapshot()).toMatchObject({ bleConnection: 'connected', contactsState: 'loading', contacts: [] });
+    await vi.advanceTimersByTimeAsync(80_000);
+    expect(adapter.getSnapshot()).toMatchObject({ bleConnection: 'connected', contactsState: 'loaded', lastError: null });
+    expect(adapter.getSnapshot().contacts).toHaveLength(500);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('a stall after 200 of 500 contacts reads as failed with no half list, never as loaded', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const many = Array.from({ length: 500 }, (_, i) => ({ key: i.toString(16).padStart(4, '0').repeat(16), name: `C${i}` }));
+    const peer = new MockCompanion({ contacts: many });
+    const adapter = new BleAdapter({ transport: new Paced(peer, 250), nowSec: () => 1700000000 });
+    adapters.push(adapter);
+    stallAfter(peer, 201); // contacts-start plus 200 contacts
+    const p = adapter.connect();
+    await vi.advanceTimersByTimeAsync(90_000);
+    expect(await p).toEqual({ ok: true, error: null });
+    const sn = adapter.getSnapshot();
+    expect(sn.contactsState).toBe('failed');
+    expect(sn.contacts).toEqual([]);
+    expect(sn.bleConnection).toBe('connected');
+  });
+
+  it('a GATT connect that completes at 15 s (the user typing the pairing PIN) succeeds', async () => {
+    vi.useFakeTimers();
+    class SlowConnect extends MockTransport {
+      override async connect(): Promise<void> {
+        await new Promise((r) => setTimeout(r, 15_000));
+        return super.connect();
+      }
+    }
+    const adapter = new BleAdapter({ transport: new SlowConnect(new MockCompanion()), nowSec: () => 1700000000 });
+    adapters.push(adapter);
+    const p = adapter.connect();
+    await vi.advanceTimersByTimeAsync(17_000);
+    expect(await p).toEqual({ ok: true, error: null });
   });
 });

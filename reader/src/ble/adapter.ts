@@ -442,7 +442,7 @@ export class BleAdapter {
     if (err) throw new BleError('device_error', err.kind === 'error' ? err.name : 'error');
   }
 
-  private async fetchContacts(): Promise<void> {
+  private async fetchContacts(): Promise<Contact[]> {
     const found: Contact[] = [];
     const err = await this.exchange('GET_CONTACTS', encodeGetContacts(), (f) => {
       if (f.kind === 'contactsStart') return 'more';
@@ -455,7 +455,7 @@ export class BleAdapter {
       return 'ignore';
     });
     this.mustNotBeError(err);
-    this.set({ contacts: found });
+    return found;
   }
 
   /**
@@ -466,8 +466,9 @@ export class BleAdapter {
     const epoch = this.linkEpoch;
     this.set({ contactsState: 'loading' });
     try {
-      await this.serial(() => this.fetchContacts());
-      if (epoch === this.linkEpoch) this.set({ contactsState: 'loaded' });
+      const found = await this.serial(() => this.fetchContacts());
+      // The list and its state belong to the link that asked: a load that outlives its link writes nothing.
+      if (epoch === this.linkEpoch) this.set({ contacts: found, contactsState: 'loaded' });
     } catch (e) {
       if (epoch === this.linkEpoch) this.set({ contactsState: 'failed' });
       throw e;

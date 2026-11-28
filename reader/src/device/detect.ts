@@ -347,7 +347,8 @@ export interface BleDetectOptions extends Pick<DetectOptions, 'stepTimeoutMs' | 
  * BLE device name is never read: role, firmware and capabilities come only from answers.
  */
 export async function detectBleDevice(raw: CompanionTransport, opts: BleDetectOptions = {}): Promise<DetectedDevice> {
-  const timeout = opts.stepTimeoutMs ?? 3000;
+  // Same wait as the BLE probe (8 s): a signed hello of about 1.5 KB over several notifications was measured at 3.7 s on a real board.
+  const timeout = opts.stepTimeoutMs ?? 8000;
   const sent: string[] = [];
   const link = guardFrames(raw, sent);
   const frames: Uint8Array[] = [];

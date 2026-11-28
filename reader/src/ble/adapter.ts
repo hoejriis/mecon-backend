@@ -330,19 +330,31 @@ export class BleAdapter {
       fail = rej;
     });
     done.catch(() => undefined);
+    let t: ReturnType<typeof setTimeout> | undefined;
+    // The reply bound is a silence bound: it restarts with every frame that belongs to the reply, so a
+    // long multi-frame answer (the contact list) on a slow link is not cut off while frames keep arriving.
+    const arm = (): void => {
+      if (t !== undefined) this.clear(t);
+      t = this.timer(() => {
+        if (this.inflight === me) this.inflight = null;
+        console.warn(`[reader] response_timeout: no answer to ${op} within ${this.responseTimeoutMs} ms`);
+        fail(new BleError('response_timeout', `no answer to ${op}`));
+      }, this.responseTimeoutMs);
+    };
     const me: Inflight = {
       onFrame: (f) => {
         if (f.kind === 'error') {
           error = f;
           return 'done';
         }
-        return onFrame(f);
+        const v = onFrame(f);
+        if (v === 'more' && t !== undefined) arm();
+        return v;
       },
       finish,
       fail,
     };
     this.inflight = me;
-    let t: ReturnType<typeof setTimeout> | undefined;
     try {
       // The reply timer starts only once the write has returned: a write can stay
       // pending for a long time (the OS pairing prompt), and that wait is not the
@@ -353,13 +365,7 @@ export class BleAdapter {
         if (e instanceof BleError && e.code === 'write_timeout') console.warn(`[reader] write_timeout during ${op} after ${this.writeTimeoutMs} ms`);
         throw e;
       }
-      if (this.inflight === me) {
-        t = this.timer(() => {
-          if (this.inflight === me) this.inflight = null;
-          console.warn(`[reader] response_timeout: no answer to ${op} within ${this.responseTimeoutMs} ms`);
-          fail(new BleError('response_timeout', `no answer to ${op}`));
-        }, this.responseTimeoutMs);
-      }
+      if (this.inflight === me) arm();
       await done;
     } finally {
       if (t !== undefined) this.clear(t);

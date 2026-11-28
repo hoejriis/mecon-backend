@@ -105,6 +105,28 @@ describe(`${S}: detection`, () => {
     expect(mock.writes[0]![0]).toBe(0x7f);
   });
 
+  it('detection waits as long as the probe: a hello whose answer takes 3.7 s is still identified by default', async () => {
+    vi.useFakeTimers();
+    try {
+      const mock = new MockCompanion(MECON);
+      class Slow extends MockTransport {
+        override onFrame(cb: (f: Uint8Array) => void): () => void {
+          return super.onFrame((f) => void setTimeout(() => cb(f), 3700));
+        }
+      }
+      const t = new Slow(mock);
+      await t.requestDevice();
+      await t.connect();
+      const p = detectBleDevice(t);
+      await vi.advanceTimersByTimeAsync(12_000);
+      const d = await p;
+      expect(d).toMatchObject({ firmware: 'mecon', role: 'companion', carriage: 'companion-frames', companionBinary: true });
+      expect(d.interfaceOps.length).toBeGreaterThan(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('the link drops during detection: reported, not hung', async () => {
     const mock = new MockCompanion({ ...MECON, silent: true });
     const t = new MockTransport(mock);

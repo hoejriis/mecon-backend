@@ -398,3 +398,59 @@ describe(`${S}: reply timer starts after the write`, () => {
     expect(errs[0]).not.toMatch(/key|text/i);
   });
 });
+
+describe(`${S}: a slow multi-frame reply on a measured link`, () => {
+  /** Delivers every notification `gapMs` after the previous one (and after `firstMs` from the write), in order, like a slow BLE notify queue. */
+  class Paced extends MockTransport {
+    private freeAt = 0;
+    constructor(
+      peer: MockCompanion,
+      private gapMs: number,
+    ) {
+      super(peer);
+    }
+    override onFrame(cb: (f: Uint8Array) => void): () => void {
+      return super.onFrame((f) => {
+        const at = Math.max(Date.now(), this.freeAt) + this.gapMs;
+        this.freeAt = at;
+        setTimeout(() => cb(f), at - Date.now());
+      });
+    }
+  }
+  const contacts = Array.from({ length: 30 }, (_, i) => ({ key: i.toString(16).padStart(2, '0').repeat(32), name: `Contact ${i}` }));
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it('a contacts list that takes longer than 5 s in total connects while every frame arrives within 5 s of the last', async () => {
+    vi.useFakeTimers();
+    const peer = new MockCompanion({ contacts });
+    const adapter = new BleAdapter({ transport: new Paced(peer, 250), nowSec: () => 1700000000 });
+    adapters.push(adapter);
+    const p = adapter.connect();
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(await p).toEqual({ ok: true, error: null });
+    expect(adapter.getSnapshot().contacts).toHaveLength(30);
+  });
+
+  it('a reply that goes silent for more than 5 s mid-list still fails response_timeout naming GET_CONTACTS', async () => {
+    vi.useFakeTimers();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const peer = new MockCompanion({ contacts });
+    const t = new Paced(peer, 250);
+    const adapter = new BleAdapter({ transport: t, nowSec: () => 1700000000 });
+    adapters.push(adapter);
+    // after the list starts, the link stops delivering
+    let n = 0;
+    const origEmit = (peer as unknown as { emit: (f: Uint8Array) => void }).emit.bind(peer);
+    (peer as unknown as { emit: (f: Uint8Array) => void }).emit = (f) => {
+      if (peer.writes.some((w) => w[0] === 4) && ++n > 6) return;
+      origEmit(f);
+    };
+    const p = adapter.connect();
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(await p).toEqual({ ok: false, error: 'response_timeout' });
+    expect(String(warn.mock.calls[0]![0])).toContain('GET_CONTACTS');
+  });
+});

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { Identity, Target } from '../api/types';
 import type { MapOutcome } from '../device/destinations';
 import { availablePaths, defaultPath, deviceView, localUnavailable, ownsIdentity, type DeviceView } from './localPath';
@@ -103,6 +103,7 @@ describe('deviceView from a real session', () => {
     const r = companionRig();
     expect(deviceView(r.session)).toMatchObject({ path: 'usb', connected: false, capabilities: [], ownKey: null, destination: null });
     await r.session.connect();
+    await vi.waitFor(() => expect(r.session.getSnapshot().companion!.contactsState).toBe('loaded'));
     const v = deviceView(r.session);
     expect(v).toMatchObject({ path: 'usb', connected: true });
     expect(v.capabilities).toEqual(expect.arrayContaining(['message.send.direct', 'message.send.channel']));

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { authFor, companionRig, mapChannel, tryMapDirect, repeaterRig, wait } from './rig.test-util';
 import type { DeviceSession } from './session';
 
@@ -70,6 +70,7 @@ describe(`${S}: connect, hello, contacts, send`, () => {
     sessions.push(r.session);
     r.peer.faults = { splitBytes: 1, coalesce: false, garbageBeforeFrame: [0x00, 0x41, 0xff], oversizeLengthNoise: true };
     expect(await r.session.connect()).toEqual({ ok: true, error: null });
+    await vi.waitFor(() => expect(r.session.getSnapshot().companion!.contactsState).toBe('loaded'));
     const a = await r.session.sendDirect(dm(r.session, 'noisy'));
     expect(a.deviceAccepted).toBe(true);
     await wait(60);
@@ -81,6 +82,7 @@ describe(`${S}: connect, hello, contacts, send`, () => {
     sessions.push(r.session);
     r.peer.faults = { splitBytes: null, coalesce: true, garbageBeforeFrame: [], oversizeLengthNoise: false };
     expect(await r.session.connect()).toEqual({ ok: true, error: null });
+    await vi.waitFor(() => expect(r.session.getSnapshot().companion!.contactsState).toBe('loaded'));
     expect(r.session.getSnapshot().companion!.contacts).toHaveLength(2);
   });
 });
@@ -250,6 +252,7 @@ describe(`${S}: duplicate notifications during hello`, () => {
     sessions.push(r.session);
     r.mock.faults.duplicateNotifications = true;
     expect(await r.session.connect()).toEqual({ ok: true, error: null });
+    await vi.waitFor(() => expect(r.session.getSnapshot().companion!.contactsState).toBe('loaded'));
     expect(r.session.getSnapshot().companion!.contacts.map((c) => c.name)).toEqual(['Alice Synthetic', 'Bob Synthetic']);
   });
 });

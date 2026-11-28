@@ -58,7 +58,8 @@ export default function BleDevPage() {
       <p>
         BLE connection: <strong data-testid="ble-conn">{s.bleConnection}</strong>; hello:{' '}
         <span data-testid="ble-hello">{s.helloComplete ? 'complete' : 'no'}</span>; last error:{' '}
-        <span data-testid="ble-last-error">{s.lastError ?? 'none'}</span>
+        <span data-testid="ble-last-error">{s.lastError ?? 'none'}</span>; contacts:{' '}
+        <span data-testid="ble-contacts-state">{s.contactsState === 'failed' ? 'could not be read (list incomplete, not shown)' : s.contactsState}</span>
       </p>
       {s.bleConnection === 'unsupported' && <p role="status">Web Bluetooth is not available in this browser. Messaging through the Backend is unaffected.</p>}
       <p>

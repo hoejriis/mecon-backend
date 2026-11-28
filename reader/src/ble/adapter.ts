@@ -93,8 +93,14 @@ export interface BleSnapshot {
   transportKind: TransportKind;
   bleConnection: LinkState;
   device: BleDeviceInfo | null;
-  /** True once hello (app start, device query, contacts) completed on this link. */
+  /** True once hello (app start, device query) completed on this link. */
   helloComplete: boolean;
+  /**
+   * The contact list is read after the connection is up, in the background (its size grows with the
+   * contact count). `loading`: being read; `loaded`: `contacts` is complete; `failed`: the read
+   * stopped (the link stays up). Anything that needs a contact waits for `loaded`.
+   */
+  contactsState: 'idle' | 'loading' | 'loaded' | 'failed';
   lastError: BleErrorCode | null;
   selfInfo: SelfInfo | null;
   deviceInfo: DeviceInfo | null;
@@ -157,7 +163,8 @@ export class BleAdapter {
     this.transport = opts.transport;
     this.responseTimeoutMs = opts.responseTimeoutMs ?? 5000;
     this.writeTimeoutMs = opts.writeTimeoutMs ?? 60000;
-    this.connectTimeoutMs = opts.connectTimeoutMs ?? 10000;
+    // As long as the probe (20 s): where the OS pairs during the GATT connect, this window includes the user typing the PIN.
+    this.connectTimeoutMs = opts.connectTimeoutMs ?? 20000;
     this.nowSec = opts.nowSec ?? (() => Math.floor(Date.now() / 1000));
     this.backendPath = opts.backendPath;
     this.snap = {
@@ -165,6 +172,7 @@ export class BleAdapter {
       bleConnection: this.transport.support === 'supported' ? 'idle' : 'unsupported',
       device: null,
       helloComplete: false,
+      contactsState: 'idle',
       lastError: null,
       selfInfo: null,
       deviceInfo: null,
@@ -225,7 +233,7 @@ export class BleAdapter {
     const c = this.snap.bleConnection;
     if (c === 'unsupported') return Promise.resolve({ ok: false, error: 'unsupported' });
     if (c === 'requesting' || c === 'connected') return Promise.resolve({ ok: false, error: 'busy' });
-    this.set({ bleConnection: 'requesting', lastError: null, helloComplete: false });
+    this.set({ bleConnection: 'requesting', lastError: null, helloComplete: false, contactsState: 'idle', contacts: [] });
     const chooser = this.transport.requestDevice();
     return this.afterChooser(chooser);
   }
@@ -249,7 +257,7 @@ export class BleAdapter {
     const c = this.snap.bleConnection;
     if (c === 'connected' || c === 'requesting') return Promise.resolve({ ok: false, error: 'busy' });
     if (!this.snap.device) return Promise.resolve({ ok: false, error: 'not_connected' });
-    this.set({ bleConnection: 'requesting', lastError: null, helloComplete: false });
+    this.set({ bleConnection: 'requesting', lastError: null, helloComplete: false, contactsState: 'idle', contacts: [] });
     return this.link();
   }
 
@@ -277,6 +285,8 @@ export class BleAdapter {
       return { ok: false, error: code };
     }
     this.set({ helloComplete: true });
+    // Connected. The contact list can take minutes on a slow link; it loads in the background.
+    void this.loadContacts().catch(() => undefined);
     return { ok: true, error: null };
   }
 
@@ -287,7 +297,7 @@ export class BleAdapter {
   private handleDisconnect(reason?: DisconnectReason): void {
     this.linkEpoch++;
     const wasLive = this.snap.bleConnection === 'connected' || this.snap.bleConnection === 'requesting';
-    if (wasLive) this.set({ bleConnection: reason === 'port_lost' ? 'unplugged' : 'disconnected', helloComplete: false });
+    if (wasLive) this.set({ bleConnection: reason === 'port_lost' ? 'unplugged' : 'disconnected', helloComplete: false, contactsState: 'idle' });
     const f = this.inflight;
     this.inflight = null;
     f?.fail(new BleError('disconnected'));
@@ -425,7 +435,6 @@ export class BleAdapter {
         this.set({ deviceInfo: f.info });
         return 'done';
       }).then((err) => this.mustNotBeError(err));
-      await this.fetchContacts();
     });
   }
 
@@ -449,8 +458,24 @@ export class BleAdapter {
     this.set({ contacts: found });
   }
 
+  /**
+   * Reads the contact list through the same exchange (silence bound, one request at a time). A
+   * failure marks the load `failed` and leaves the connection up; it never ends the link.
+   */
+  async loadContacts(): Promise<void> {
+    const epoch = this.linkEpoch;
+    this.set({ contactsState: 'loading' });
+    try {
+      await this.serial(() => this.fetchContacts());
+      if (epoch === this.linkEpoch) this.set({ contactsState: 'loaded' });
+    } catch (e) {
+      if (epoch === this.linkEpoch) this.set({ contactsState: 'failed' });
+      throw e;
+    }
+  }
+
   async refreshContacts(): Promise<void> {
-    await this.serial(() => this.fetchContacts());
+    await this.loadContacts();
   }
 
   // -- receive -------------------------------------------------------------

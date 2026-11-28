@@ -356,6 +356,12 @@ export class DeviceSession {
     if (!this.can(kind === 'direct' ? 'message.send.direct' : 'message.send.channel')) {
       return { ok: false, code: 'not_ready', reason: 'This device cannot send that kind of message right now.', candidates: [] };
     }
+    if (kind === 'direct') {
+      // The contact list loads after the connection is up; a contact can only be matched against the whole list.
+      const cs = this.snap.companion?.contactsState;
+      if (cs === 'loading' || cs === 'idle') return { ok: false, code: 'not_ready', reason: 'Loading the contacts from the device. Try again when they have loaded.', candidates: [] };
+      if (cs === 'failed') return { ok: false, code: 'not_ready', reason: 'The device contacts could not be read. Reconnect to try again.', candidates: [] };
+    }
     const out = this.resolve(dest, pick);
     if (!out.ok) return out;
     const token: DestinationToken = Object.freeze({ kind, targetId: dest.targetId, dest, pick, destination: out.destination });

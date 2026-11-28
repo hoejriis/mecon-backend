@@ -64,6 +64,7 @@ export default function UsbDevPage() {
         Role: <span data-testid="usb-role">{s.detected?.role ?? 'unknown'}</span>; capabilities: <span data-testid="usb-caps">{caps.join(',') || 'none'}</span>
       </p>
       <h2>Contacts</h2>
+      <p data-testid="usb-contacts-state">contacts: {s.companion?.contactsState === 'failed' ? 'could not be read (list incomplete, not shown)' : (s.companion?.contactsState ?? 'idle')}</p>
       <ul data-testid="usb-contacts">
         {(s.companion?.contacts ?? []).map((c) => (
           <li key={c.publicKey}>{c.name}</li>

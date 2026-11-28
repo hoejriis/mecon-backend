@@ -55,6 +55,23 @@ describe(`${S}: detection`, () => {
     expect(r.backend.post).not.toHaveBeenCalled();
   });
 
+  it('contacts still loading or failed: connected, a contact destination is not ready (with the reason), a channel one is not blocked by it', async () => {
+    const r = bleRig(MECON);
+    const rx = r.mock.receive.bind(r.mock);
+    r.mock.receive = (f) => {
+      if (f[0] !== CMD.GET_CONTACTS) rx(f); // the contact list never answers
+    };
+    expect(await r.session.connect()).toEqual({ ok: true, error: null });
+    expect(r.session.can('message.send.direct')).toBe(true);
+    const dest = { kind: 'contact' as const, targetId: 't-1', prefix: 'a1a1a1' };
+    expect(r.session.getSnapshot().companion!.contactsState).toBe('loading');
+    expect(r.session.mapDestination(dest)).toMatchObject({ ok: false, code: 'not_ready', reason: expect.stringContaining('Loading the contacts') });
+    await wait(260);
+    expect(r.session.getSnapshot()).toMatchObject({ link: 'connected', phase: 'ready' });
+    expect(r.session.getSnapshot().companion!.contactsState).toBe('failed');
+    expect(r.session.mapDestination(dest)).toMatchObject({ ok: false, code: 'not_ready', reason: expect.stringContaining('could not be read') });
+  });
+
   it('unknown device: nothing answers; unknown role, no capabilities, no driver, nothing sendable', async () => {
     const r = bleRig({ silent: true });
     expect(await r.session.connect()).toEqual({ ok: true, error: null });

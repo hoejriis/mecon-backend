@@ -95,6 +95,7 @@ describe(S, () => {
     const { n, handle, mock } = nav();
     const adapter = new BleAdapter({ transport: new WebBluetoothTransport(n), responseTimeoutMs: 100 });
     expect((await adapter.connect()).ok).toBe(true);
+    await vi.waitFor(() => expect(adapter.getSnapshot().contactsState).toBe('loaded'));
     expect(adapter.getSnapshot().contacts).toHaveLength(2);
     const a = await adapter.sendDirect({ clientDraftId: 'd', clientAttemptId: 'a', contactKey: SYNTHETIC_KEYS.bob, text: 'hi' });
     await wait(10);
